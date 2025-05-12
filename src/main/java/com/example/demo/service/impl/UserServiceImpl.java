@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.example.demo.dto.UserDTO;
 import com.example.demo.entity.User;
+import com.example.demo.entity.UserRole;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.UserService;
 
@@ -55,7 +56,7 @@ public class UserServiceImpl implements UserService {
             }
             
             // 设置用户角色
-            user.setRole(userDTO.getRole() != null ? userDTO.getRole() : "USER");
+            user.setRole(userDTO.getRole() != null ? userDTO.getRole() : UserRole.USER);
             
             // 保存用户
             try {
