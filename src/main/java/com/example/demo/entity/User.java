@@ -2,10 +2,15 @@ package com.example.demo.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @Entity
 @Table(name = "users")
@@ -15,26 +20,39 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(unique = true, nullable = false)
+    @NotBlank(message = "用户名不能为空")
+    @Size(min = 3, max = 50, message = "用户名长度必须在3-50个字符之间")
+    @Column(unique = true)
     private String username;
     
-    @Column(nullable = false)
+    @NotBlank(message = "密码不能为空")
+    @Size(min = 6, message = "密码长度不能小于6个字符")
     private String password;
     
-    @Column(nullable = false)
-    private String role;
-
-    @Column(nullable = false)
+    @Email(message = "邮箱格式不正确")
+    @Column(unique = true)
     private String email;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role = UserRole.USER; // 默认为普通用户
+    
+    @Column(name = "created_at")
+    private java.time.LocalDateTime createdAt;
+    
+    @Column(name = "updated_at")
+    private java.time.LocalDateTime updatedAt;
     
     // 构造函数
     public User() {
+        this.createdAt = java.time.LocalDateTime.now();
+        this.updatedAt = this.createdAt;
     }
     
-    public User(String username, String password, String role, String email) {
+    public User(String username, String password, String email) {
+        this();
         this.username = username;
         this.password = password;
-        this.role = role;
         this.email = email;
     }
     
@@ -63,19 +81,40 @@ public class User {
         this.password = password;
     }
     
-    public String getRole() {
-        return role;
-    }
-    
-    public void setRole(String role) {
-        this.role = role;
-    }
-
     public String getEmail() {
         return email;
     }
-
+    
     public void setEmail(String email) {
         this.email = email;
+    }
+    
+    public UserRole getRole() {
+        return role;
+    }
+    
+    public void setRole(UserRole role) {
+        this.role = role;
+    }
+    
+    public java.time.LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+    
+    public void setCreatedAt(java.time.LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+    
+    public java.time.LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+    
+    public void setUpdatedAt(java.time.LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+    
+    // 更新时间的方法
+    public void updateTimestamp() {
+        this.updatedAt = java.time.LocalDateTime.now();
     }
 } 

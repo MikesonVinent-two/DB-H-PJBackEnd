@@ -1,5 +1,7 @@
 package com.example.demo.dto;
 
+import com.example.demo.entity.UserRole;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -13,7 +15,7 @@ public class UserDTO {
     private Long id;
     
     @NotBlank(message = "用户名不能为空", groups = {RegisterValidation.class, LoginValidation.class})
-    @Size(min = 4, max = 50, message = "用户名长度必须在4-50个字符之间", groups = {RegisterValidation.class})
+    @Size(min = 3, max = 50, message = "用户名长度必须在3-50个字符之间", groups = {RegisterValidation.class})
     private String username;
     
     @NotBlank(message = "邮箱不能为空", groups = RegisterValidation.class)
@@ -21,10 +23,10 @@ public class UserDTO {
     private String email;
     
     @NotBlank(message = "密码不能为空", groups = {RegisterValidation.class, LoginValidation.class})
-    @Size(min = 6, max = 100, message = "密码长度必须在6-100个字符之间", groups = {RegisterValidation.class})
+    @Size(min = 6, message = "密码长度不能小于6个字符", groups = {RegisterValidation.class})
     private String password;
     
-    private String role;
+    private UserRole role = UserRole.USER;
     
     // 构造函数
     public UserDTO() {
@@ -34,7 +36,6 @@ public class UserDTO {
         this.username = username;
         this.email = email;
         this.password = password;
-        this.role = "USER"; // 默认角色
     }
     
     // Getters and Setters
@@ -70,11 +71,11 @@ public class UserDTO {
         this.password = password;
     }
     
-    public String getRole() {
+    public UserRole getRole() {
         return role;
     }
     
-    public void setRole(String role) {
+    public void setRole(UserRole role) {
         this.role = role;
     }
 } 

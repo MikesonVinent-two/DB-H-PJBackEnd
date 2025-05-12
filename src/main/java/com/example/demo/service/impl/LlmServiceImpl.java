@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
@@ -21,6 +22,7 @@ import org.springframework.web.client.RestTemplate;
 import com.example.demo.config.LlmConfig;
 import com.example.demo.dto.LlmRequestDTO;
 import com.example.demo.dto.LlmResponseDTO;
+import com.example.demo.dto.ModelInfoDTO;
 import com.example.demo.service.LlmService;
 
 @Service
@@ -264,6 +266,98 @@ public class LlmServiceImpl implements LlmService {
         } catch (Exception e) {
             logger.error("解析API响应时发生错误: {}", e.getMessage(), e);
             return new LlmResponseDTO(false, "解析API响应时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Retryable(
+        value = {RestClientException.class},
+        maxAttemptsExpression = "#{@llmConfig.retry.maxAttempts}",
+        backoff = @Backoff(delayExpression = "#{@llmConfig.retry.backoffDelay}")
+    )
+    public List<ModelInfoDTO> getAvailableModels(String apiUrl, String apiKey) {
+        logger.info("正在获取可用模型列表，API URL: {}", apiUrl);
+        
+        try {
+            // 构建请求头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + apiKey);
+            
+            // 构建请求实体
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            // 构建模型列表API URL（保持与OpenAI兼容的路径）
+            String modelsUrl = apiUrl.endsWith("/") ? apiUrl + "v1/models" : apiUrl + "/v1/models";
+            
+            // 发送请求
+            ResponseEntity<Map> response = restTemplate.exchange(
+                modelsUrl,
+                HttpMethod.GET,
+                entity,
+                Map.class
+            );
+            
+            // 解析响应（假设响应格式与OpenAI兼容）
+            List<ModelInfoDTO> models = new ArrayList<>();
+            if (response.getBody() != null && response.getBody().containsKey("data")) {
+                List<Map<String, Object>> modelData = (List<Map<String, Object>>) response.getBody().get("data");
+                
+                for (Map<String, Object> model : modelData) {
+                    ModelInfoDTO modelInfo = new ModelInfoDTO(
+                        (String) model.get("id"),
+                        (String) model.get("id"), // 使用id作为名称
+                        getProviderFromUrl(apiUrl)
+                    );
+                    
+                    // 设置其他属性
+                    if (model.containsKey("description")) {
+                        modelInfo.setDescription((String) model.get("description"));
+                    }
+                    
+                    // 设置最大token数（如果有）
+                    if (model.containsKey("max_tokens")) {
+                        modelInfo.setMaxTokens((Integer) model.get("max_tokens"));
+                    }
+                    
+                    // 设置可用性
+                    modelInfo.setAvailable(true);
+                    
+                    models.add(modelInfo);
+                }
+            }
+            
+            logger.info("成功获取到{}个可用模型", models.size());
+            return models;
+            
+        } catch (Exception e) {
+            logger.error("获取模型列表时发生错误: {}", e.getMessage(), e);
+            throw new RestClientException("获取模型列表失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 从API URL中获取提供商名称
+     */
+    private String getProviderFromUrl(String apiUrl) {
+        if (apiUrl.contains("openai.com")) {
+            return "OpenAI";
+        } else if (apiUrl.contains("anthropic.com")) {
+            return "Anthropic";
+        } else {
+            // 尝试从URL中提取提供商名称
+            try {
+                String host = new java.net.URL(apiUrl).getHost();
+                // 移除常见的域名后缀
+                host = host.replaceAll("(?i)\\.com|\\.cn|\\.org|\\.net|\\.ai", "");
+                // 获取最后一个部分作为提供商名称
+                String[] parts = host.split("\\.");
+                String provider = parts[parts.length - 1];
+                // 首字母大写
+                return provider.substring(0, 1).toUpperCase() + provider.substring(1);
+            } catch (Exception e) {
+                return "OpenAI Compatible";
+            }
         }
     }
 } 
