@@ -8,6 +8,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -20,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import com.example.demo.config.LlmConfig;
+import com.example.demo.config.RestTemplateConfig;
 import com.example.demo.dto.LlmRequestDTO;
 import com.example.demo.dto.LlmResponseDTO;
 import com.example.demo.dto.ModelInfoDTO;
@@ -31,11 +33,16 @@ public class LlmServiceImpl implements LlmService {
     private static final Logger logger = LoggerFactory.getLogger(LlmServiceImpl.class);
     
     private final RestTemplate restTemplate;
+    private final RestTemplateBuilder restTemplateBuilder;
+    private final RestTemplateConfig restTemplateConfig;
     private final LlmConfig llmConfig;
 
     @Autowired
-    public LlmServiceImpl(RestTemplate restTemplate, LlmConfig llmConfig) {
+    public LlmServiceImpl(RestTemplate restTemplate, RestTemplateBuilder restTemplateBuilder, 
+                         RestTemplateConfig restTemplateConfig, LlmConfig llmConfig) {
         this.restTemplate = restTemplate;
+        this.restTemplateBuilder = restTemplateBuilder;
+        this.restTemplateConfig = restTemplateConfig;
         this.llmConfig = llmConfig;
     }
 
@@ -48,7 +55,6 @@ public class LlmServiceImpl implements LlmService {
         
         // 根据不同的API类型添加对应的端点路径        
         return baseUrl + "/v1/chat/completions";
-
     }
 
     @Override
@@ -90,8 +96,16 @@ public class LlmServiceImpl implements LlmService {
             // 创建HTTP实体
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
             
+            // 根据模型类型获取特定的RestTemplate
+            RestTemplate modelSpecificRestTemplate = 
+                restTemplateConfig.getModelSpecificRestTemplate(restTemplateBuilder, request.getModel());
+            
+            // 记录实际使用的超时设置
+            logger.info("模型 {} 使用的超时设置: {}", request.getModel(), 
+                       modelSpecificRestTemplate.getRequestFactory().toString());
+            
             // 发送请求
-            ResponseEntity<Map> response = restTemplate.postForEntity(
+            ResponseEntity<Map> response = modelSpecificRestTemplate.postForEntity(
                     apiUrl,
                     entity,
                     Map.class
@@ -290,7 +304,7 @@ public class LlmServiceImpl implements LlmService {
             // 构建模型列表API URL（保持与OpenAI兼容的路径）
             String modelsUrl = apiUrl.endsWith("/") ? apiUrl + "v1/models" : apiUrl + "/v1/models";
             
-            // 发送请求
+            // 使用默认RestTemplate发送请求 - 这里不需要模型特定的超时设置
             ResponseEntity<Map> response = restTemplate.exchange(
                 modelsUrl,
                 HttpMethod.GET,

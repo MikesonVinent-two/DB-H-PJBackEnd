@@ -5,7 +5,7 @@ import com.example.demo.entity.UserRole;
 public class LoginResponseDTO {
     private Long userId;
     private String username;
-    private String email;
+    private String contactInfo;
     private UserRole role;
     private String token;
     private Long expiresIn;  // token过期时间（秒）
@@ -18,10 +18,10 @@ public class LoginResponseDTO {
     }
     
     // 成功登录时使用的构造函数
-    public LoginResponseDTO(Long userId, String username, String email, UserRole role, String token, Long expiresIn) {
+    public LoginResponseDTO(Long userId, String username, String contactInfo, UserRole role, String token, Long expiresIn) {
         this.userId = userId;
         this.username = username;
-        this.email = email;
+        this.contactInfo = contactInfo;
         this.role = role;
         this.token = token;
         this.expiresIn = expiresIn;
@@ -52,12 +52,12 @@ public class LoginResponseDTO {
         this.username = username;
     }
     
-    public String getEmail() {
-        return email;
+    public String getContactInfo() {
+        return contactInfo;
     }
     
-    public void setEmail(String email) {
-        this.email = email;
+    public void setContactInfo(String contactInfo) {
+        this.contactInfo = contactInfo;
     }
     
     public UserRole getRole() {

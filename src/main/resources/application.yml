@@ -34,7 +34,10 @@ llm:
   default-api-url: https://api.openai.com/v1/chat/completions
   default-model: gpt-3.5-turbo
   connection-timeout: 30 # 秒
-  read-timeout: 60 # 秒
+  read-timeout: 60 # 秒 (默认模型的超时设置)
+  # 特定模型类型有特殊超时设置：
+  # - deepsearch/deepresearch 类型模型: 300秒 (5分钟)
+  # - 思考类模型: 180秒 (3分钟)
   retry:
     max-attempts: 3
     backoff-delay: 1000 # 毫秒

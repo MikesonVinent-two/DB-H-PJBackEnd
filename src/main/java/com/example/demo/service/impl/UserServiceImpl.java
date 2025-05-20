@@ -30,8 +30,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User register(UserDTO userDTO) {
-        logger.debug("开始处理用户注册 - 用户信息: username={}, email={}, role={}", 
-            userDTO.getUsername(), userDTO.getEmail(), userDTO.getRole());
+        logger.debug("开始处理用户注册 - 用户信息: username={}, contactInfo={}, role={}", 
+            userDTO.getUsername(), userDTO.getContactInfo(), userDTO.getRole());
         
         try {
             // 检查用户名是否已存在
@@ -43,7 +43,8 @@ public class UserServiceImpl implements UserService {
             // 创建新用户实体
             User user = new User();
             user.setUsername(userDTO.getUsername());
-            user.setEmail(userDTO.getEmail());
+            user.setContactInfo(userDTO.getContactInfo());
+            user.setName(userDTO.getName());
             
             // 加密密码
             try {
@@ -56,7 +57,7 @@ public class UserServiceImpl implements UserService {
             }
             
             // 设置用户角色
-            user.setRole(userDTO.getRole() != null ? userDTO.getRole() : UserRole.USER);
+            user.setRole(userDTO.getRole() != null ? userDTO.getRole() : UserRole.CROWDSOURCE_USER);
             
             // 保存用户
             try {

@@ -2,7 +2,6 @@ package com.example.demo.dto;
 
 import com.example.demo.entity.UserRole;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -18,23 +17,24 @@ public class UserDTO {
     @Size(min = 3, max = 50, message = "用户名长度必须在3-50个字符之间", groups = {RegisterValidation.class})
     private String username;
     
-    @NotBlank(message = "邮箱不能为空", groups = RegisterValidation.class)
-    @Email(message = "邮箱格式不正确", groups = RegisterValidation.class)
-    private String email;
+    private String name;
+    
+    @NotBlank(message = "联系方式不能为空", groups = RegisterValidation.class)
+    private String contactInfo;
     
     @NotBlank(message = "密码不能为空", groups = {RegisterValidation.class, LoginValidation.class})
     @Size(min = 6, message = "密码长度不能小于6个字符", groups = {RegisterValidation.class})
     private String password;
     
-    private UserRole role = UserRole.USER;
+    private UserRole role = UserRole.CROWDSOURCE_USER;
     
     // 构造函数
     public UserDTO() {
     }
     
-    public UserDTO(String username, String email, String password) {
+    public UserDTO(String username, String contactInfo, String password) {
         this.username = username;
-        this.email = email;
+        this.contactInfo = contactInfo;
         this.password = password;
     }
     
@@ -55,12 +55,20 @@ public class UserDTO {
         this.username = username;
     }
     
-    public String getEmail() {
-        return email;
+    public String getName() {
+        return name;
     }
     
-    public void setEmail(String email) {
-        this.email = email;
+    public void setName(String name) {
+        this.name = name;
+    }
+    
+    public String getContactInfo() {
+        return contactInfo;
+    }
+    
+    public void setContactInfo(String contactInfo) {
+        this.contactInfo = contactInfo;
     }
     
     public String getPassword() {

@@ -8,7 +8,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -29,13 +28,15 @@ public class User {
     @Size(min = 6, message = "密码长度不能小于6个字符")
     private String password;
     
-    @Email(message = "邮箱格式不正确")
-    @Column(unique = true)
-    private String email;
+    @Column(name = "name")
+    private String name;
+    
+    @Column(name = "contact_info")
+    private String contactInfo;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserRole role = UserRole.USER; // 默认为普通用户
+    private UserRole role = UserRole.CROWDSOURCE_USER; // 默认为众包用户
     
     @Column(name = "created_at")
     private java.time.LocalDateTime createdAt;
@@ -49,11 +50,11 @@ public class User {
         this.updatedAt = this.createdAt;
     }
     
-    public User(String username, String password, String email) {
+    public User(String username, String password, String contactInfo) {
         this();
         this.username = username;
         this.password = password;
-        this.email = email;
+        this.contactInfo = contactInfo;
     }
     
     // Getters and Setters
@@ -81,12 +82,20 @@ public class User {
         this.password = password;
     }
     
-    public String getEmail() {
-        return email;
+    public String getName() {
+        return name;
     }
     
-    public void setEmail(String email) {
-        this.email = email;
+    public void setName(String name) {
+        this.name = name;
+    }
+    
+    public String getContactInfo() {
+        return contactInfo;
+    }
+    
+    public void setContactInfo(String contactInfo) {
+        this.contactInfo = contactInfo;
     }
     
     public UserRole getRole() {

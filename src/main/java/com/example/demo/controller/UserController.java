@@ -41,8 +41,8 @@ public class UserController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Validated(RegisterValidation.class) @RequestBody UserDTO userDTO) {
-        logger.info("收到用户注册请求 - 用户信息: username={}, email={}, role={}", 
-            userDTO.getUsername(), userDTO.getEmail(), userDTO.getRole());
+        logger.info("收到用户注册请求 - 用户信息: username={}, contactInfo={}, role={}", 
+            userDTO.getUsername(), userDTO.getContactInfo(), userDTO.getRole());
         
         try {
             // 验证请求数据
@@ -54,9 +54,9 @@ public class UserController {
                 logger.error("注册失败 - 密码为空");
                 return new ResponseEntity<>(Map.of("error", "密码不能为空"), HttpStatus.BAD_REQUEST);
             }
-            if (userDTO.getEmail() == null || userDTO.getEmail().trim().isEmpty()) {
-                logger.error("注册失败 - 邮箱为空");
-                return new ResponseEntity<>(Map.of("error", "邮箱不能为空"), HttpStatus.BAD_REQUEST);
+            if (userDTO.getContactInfo() == null || userDTO.getContactInfo().trim().isEmpty()) {
+                logger.error("注册失败 - 联系方式为空");
+                return new ResponseEntity<>(Map.of("error", "联系方式不能为空"), HttpStatus.BAD_REQUEST);
             }
 
             logger.debug("开始处理用户注册 - 验证通过，准备保存用户信息");
@@ -65,7 +65,8 @@ public class UserController {
             Map<String, Object> response = new HashMap<>();
             response.put("id", user.getId());
             response.put("username", user.getUsername());
-            response.put("email", user.getEmail());
+            response.put("name", user.getName());
+            response.put("contactInfo", user.getContactInfo());
             response.put("role", user.getRole());
             
             logger.info("用户注册成功 - ID: {}, 用户名: {}, 角色: {}", 
@@ -108,7 +109,8 @@ public class UserController {
                         Map<String, Object> response = new HashMap<>();
                         response.put("id", user.getId());
                         response.put("username", user.getUsername());
-                        response.put("email", user.getEmail());
+                        response.put("name", user.getName());
+                        response.put("contactInfo", user.getContactInfo());
                         response.put("role", user.getRole());
                         
                         logger.info("用户登录成功 - ID: {}, 用户名: {}, 角色: {}", 
@@ -236,7 +238,8 @@ public class UserController {
                     Map<String, Object> profile = new HashMap<>();
                     profile.put("id", user.getId());
                     profile.put("username", user.getUsername());
-                    profile.put("email", user.getEmail());
+                    profile.put("name", user.getName());
+                    profile.put("contactInfo", user.getContactInfo());
                     profile.put("role", user.getRole());
                     profile.put("createdAt", user.getCreatedAt());
                     
