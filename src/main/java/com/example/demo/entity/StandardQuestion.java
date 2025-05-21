@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Convert;
 
 @Entity
 @Table(name = "standard_questions")
@@ -29,11 +30,12 @@ public class StandardQuestion {
     @Column(name = "question_text", nullable = false, columnDefinition = "TEXT")
     private String questionText;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = com.example.demo.converter.QuestionTypeConverter.class)
     @Column(name = "question_type", nullable = false)
     private QuestionType questionType;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = com.example.demo.converter.DifficultyLevelConverter.class)
+    @Column(name = "difficulty")
     private DifficultyLevel difficulty;
 
     @Column(name = "creation_time", nullable = false)
