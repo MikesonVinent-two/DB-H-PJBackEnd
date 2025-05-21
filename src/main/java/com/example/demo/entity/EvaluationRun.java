@@ -13,7 +13,7 @@ public class EvaluationRun {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "llm_model_id", nullable = false)
-    private LlmModel llmModel;
+    private LLMModel llmModel;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dataset_version_id", nullable = false)
@@ -59,11 +59,11 @@ public class EvaluationRun {
         this.id = id;
     }
 
-    public LlmModel getLlmModel() {
+    public LLMModel getLlmModel() {
         return llmModel;
     }
 
-    public void setLlmModel(LlmModel llmModel) {
+    public void setLlmModel(LLMModel llmModel) {
         this.llmModel = llmModel;
     }
 

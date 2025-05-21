@@ -5,8 +5,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "llm_models")
-public class LlmModel {
-    
+public class LLMModel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -18,25 +17,25 @@ public class LlmModel {
 
     private String version;
 
-    @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "api_config", columnDefinition = "json")
-    private String apiConfig;
+    private String apiUrl;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private String apiKey;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
-    private User createdByUser;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_change_log_id")
-    private ChangeLog createdChangeLog;
+    private Long createdByUserId;
 
-    @Column(name = "deleted_at")
+    private Long createdChangeLogId;
+
     private LocalDateTime deletedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 
     // Getters and Setters
     public Long getId() {
@@ -79,12 +78,20 @@ public class LlmModel {
         this.description = description;
     }
 
-    public String getApiConfig() {
-        return apiConfig;
+    public String getApiUrl() {
+        return apiUrl;
     }
 
-    public void setApiConfig(String apiConfig) {
-        this.apiConfig = apiConfig;
+    public void setApiUrl(String apiUrl) {
+        this.apiUrl = apiUrl;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -95,20 +102,20 @@ public class LlmModel {
         this.createdAt = createdAt;
     }
 
-    public User getCreatedByUser() {
-        return createdByUser;
+    public Long getCreatedByUserId() {
+        return createdByUserId;
     }
 
-    public void setCreatedByUser(User createdByUser) {
-        this.createdByUser = createdByUser;
+    public void setCreatedByUserId(Long createdByUserId) {
+        this.createdByUserId = createdByUserId;
     }
 
-    public ChangeLog getCreatedChangeLog() {
-        return createdChangeLog;
+    public Long getCreatedChangeLogId() {
+        return createdChangeLogId;
     }
 
-    public void setCreatedChangeLog(ChangeLog createdChangeLog) {
-        this.createdChangeLog = createdChangeLog;
+    public void setCreatedChangeLogId(Long createdChangeLogId) {
+        this.createdChangeLogId = createdChangeLogId;
     }
 
     public LocalDateTime getDeletedAt() {
