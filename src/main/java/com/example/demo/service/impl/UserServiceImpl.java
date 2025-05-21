@@ -8,8 +8,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.dto.UserDTO;
+import com.example.demo.dto.UserProfileDTO;
 import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.repository.UserRepository;
@@ -157,5 +159,24 @@ public class UserServiceImpl implements UserService {
         User updatedUser = userRepository.save(user);
         logger.debug("成功更新用户信息 - ID: {}, 用户名: {}", updatedUser.getId(), updatedUser.getUsername());
         return updatedUser;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UserProfileDTO> getUserProfile(Long userId) {
+        return userRepository.findById(userId)
+                .map(this::convertToProfileDTO);
+    }
+
+    private UserProfileDTO convertToProfileDTO(User user) {
+        UserProfileDTO dto = new UserProfileDTO();
+        dto.setId(user.getId());
+        dto.setUsername(user.getUsername());
+        dto.setName(user.getName());
+        dto.setRole(user.getRole());
+        dto.setContactInfo(user.getContactInfo());
+        dto.setCreatedAt(user.getCreatedAt());
+        dto.setUpdatedAt(user.getUpdatedAt());
+        return dto;
     }
 } 

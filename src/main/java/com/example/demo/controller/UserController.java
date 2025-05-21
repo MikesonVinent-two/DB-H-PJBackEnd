@@ -25,6 +25,7 @@ import com.example.demo.dto.UserDTO.LoginValidation;
 import com.example.demo.dto.UserDTO.RegisterValidation;
 import com.example.demo.entity.User;
 import com.example.demo.service.UserService;
+import com.example.demo.dto.UserProfileDTO;
 
 @RestController
 @RequestMapping("/api/users")
@@ -229,34 +230,9 @@ public class UserController {
     }
 
     @GetMapping("/profile/{userId}")
-    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
-        logger.info("收到获取用户资料请求 - 用户ID: {}", userId);
-        
-        try {
-            return userService.getUserById(userId)
-                .map(user -> {
-                    Map<String, Object> profile = new HashMap<>();
-                    profile.put("id", user.getId());
-                    profile.put("username", user.getUsername());
-                    profile.put("name", user.getName());
-                    profile.put("contactInfo", user.getContactInfo());
-                    profile.put("role", user.getRole());
-                    profile.put("createdAt", user.getCreatedAt());
-                    
-                    logger.info("成功获取用户资料 - ID: {}, 用户名: {}", user.getId(), user.getUsername());
-                    return new ResponseEntity<>(profile, HttpStatus.OK);
-                })
-                .orElseGet(() -> {
-                    logger.warn("获取用户资料失败 - 用户ID: {}, 原因: 用户不存在", userId);
-                    Map<String, Object> error = new HashMap<>();
-                    error.put("error", "用户不存在");
-                    return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
-                });
-        } catch (Exception e) {
-            logger.error("获取用户资料过程中发生错误 - 用户ID: {}, 异常信息: {}", userId, e.getMessage(), e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "获取用户资料失败: " + e.getMessage());
-            return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public ResponseEntity<UserProfileDTO> getUserProfile(@PathVariable Long userId) {
+        return userService.getUserProfile(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 } 
