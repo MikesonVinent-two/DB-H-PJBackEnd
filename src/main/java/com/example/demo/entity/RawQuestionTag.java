@@ -2,6 +2,8 @@ package com.example.demo.entity;
 
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,20 +13,30 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "tags")
-public class Tag {
+@Table(
+    name = "raw_question_tags",
+    uniqueConstraints = @UniqueConstraint(
+        columnNames = {"raw_question_id", "tag_id"},
+        name = "uk_raw_question_tag"
+    )
+)
+public class RawQuestionTag {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(name = "tag_name", unique = true, nullable = false)
-    private String tagName;
     
-    @Column(name = "tag_type")
-    private String tagType;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "raw_question_id", nullable = false)
+    @JsonBackReference
+    private RawQuestion rawQuestion;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag_id", nullable = false)
+    private Tag tag;
     
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -37,15 +49,13 @@ public class Tag {
     @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
     
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
-    
     // 构造函数
-    public Tag() {
+    public RawQuestionTag() {
     }
     
-    public Tag(String tagName) {
-        this.tagName = tagName;
+    public RawQuestionTag(RawQuestion rawQuestion, Tag tag) {
+        this.rawQuestion = rawQuestion;
+        this.tag = tag;
         this.createdAt = LocalDateTime.now();
     }
     
@@ -58,20 +68,20 @@ public class Tag {
         this.id = id;
     }
     
-    public String getTagName() {
-        return tagName;
+    public RawQuestion getRawQuestion() {
+        return rawQuestion;
     }
     
-    public void setTagName(String tagName) {
-        this.tagName = tagName;
+    public void setRawQuestion(RawQuestion rawQuestion) {
+        this.rawQuestion = rawQuestion;
     }
     
-    public String getTagType() {
-        return tagType;
+    public Tag getTag() {
+        return tag;
     }
     
-    public void setTagType(String tagType) {
-        this.tagType = tagType;
+    public void setTag(Tag tag) {
+        this.tag = tag;
     }
     
     public LocalDateTime getCreatedAt() {
@@ -96,13 +106,5 @@ public class Tag {
     
     public void setCreatedChangeLog(ChangeLog createdChangeLog) {
         this.createdChangeLog = createdChangeLog;
-    }
-    
-    public LocalDateTime getDeletedAt() {
-        return deletedAt;
-    }
-    
-    public void setDeletedAt(LocalDateTime deletedAt) {
-        this.deletedAt = deletedAt;
     }
 } 

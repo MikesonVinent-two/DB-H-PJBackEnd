@@ -1,6 +1,7 @@
 package com.example.demo.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,6 +23,8 @@ public class RawQuestionDTO {
     private LocalDateTime crawlTime;
     
     private String otherMetadata;
+    
+    private List<String> tags;
     
     // 构造函数
     public RawQuestionDTO() {
@@ -74,5 +77,13 @@ public class RawQuestionDTO {
     
     public void setOtherMetadata(String otherMetadata) {
         this.otherMetadata = otherMetadata;
+    }
+    
+    public List<String> getTags() {
+        return tags;
+    }
+    
+    public void setTags(List<String> tags) {
+        this.tags = tags;
     }
 } 

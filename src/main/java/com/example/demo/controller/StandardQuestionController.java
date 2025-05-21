@@ -1,7 +1,10 @@
 package com.example.demo.controller;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.StandardQuestionDTO;
 import com.example.demo.entity.StandardQuestion;
+import com.example.demo.entity.StandardQuestionTag;
 import com.example.demo.service.StandardQuestionService;
 
 import jakarta.validation.Valid;
@@ -58,6 +62,14 @@ public class StandardQuestionController {
             StandardQuestion savedQuestion = standardQuestionService.createStandardQuestion(
                 questionDTO, questionDTO.getUserId());
             
+            // 提取标签信息
+            List<String> tagNames = new ArrayList<>();
+            if (savedQuestion.getQuestionTags() != null && !savedQuestion.getQuestionTags().isEmpty()) {
+                tagNames = savedQuestion.getQuestionTags().stream()
+                    .map(tag -> tag.getTag().getTagName())
+                    .collect(Collectors.toList());
+            }
+            
             // 构建成功响应
             Map<String, Object> response = new HashMap<>();
             response.put("id", savedQuestion.getId());
@@ -65,6 +77,7 @@ public class StandardQuestionController {
             response.put("questionType", savedQuestion.getQuestionType());
             response.put("difficulty", savedQuestion.getDifficulty());
             response.put("createdByUserId", savedQuestion.getCreatedByUser().getId());
+            response.put("tags", tagNames);
             response.put("message", "标准问题创建成功");
             
             logger.info("标准问题创建成功 - ID: {}", savedQuestion.getId());

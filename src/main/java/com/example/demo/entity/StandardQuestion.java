@@ -1,6 +1,10 @@
 package com.example.demo.entity;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,7 +16,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Convert;
 
 @Entity
@@ -55,6 +61,22 @@ public class StandardQuestion {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+    
+    @OneToMany(mappedBy = "standardQuestion", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private List<StandardQuestionTag> questionTags = new ArrayList<>();
+
+    // 添加标签关联
+    public void addTag(StandardQuestionTag tag) {
+        questionTags.add(tag);
+        tag.setStandardQuestion(this);
+    }
+    
+    // 移除标签关联
+    public void removeTag(StandardQuestionTag tag) {
+        questionTags.remove(tag);
+        tag.setStandardQuestion(null);
+    }
 
     // Getters and Setters
     public Long getId() {
@@ -135,5 +157,13 @@ public class StandardQuestion {
 
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+    
+    public List<StandardQuestionTag> getQuestionTags() {
+        return questionTags;
+    }
+
+    public void setQuestionTags(List<StandardQuestionTag> questionTags) {
+        this.questionTags = questionTags;
     }
 } 

@@ -3,6 +3,8 @@ package com.example.demo.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+
 @Entity
 @Table(name = "standard_question_tags")
 public class StandardQuestionTag {
@@ -13,6 +15,7 @@ public class StandardQuestionTag {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "standard_question_id", nullable = false)
+    @JsonBackReference
     private StandardQuestion standardQuestion;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -29,6 +32,17 @@ public class StandardQuestionTag {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
+
+    // 构造函数
+    public StandardQuestionTag() {
+    }
+    
+    public StandardQuestionTag(StandardQuestion standardQuestion, Tag tag, User user) {
+        this.standardQuestion = standardQuestion;
+        this.tag = tag;
+        this.createdByUser = user;
+        this.createdAt = LocalDateTime.now();
+    }
 
     // Getters and Setters
     public Long getId() {

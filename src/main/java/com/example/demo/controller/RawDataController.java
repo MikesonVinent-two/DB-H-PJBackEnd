@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.RawAnswerDTO;
+import com.example.demo.dto.RawQuestionDTO;
 import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.entity.RawAnswer;
 import com.example.demo.entity.RawQuestion;
@@ -34,6 +35,12 @@ public class RawDataController {
     @PostMapping("/questions")
     public ResponseEntity<RawQuestion> createQuestion(@Valid @RequestBody RawQuestion question) {
         RawQuestion savedQuestion = rawDataService.createQuestion(question);
+        return ResponseEntity.ok(savedQuestion);
+    }
+    
+    @PostMapping("/questions-dto")
+    public ResponseEntity<RawQuestion> createQuestionFromDTO(@Valid @RequestBody RawQuestionDTO questionDTO) {
+        RawQuestion savedQuestion = rawDataService.createQuestionFromDTO(questionDTO);
         return ResponseEntity.ok(savedQuestion);
     }
     

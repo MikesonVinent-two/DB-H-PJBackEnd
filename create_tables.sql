@@ -24,6 +24,7 @@ CREATE TABLE `raw_questions` (
     `title` VARCHAR(512) NOT NULL,
     `content` TEXT NULL COMMENT '问题描述或详细内容',
     `crawl_time` DATETIME NOT NULL,
+    `tags` JSON NULL COMMENT '标签列表，例如: ["医学", "疾病", "治疗"]',
     `other_metadata` JSON NULL COMMENT '存储原始站点的其他信息 (e.g., 原始ID, 作者)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -170,24 +171,24 @@ CREATE TABLE `standard_subjective_answers` (
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 12. standard_answer_checklist_items (标准答案检查项表)
-DROP TABLE IF EXISTS `standard_answer_checklist_items`;
-CREATE TABLE `standard_answer_checklist_items` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `standard_question_id` BIGINT NOT NULL COMMENT '关联到特定的标准问题版本',
-    `item_text` TEXT NOT NULL COMMENT '检查项的具体描述 (e.g., "是否提到了疾病的常见症状")',
-    `item_type` ENUM('POSITIVE_POINT', 'NEGATIVE_POINT', 'STYLE_POINT', 'FACTUAL_CHECK', 'OTHER') NOT NULL COMMENT '检查项的类型',
-    `weight_score` DECIMAL(10, 2) NOT NULL COMMENT '该检查项的分值或权重 (可以是正或负)',
-    `order_in_list` INT NULL COMMENT '在清单中的显示顺序',
-    `guidance` TEXT NULL COMMENT '针对此检查项给评测员的额外指导',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NOT NULL,
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此检查项的 change_log 条目',
-    `deleted_at` DATETIME NULL COMMENT '软删除标记',
-    FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- -- 12. standard_answer_checklist_items (标准答案检查项表)
+-- DROP TABLE IF EXISTS `standard_answer_checklist_items`;
+-- CREATE TABLE `standard_answer_checklist_items` (
+--     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+--     `standard_question_id` BIGINT NOT NULL COMMENT '关联到特定的标准问题版本',
+--     `item_text` TEXT NOT NULL COMMENT '检查项的具体描述 (e.g., "是否提到了疾病的常见症状")',
+--     `item_type` ENUM('POSITIVE_POINT', 'NEGATIVE_POINT', 'STYLE_POINT', 'FACTUAL_CHECK', 'OTHER') NOT NULL COMMENT '检查项的类型',
+--     `weight_score` DECIMAL(10, 2) NOT NULL COMMENT '该检查项的分值或权重 (可以是正或负)',
+--     `order_in_list` INT NULL COMMENT '在清单中的显示顺序',
+--     `guidance` TEXT NULL COMMENT '针对此检查项给评测员的额外指导',
+--     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     `created_by_user_id` BIGINT NOT NULL,
+--     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此检查项的 change_log 条目',
+--     `deleted_at` DATETIME NULL COMMENT '软删除标记',
+--     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
+--     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+--     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 13. tags (标签表)
 DROP TABLE IF EXISTS `tags`;
@@ -217,6 +218,22 @@ CREATE TABLE `standard_question_tags` (
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
     UNIQUE (`standard_question_id`, `tag_id`) COMMENT '防止重复标签'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14.5 raw_question_tags (原始问题-标签关联表)
+DROP TABLE IF EXISTS `raw_question_tags`;
+CREATE TABLE `raw_question_tags` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `raw_question_id` BIGINT NOT NULL,
+    `tag_id` BIGINT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NULL,
+    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
+    FOREIGN KEY (`raw_question_id`) REFERENCES `raw_questions`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    UNIQUE (`raw_question_id`, `tag_id`) COMMENT '防止重复标签'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 15. dataset_versions (数据集版本表)

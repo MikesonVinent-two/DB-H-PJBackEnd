@@ -1,5 +1,7 @@
 package com.example.demo.dto;
 
+import java.util.List;
+
 import com.example.demo.entity.DifficultyLevel;
 import com.example.demo.entity.QuestionType;
 
@@ -24,6 +26,8 @@ public class StandardQuestionDTO {
     private Long parentStandardQuestionId;
     
     private String commitMessage;
+    
+    private List<String> tags;
     
     // Getters and Setters
     public Long getUserId() {
@@ -80,5 +84,13 @@ public class StandardQuestionDTO {
     
     public void setCommitMessage(String commitMessage) {
         this.commitMessage = commitMessage;
+    }
+    
+    public List<String> getTags() {
+        return tags;
+    }
+    
+    public void setTags(List<String> tags) {
+        this.tags = tags;
     }
 } 

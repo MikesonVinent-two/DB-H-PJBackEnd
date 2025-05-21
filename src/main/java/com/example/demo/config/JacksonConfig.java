@@ -7,6 +7,8 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import com.example.demo.entity.QuestionType;
 import com.example.demo.entity.DifficultyLevel;
 import com.example.demo.entity.EntityType;
+import com.example.demo.entity.ChangeType;
+import com.example.demo.exception.EnumDeserializationException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -42,7 +44,12 @@ public class JacksonConfig {
             @Override
             public QuestionType deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
                 String value = p.getValueAsString();
-                return QuestionType.fromString(value);
+                try {
+                    return QuestionType.fromString(value);
+                } catch (EnumDeserializationException e) {
+                    // 直接抛出异常，由全局异常处理器处理
+                    throw e;
+                }
             }
         });
         
@@ -51,7 +58,26 @@ public class JacksonConfig {
             @Override
             public DifficultyLevel deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
                 String value = p.getValueAsString();
-                return DifficultyLevel.fromString(value);
+                try {
+                    return DifficultyLevel.fromString(value);
+                } catch (EnumDeserializationException e) {
+                    // 直接抛出异常，由全局异常处理器处理
+                    throw e;
+                }
+            }
+        });
+        
+        // 为ChangeType添加自定义反序列化器
+        module.addDeserializer(ChangeType.class, new StdScalarDeserializer<ChangeType>(ChangeType.class) {
+            @Override
+            public ChangeType deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                String value = p.getValueAsString();
+                try {
+                    return ChangeType.fromString(value);
+                } catch (EnumDeserializationException e) {
+                    // 直接抛出异常，由全局异常处理器处理
+                    throw e;
+                }
             }
         });
         

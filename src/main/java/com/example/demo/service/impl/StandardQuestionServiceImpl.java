@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -7,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.example.demo.dto.StandardQuestionDTO;
 import com.example.demo.entity.ChangeLog;
@@ -15,14 +17,19 @@ import com.example.demo.entity.ChangeLogDetail;
 import com.example.demo.entity.EntityType;
 import com.example.demo.entity.RawQuestion;
 import com.example.demo.entity.StandardQuestion;
+import com.example.demo.entity.StandardQuestionTag;
+import com.example.demo.entity.Tag;
 import com.example.demo.entity.User;
 import com.example.demo.repository.ChangeLogDetailRepository;
 import com.example.demo.repository.ChangeLogRepository;
 import com.example.demo.repository.RawQuestionRepository;
 import com.example.demo.repository.StandardQuestionRepository;
+import com.example.demo.repository.StandardQuestionTagRepository;
+import com.example.demo.repository.TagRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.StandardQuestionService;
 import com.example.demo.util.ChangeLogUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class StandardQuestionServiceImpl implements StandardQuestionService {
@@ -43,6 +50,15 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     
     @Autowired
     private ChangeLogDetailRepository changeLogDetailRepository;
+    
+    @Autowired
+    private TagRepository tagRepository;
+    
+    @Autowired
+    private StandardQuestionTagRepository standardQuestionTagRepository;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -114,6 +130,11 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             } catch (Exception e) {
                 logger.error("创建标准问题失败 - 保存标准问题时出错", e);
                 throw new RuntimeException("保存标准问题时出错: " + e.getMessage());
+            }
+            
+            // 处理标签关联
+            if (questionDTO.getTags() != null && !questionDTO.getTags().isEmpty()) {
+                processQuestionTags(standardQuestion, questionDTO.getTags(), user, changeLog);
             }
             
             // 更新变更日志的关联问题
@@ -189,6 +210,61 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         } catch (Exception e) {
             logger.error("创建标准问题时发生未预期的错误", e);
             throw new RuntimeException("创建标准问题时发生错误: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 处理标准问题的标签关联
+     * @param standardQuestion 已保存的标准问题实体
+     * @param tagNames 标签名称列表
+     * @param user 当前用户
+     * @param changeLog 变更日志
+     */
+    @Transactional
+    protected void processQuestionTags(StandardQuestion standardQuestion, List<String> tagNames, 
+                                      User user, ChangeLog changeLog) {
+        if (tagNames == null || tagNames.isEmpty()) {
+            return;
+        }
+        
+        List<StandardQuestionTag> questionTags = new ArrayList<>();
+        
+        for (String tagName : tagNames) {
+            if (!StringUtils.hasText(tagName)) {
+                continue;
+            }
+            
+            // 查找或创建标签
+            Tag tag = tagRepository.findByTagName(tagName.trim())
+                    .orElseGet(() -> {
+                        Tag newTag = new Tag(tagName.trim());
+                        newTag.setCreatedByUser(user);
+                        newTag.setCreatedChangeLog(changeLog);
+                        return tagRepository.save(newTag);
+                    });
+            
+            // 如果该问题与标签的关联不存在，则创建关联
+            if (!standardQuestionTagRepository.existsByStandardQuestionAndTag(standardQuestion, tag)) {
+                StandardQuestionTag questionTag = new StandardQuestionTag(standardQuestion, tag, user);
+                questionTag.setCreatedChangeLog(changeLog);
+                questionTags.add(questionTag);
+                standardQuestion.addTag(questionTag);
+                
+                // 记录变更日志详情
+                ChangeLogDetail tagDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION_TAGS,
+                    standardQuestion.getId(),
+                    "tag_id",
+                    null,
+                    tag.getId()
+                );
+                changeLogDetailRepository.save(tagDetail);
+            }
+        }
+        
+        if (!questionTags.isEmpty()) {
+            standardQuestionTagRepository.saveAll(questionTags);
         }
     }
 } 

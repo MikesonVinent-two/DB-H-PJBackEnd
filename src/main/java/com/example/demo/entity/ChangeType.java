@@ -1,5 +1,7 @@
 package com.example.demo.entity;
 
+import com.example.demo.exception.EnumDeserializationException;
+
 public enum ChangeType {
     CREATE_STANDARD_ANSWER("创建标准答案"),
     UPDATE_STANDARD_ANSWER("更新标准答案"),
@@ -37,7 +39,8 @@ public enum ChangeType {
     /**
      * 根据字符串查找对应的变更类型，忽略大小写
      * @param value 变更类型字符串
-     * @return 对应的变更类型枚举值，如果找不到则返回null
+     * @return 对应的变更类型枚举值
+     * @throws EnumDeserializationException 如果找不到匹配的枚举值
      */
     public static ChangeType fromString(String value) {
         if (value == null) {
@@ -47,6 +50,7 @@ public enum ChangeType {
         try {
             return ChangeType.valueOf(value.toUpperCase());
         } catch (IllegalArgumentException e) {
+            // 尝试匹配名称
             for (ChangeType type : ChangeType.values()) {
                 if (type.name().equalsIgnoreCase(value)) {
                     return type;
@@ -56,13 +60,24 @@ public enum ChangeType {
                     return type;
                 }
             }
+            
             // 处理特殊情况，如下划线与横杠的替换
             if (value.contains("_")) {
-                return fromString(value.replace("_", "-"));
+                try {
+                    return fromString(value.replace("_", "-"));
+                } catch (EnumDeserializationException ex) {
+                    // 忽略这个异常，继续尝试其他方法
+                }
             } else if (value.contains("-")) {
-                return fromString(value.replace("-", "_"));
+                try {
+                    return fromString(value.replace("-", "_"));
+                } catch (EnumDeserializationException ex) {
+                    // 忽略这个异常，继续尝试其他方法
+                }
             }
-            return null;
+            
+            // 所有尝试都失败了，抛出自定义异常
+            throw new EnumDeserializationException("changeType", value, ChangeType.class);
         }
     }
 } 
