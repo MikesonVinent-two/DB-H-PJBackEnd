@@ -6,10 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.example.demo.dto.CrowdsourcedAnswerDTO;
 import com.example.demo.service.CrowdsourcedAnswerService;
@@ -65,18 +68,71 @@ public class CrowdsourcedAnswerController {
     // 提交众包回答
     @PostMapping
     public ResponseEntity<?> submitCrowdsourcedAnswer(@Valid @RequestBody CrowdsourcedAnswerDTO answerDTO) {
-        logger.info("接收到众包回答提交请求 - 问题ID: {}, 用户ID: {}", 
-            answerDTO.getStandardQuestionId(), answerDTO.getUserId());
+        logger.info("接收到众包回答提交请求 - 问题ID: {}, 用户ID: {}, 任务批次ID: {}", 
+            answerDTO.getStandardQuestionId(), answerDTO.getUserId(), answerDTO.getTaskBatchId());
         
         try {
             CrowdsourcedAnswerDTO savedAnswer = crowdsourcedAnswerService.createCrowdsourcedAnswer(answerDTO);
             return ResponseEntity.ok(savedAnswer);
         } catch (IllegalArgumentException e) {
             logger.error("提交众包回答失败 - 参数错误", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (IllegalStateException e) {
+            // 处理已存在记录的情况
+            logger.error("提交众包回答失败 - 重复提交", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "DUPLICATE_SUBMISSION");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         } catch (Exception e) {
             logger.error("提交众包回答失败 - 服务器错误", e);
-            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    // 修改众包回答
+    @PutMapping("/{answerId}")
+    public ResponseEntity<?> updateCrowdsourcedAnswer(
+            @PathVariable Long answerId,
+            @Valid @RequestBody CrowdsourcedAnswerDTO answerDTO) {
+        logger.info("接收到修改众包回答请求 - 回答ID: {}, 用户ID: {}", answerId, answerDTO.getUserId());
+        
+        try {
+            CrowdsourcedAnswerDTO updatedAnswer = crowdsourcedAnswerService.updateCrowdsourcedAnswer(answerId, answerDTO);
+            return ResponseEntity.ok(updatedAnswer);
+        } catch (IllegalArgumentException e) {
+            logger.error("修改众包回答失败 - 参数错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (IllegalStateException e) {
+            // 处理权限或状态错误
+            logger.error("修改众包回答失败 - 权限或状态错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "OPERATION_NOT_ALLOWED");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            logger.error("修改众包回答失败 - 服务器错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
@@ -98,10 +154,73 @@ public class CrowdsourcedAnswerController {
             return ResponseEntity.ok(reviewedAnswer);
         } catch (IllegalArgumentException e) {
             logger.error("审核众包回答失败 - 参数错误", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         } catch (Exception e) {
             logger.error("审核众包回答失败 - 服务器错误", e);
-            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 删除众包回答
+     * @param answerId 回答ID
+     * @param userId 用户ID（必须是回答的创建者）
+     * @return 操作结果
+     */
+    @DeleteMapping("/{answerId}")
+    public ResponseEntity<?> deleteCrowdsourcedAnswer(
+            @PathVariable Long answerId,
+            @RequestParam Long userId) {
+        logger.info("接收到删除众包回答请求 - 回答ID: {}, 用户ID: {}", answerId, userId);
+        
+        try {
+            boolean result = crowdsourcedAnswerService.deleteCrowdsourcedAnswer(answerId, userId);
+            
+            if (result) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "众包回答删除成功");
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "删除操作未完成");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+        } catch (IllegalArgumentException e) {
+            // 回答不存在等参数错误
+            logger.error("删除众包回答失败 - 参数错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (IllegalStateException e) {
+            // 权限或状态错误
+            logger.error("删除众包回答失败 - 权限或状态错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "OPERATION_NOT_ALLOWED");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            // 其他服务器错误
+            logger.error("删除众包回答失败 - 服务器错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 }

@@ -17,4 +17,26 @@ public interface ExpertCandidateAnswerService {
     // 更新专家候选回答的质量评分和反馈
     ExpertCandidateAnswerDTO updateQualityScoreAndFeedback(
         Long answerId, Integer qualityScore, String feedback);
+        
+    /**
+     * 修改专家候选回答内容
+     * @param answerId 回答ID
+     * @param userId 操作用户ID（用于权限验证）
+     * @param answerText 新的回答内容
+     * @return 修改后的回答
+     * @throws IllegalArgumentException 如果回答不存在
+     * @throws IllegalStateException 如果用户无权修改
+     */
+    ExpertCandidateAnswerDTO updateExpertCandidateAnswer(
+        Long answerId, Long userId, String answerText);
+        
+    /**
+     * 删除专家候选回答
+     * @param answerId 回答ID
+     * @param userId 操作用户ID（用于权限验证）
+     * @return 是否删除成功
+     * @throws IllegalArgumentException 如果回答不存在
+     * @throws IllegalStateException 如果用户无权删除
+     */
+    boolean deleteExpertCandidateAnswer(Long answerId, Long userId);
 } 

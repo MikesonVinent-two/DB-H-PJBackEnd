@@ -35,4 +35,21 @@ public interface RawDataService {
      * @return 满足所有标签的问题列表
      */
     Page<RawQuestionDisplayDTO> findQuestionsByTags(List<String> tags, Pageable pageable);
+    
+    /**
+     * 删除原始问题
+     * @param questionId 问题ID
+     * @return 是否删除成功
+     * @throws IllegalArgumentException 如果问题不存在
+     * @throws IllegalStateException 如果问题已被标准化，不能删除
+     */
+    boolean deleteRawQuestion(Long questionId);
+    
+    /**
+     * 删除原始回答
+     * @param answerId 回答ID
+     * @return 是否删除成功
+     * @throws IllegalArgumentException 如果回答不存在
+     */
+    boolean deleteRawAnswer(Long answerId);
 } 

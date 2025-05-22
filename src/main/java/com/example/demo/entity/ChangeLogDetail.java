@@ -32,24 +32,48 @@ public class ChangeLogDetail {
     private String newValue;
     
     // Getter and Setter methods
+    public ChangeLog getChangeLog() {
+        return this.changeLog;
+    }
+    
     public void setChangeLog(ChangeLog changeLog) {
         this.changeLog = changeLog;
+    }
+    
+    public EntityType getEntityType() {
+        return this.entityType;
     }
     
     public void setEntityType(EntityType entityType) {
         this.entityType = entityType;
     }
     
+    public Long getEntityId() {
+        return this.entityId;
+    }
+    
     public void setEntityId(Long entityId) {
         this.entityId = entityId;
+    }
+    
+    public String getAttributeName() {
+        return this.attributeName;
     }
     
     public void setAttributeName(String attributeName) {
         this.attributeName = attributeName;
     }
     
+    public String getOldValue() {
+        return this.oldValue;
+    }
+    
     public void setOldValue(String oldValue) {
         this.oldValue = oldValue;
+    }
+    
+    public String getNewValue() {
+        return this.newValue;
     }
     
     public void setNewValue(String newValue) {

@@ -13,6 +13,11 @@ import jakarta.validation.Valid;
 
 import com.example.demo.dto.ExpertCandidateAnswerDTO;
 import com.example.demo.service.ExpertCandidateAnswerService;
+import org.springframework.http.HttpStatus;
+import java.util.HashMap;
+import java.util.Map;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
 @RestController
 @RequestMapping("/api/expert-candidate-answers")
@@ -79,5 +84,101 @@ public class ExpertCandidateAnswerController {
             logger.error("更新质量评分失败 - 服务器错误", e);
             return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
         }
+    }
+    
+    /**
+     * 修改专家候选回答内容
+     * @param answerId 回答ID
+     * @param updateRequest 更新请求，包含userId和新的答案内容
+     * @return 修改后的回答
+     */
+    @PutMapping("/{answerId}")
+    public ResponseEntity<?> updateExpertCandidateAnswer(
+            @PathVariable Long answerId,
+            @Valid @RequestBody UpdateAnswerRequest updateRequest) {
+        logger.info("接收到修改专家候选回答请求 - 回答ID: {}, 用户ID: {}", 
+            answerId, updateRequest.getUserId());
+        
+        try {
+            ExpertCandidateAnswerDTO updatedAnswer = expertCandidateAnswerService
+                .updateExpertCandidateAnswer(
+                    answerId, 
+                    updateRequest.getUserId(), 
+                    updateRequest.getAnswerText()
+                );
+            return ResponseEntity.ok(updatedAnswer);
+        } catch (IllegalArgumentException e) {
+            logger.error("修改专家候选回答失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            logger.error("修改专家候选回答失败 - 权限错误", e);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("修改专家候选回答失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+    
+    /**
+     * 删除专家候选回答
+     * @param answerId 回答ID
+     * @param userId 用户ID（权限验证）
+     * @return 操作结果
+     */
+    @DeleteMapping("/{answerId}")
+    public ResponseEntity<?> deleteExpertCandidateAnswer(
+            @PathVariable Long answerId,
+            @RequestParam Long userId) {
+        logger.info("接收到删除专家候选回答请求 - 回答ID: {}, 用户ID: {}", answerId, userId);
+        
+        try {
+            boolean result = expertCandidateAnswerService.deleteExpertCandidateAnswer(answerId, userId);
+            
+            if (result) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "专家候选回答删除成功");
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.internalServerError().body("删除操作未完成");
+            }
+        } catch (IllegalArgumentException e) {
+            logger.error("删除专家候选回答失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            logger.error("删除专家候选回答失败 - 权限错误", e);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("删除专家候选回答失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+}
+
+/**
+ * 更新专家回答的请求体
+ */
+class UpdateAnswerRequest {
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+    
+    @NotBlank(message = "回答内容不能为空")
+    private String answerText;
+    
+    // Getters and Setters
+    public Long getUserId() {
+        return userId;
+    }
+    
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+    
+    public String getAnswerText() {
+        return answerText;
+    }
+    
+    public void setAnswerText(String answerText) {
+        this.answerText = answerText;
     }
 } 

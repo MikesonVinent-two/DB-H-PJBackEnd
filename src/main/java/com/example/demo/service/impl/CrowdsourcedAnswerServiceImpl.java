@@ -77,8 +77,8 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
     @Override
     @Transactional
     public CrowdsourcedAnswerDTO createCrowdsourcedAnswer(CrowdsourcedAnswerDTO answerDTO) {
-        logger.debug("开始创建众包回答 - 标准问题ID: {}, 用户ID: {}", 
-            answerDTO.getStandardQuestionId(), answerDTO.getUserId());
+        logger.debug("开始创建众包回答 - 标准问题ID: {}, 用户ID: {}, 任务批次ID: {}", 
+            answerDTO.getStandardQuestionId(), answerDTO.getUserId(), answerDTO.getTaskBatchId());
         
         // 验证必填字段
         if (answerDTO.getStandardQuestionId() == null) {
@@ -106,6 +106,22 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
                 return new IllegalArgumentException("用户不存在");
             });
         
+        // 检查是否已存在相同组合的记录（防止重复提交）
+        if (answerDTO.getTaskBatchId() != null) {
+            boolean exists = crowdsourcedAnswerRepository.existsByStandardQuestionIdAndUserIdAndTaskBatchId(
+                answerDTO.getStandardQuestionId(), 
+                answerDTO.getUserId(),
+                answerDTO.getTaskBatchId()
+            );
+            
+            if (exists) {
+                String errorMsg = String.format("用户(ID:%d)已经在任务批次(ID:%d)中为标准问题(ID:%d)提交了回答", 
+                    answerDTO.getUserId(), answerDTO.getTaskBatchId(), answerDTO.getStandardQuestionId());
+                logger.error("创建众包回答失败 - {}", errorMsg);
+                throw new IllegalStateException(errorMsg);
+            }
+        }
+        
         // 创建众包回答实体
         CrowdsourcedAnswer answer = new CrowdsourcedAnswer();
         answer.setStandardQuestion(standardQuestion);
@@ -119,9 +135,21 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         // 保存并返回
         try {
             CrowdsourcedAnswer savedAnswer = crowdsourcedAnswerRepository.save(answer);
-            logger.info("众包回答创建成功 - ID: {}, 问题ID: {}, 用户ID: {}", 
-                savedAnswer.getId(), savedAnswer.getStandardQuestion().getId(), savedAnswer.getUser().getId());
+            logger.info("众包回答创建成功 - ID: {}, 问题ID: {}, 用户ID: {}, 任务批次ID: {}", 
+                savedAnswer.getId(), savedAnswer.getStandardQuestion().getId(), 
+                savedAnswer.getUser().getId(), savedAnswer.getTaskBatchId());
             return convertToDTO(savedAnswer);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 处理唯一约束冲突
+            if (e.getMessage() != null && e.getMessage().contains("Duplicate entry") && 
+                e.getMessage().contains("standard_question_id")) {
+                String errorMsg = String.format("用户(ID:%d)已经在任务批次中为标准问题(ID:%d)提交了回答，不能重复提交", 
+                    answerDTO.getUserId(), answerDTO.getStandardQuestionId());
+                logger.error("创建众包回答失败 - 唯一约束冲突: {}", errorMsg);
+                throw new IllegalStateException(errorMsg);
+            }
+            logger.error("创建众包回答失败 - 数据完整性错误", e);
+            throw new RuntimeException("创建众包回答失败: " + e.getMessage());
         } catch (Exception e) {
             logger.error("保存众包回答失败", e);
             throw new RuntimeException("保存众包回答失败: " + e.getMessage());
@@ -182,6 +210,57 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         }
     }
     
+    @Override
+    @Transactional
+    public CrowdsourcedAnswerDTO updateCrowdsourcedAnswer(Long answerId, CrowdsourcedAnswerDTO answerDTO) {
+        logger.debug("开始修改众包回答 - 回答ID: {}, 用户ID: {}", answerId, answerDTO.getUserId());
+        
+        // 验证必填字段
+        if (answerId == null) {
+            throw new IllegalArgumentException("回答ID不能为空");
+        }
+        if (!StringUtils.hasText(answerDTO.getAnswerText())) {
+            throw new IllegalArgumentException("回答内容不能为空");
+        }
+        
+        // 查找众包回答
+        CrowdsourcedAnswer answer = crowdsourcedAnswerRepository.findById(answerId)
+            .orElseThrow(() -> {
+                logger.error("修改众包回答失败 - 回答不存在: {}", answerId);
+                return new IllegalArgumentException("回答不存在");
+            });
+        
+        // 检查权限 - 只有创建者可以修改自己的回答
+        if (!answer.getUser().getId().equals(answerDTO.getUserId())) {
+            String errorMsg = String.format("用户(ID:%d)无权修改其他用户(ID:%d)的回答", 
+                answerDTO.getUserId(), answer.getUser().getId());
+            logger.error("修改众包回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        // 检查回答状态 - 只有PENDING状态的回答可以修改
+        if (answer.getQualityReviewStatus() != CrowdsourcedAnswer.QualityReviewStatus.PENDING) {
+            String errorMsg = String.format("已经被审核的回答(状态:%s)不能修改", 
+                answer.getQualityReviewStatus().name());
+            logger.error("修改众包回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        try {
+            // 更新回答内容
+            answer.setAnswerText(answerDTO.getAnswerText());
+            
+            // 保存并返回
+            CrowdsourcedAnswer savedAnswer = crowdsourcedAnswerRepository.save(answer);
+            logger.info("众包回答修改成功 - ID: {}, 用户ID: {}", 
+                savedAnswer.getId(), savedAnswer.getUser().getId());
+            return convertToDTO(savedAnswer);
+        } catch (Exception e) {
+            logger.error("保存修改的众包回答失败", e);
+            throw new RuntimeException("保存修改的众包回答失败: " + e.getMessage());
+        }
+    }
+    
     // 将实体转换为DTO
     private CrowdsourcedAnswerDTO convertToDTO(CrowdsourcedAnswer answer) {
         CrowdsourcedAnswerDTO dto = new CrowdsourcedAnswerDTO();
@@ -202,5 +281,52 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         dto.setUserUsername(answer.getUser().getUsername());
         
         return dto;
+    }
+    
+    @Override
+    @Transactional
+    public boolean deleteCrowdsourcedAnswer(Long answerId, Long userId) {
+        logger.debug("开始删除众包回答 - 回答ID: {}, 操作用户ID: {}", answerId, userId);
+        
+        // 验证参数
+        if (answerId == null) {
+            throw new IllegalArgumentException("回答ID不能为空");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        
+        // 查找众包回答
+        CrowdsourcedAnswer answer = crowdsourcedAnswerRepository.findById(answerId)
+            .orElseThrow(() -> {
+                logger.error("删除众包回答失败 - 回答不存在: {}", answerId);
+                return new IllegalArgumentException("回答不存在");
+            });
+        
+        // 检查权限 - 只有创建者可以删除自己的回答
+        if (!answer.getUser().getId().equals(userId)) {
+            String errorMsg = String.format("用户(ID:%d)无权删除其他用户(ID:%d)的回答", 
+                userId, answer.getUser().getId());
+            logger.error("删除众包回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        // 检查回答状态 - 只有PENDING状态的回答可以删除
+        if (answer.getQualityReviewStatus() != CrowdsourcedAnswer.QualityReviewStatus.PENDING) {
+            String errorMsg = String.format("已经被审核的回答(状态:%s)不能删除", 
+                answer.getQualityReviewStatus().name());
+            logger.error("删除众包回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        try {
+            // 删除回答
+            crowdsourcedAnswerRepository.delete(answer);
+            logger.info("众包回答删除成功 - ID: {}, 用户ID: {}", answerId, userId);
+            return true;
+        } catch (Exception e) {
+            logger.error("删除众包回答失败", e);
+            throw new RuntimeException("删除众包回答失败: " + e.getMessage());
+        }
     }
 } 

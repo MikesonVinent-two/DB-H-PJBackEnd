@@ -23,4 +23,8 @@ public interface CrowdsourcedAnswerRepository extends JpaRepository<Crowdsourced
     // 根据标准问题ID和审核状态查询众包回答
     Page<CrowdsourcedAnswer> findByStandardQuestionIdAndQualityReviewStatus(
         Long standardQuestionId, CrowdsourcedAnswer.QualityReviewStatus status, Pageable pageable);
+        
+    // 检查用户是否已经在特定任务批次中为特定问题提交回答
+    boolean existsByStandardQuestionIdAndUserIdAndTaskBatchId(
+        Long standardQuestionId, Long userId, Integer taskBatchId);
 } 

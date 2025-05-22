@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,9 @@ import com.example.demo.service.RawDataService;
 
 import jakarta.validation.Valid;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/raw-data")
@@ -127,5 +130,99 @@ public class RawDataController {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(rawDataService.findQuestionsByTags(tags, pageable));
+    }
+    
+    /**
+     * 删除原始问题
+     * @param questionId 问题ID
+     * @return 操作结果
+     */
+    @DeleteMapping("/questions/{questionId}")
+    public ResponseEntity<?> deleteRawQuestion(@PathVariable Long questionId) {
+        logger.info("接收到删除原始问题请求 - ID: {}", questionId);
+        
+        try {
+            boolean result = rawDataService.deleteRawQuestion(questionId);
+            
+            if (result) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "原始问题删除成功");
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "删除操作未完成");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+        } catch (IllegalArgumentException e) {
+            // 问题不存在等参数错误
+            logger.error("删除原始问题失败 - 参数错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (IllegalStateException e) {
+            // 问题已被标准化等状态错误
+            logger.error("删除原始问题失败 - 状态错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "OPERATION_NOT_ALLOWED");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (Exception e) {
+            // 其他服务器错误
+            logger.error("删除原始问题失败 - 服务器错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 删除原始回答
+     * @param answerId 回答ID
+     * @return 操作结果
+     */
+    @DeleteMapping("/answers/{answerId}")
+    public ResponseEntity<?> deleteRawAnswer(@PathVariable Long answerId) {
+        logger.info("接收到删除原始回答请求 - ID: {}", answerId);
+        
+        try {
+            boolean result = rawDataService.deleteRawAnswer(answerId);
+            
+            if (result) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "success");
+                response.put("message", "原始回答删除成功");
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> response = new HashMap<>();
+                response.put("status", "error");
+                response.put("message", "删除操作未完成");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+        } catch (IllegalArgumentException e) {
+            // 回答不存在等参数错误
+            logger.error("删除原始回答失败 - 参数错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            // 其他服务器错误
+            logger.error("删除原始回答失败 - 服务器错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "服务器处理请求时发生错误");
+            response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 } 

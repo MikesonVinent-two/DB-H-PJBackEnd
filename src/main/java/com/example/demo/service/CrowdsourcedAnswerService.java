@@ -21,6 +21,19 @@ public interface CrowdsourcedAnswerService {
     // 创建众包回答
     CrowdsourcedAnswerDTO createCrowdsourcedAnswer(CrowdsourcedAnswerDTO answerDTO);
     
+    // 修改众包回答
+    CrowdsourcedAnswerDTO updateCrowdsourcedAnswer(Long answerId, CrowdsourcedAnswerDTO answerDTO);
+    
     // 审核众包回答
     CrowdsourcedAnswerDTO reviewAnswer(Long answerId, Long reviewerUserId, String status, String feedback);
+    
+    /**
+     * 删除众包回答
+     * @param answerId 回答ID
+     * @param userId 操作用户ID（用于权限验证）
+     * @return 是否删除成功
+     * @throws IllegalArgumentException 如果回答不存在
+     * @throws IllegalStateException 如果用户无权删除或回答状态不允许删除
+     */
+    boolean deleteCrowdsourcedAnswer(Long answerId, Long userId);
 } 

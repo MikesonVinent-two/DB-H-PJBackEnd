@@ -1,32 +1,24 @@
 package com.example.demo.service.impl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.example.demo.dto.ChangeDetailDTO;
+import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.StandardQuestionDTO;
-import com.example.demo.entity.ChangeLog;
-import com.example.demo.entity.ChangeType;
-import com.example.demo.entity.ChangeLogDetail;
-import com.example.demo.entity.EntityType;
-import com.example.demo.entity.RawQuestion;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.StandardQuestionTag;
-import com.example.demo.entity.Tag;
-import com.example.demo.entity.User;
-import com.example.demo.repository.ChangeLogDetailRepository;
-import com.example.demo.repository.ChangeLogRepository;
-import com.example.demo.repository.RawQuestionRepository;
-import com.example.demo.repository.StandardQuestionRepository;
-import com.example.demo.repository.StandardQuestionTagRepository;
-import com.example.demo.repository.TagRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.*;
+import com.example.demo.repository.*;
 import com.example.demo.service.StandardQuestionService;
 import com.example.demo.util.ChangeLogUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,33 +28,38 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
 
     private static final Logger logger = LoggerFactory.getLogger(StandardQuestionServiceImpl.class);
 
-    @Autowired
-    private StandardQuestionRepository standardQuestionRepository;
+    private final StandardQuestionRepository standardQuestionRepository;
+    private final RawQuestionRepository rawQuestionRepository;
+    private final UserRepository userRepository;
+    private final ChangeLogRepository changeLogRepository;
+    private final ChangeLogDetailRepository changeLogDetailRepository;
+    private final TagRepository tagRepository;
+    private final StandardQuestionTagRepository standardQuestionTagRepository;
+    private final ObjectMapper objectMapper;
     
-    @Autowired
-    private RawQuestionRepository rawQuestionRepository;
-    
-    @Autowired
-    private UserRepository userRepository;
-    
-    @Autowired
-    private ChangeLogRepository changeLogRepository;
-    
-    @Autowired
-    private ChangeLogDetailRepository changeLogDetailRepository;
-    
-    @Autowired
-    private TagRepository tagRepository;
-    
-    @Autowired
-    private StandardQuestionTagRepository standardQuestionTagRepository;
-    
-    @Autowired
-    private ObjectMapper objectMapper;
+    // 显式构造函数
+    public StandardQuestionServiceImpl(
+            StandardQuestionRepository standardQuestionRepository,
+            RawQuestionRepository rawQuestionRepository,
+            UserRepository userRepository,
+            ChangeLogRepository changeLogRepository,
+            ChangeLogDetailRepository changeLogDetailRepository,
+            TagRepository tagRepository,
+            StandardQuestionTagRepository standardQuestionTagRepository,
+            ObjectMapper objectMapper) {
+        this.standardQuestionRepository = standardQuestionRepository;
+        this.rawQuestionRepository = rawQuestionRepository;
+        this.userRepository = userRepository;
+        this.changeLogRepository = changeLogRepository;
+        this.changeLogDetailRepository = changeLogDetailRepository;
+        this.tagRepository = tagRepository;
+        this.standardQuestionTagRepository = standardQuestionTagRepository;
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     @Transactional
-    public StandardQuestion createStandardQuestion(StandardQuestionDTO questionDTO, Long userId) {
+    public StandardQuestionDTO createStandardQuestion(StandardQuestionDTO questionDTO, Long userId) {
         logger.debug("开始创建标准问题 - 用户ID: {}, 问题文本: {}", userId, questionDTO.getQuestionText());
         
         // 验证用户ID
@@ -203,13 +200,114 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             }
             
             logger.info("成功创建标准问题 - ID: {}, 用户ID: {}", standardQuestion.getId(), userId);
-            return standardQuestion;
+            return convertToDTO(standardQuestion);
             
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
             logger.error("创建标准问题时发生未预期的错误", e);
             throw new RuntimeException("创建标准问题时发生错误: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    @Transactional
+    public StandardQuestionDTO updateStandardQuestion(Long questionId, StandardQuestionDTO questionDTO, Long userId) {
+        logger.debug("开始修改标准问题 - 问题ID: {}, 用户ID: {}", questionId, userId);
+        
+        // 验证参数
+        if (questionId == null || userId == null) {
+            logger.error("修改标准问题失败 - 问题ID或用户ID为空");
+            throw new IllegalArgumentException("问题ID和用户ID不能为空");
+        }
+
+        try {
+            // 获取原问题
+            StandardQuestion originalQuestion = standardQuestionRepository.findById(questionId)
+                .orElseThrow(() -> {
+                    logger.error("修改标准问题失败 - 找不到问题ID: {}", questionId);
+                    return new IllegalArgumentException("找不到指定的标准问题（ID: " + questionId + "）");
+                });
+
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    logger.error("修改标准问题失败 - 找不到用户ID: {}", userId);
+                    return new IllegalArgumentException("找不到指定的用户（ID: " + userId + "）");
+                });
+
+            // 创建新版本
+            StandardQuestion newVersion = new StandardQuestion();
+            newVersion.setQuestionText(questionDTO.getQuestionText());
+            newVersion.setQuestionType(questionDTO.getQuestionType());
+            newVersion.setDifficulty(questionDTO.getDifficulty());
+            newVersion.setCreatedByUser(user);
+            newVersion.setParentStandardQuestion(originalQuestion);
+            newVersion.setOriginalRawQuestion(originalQuestion.getOriginalRawQuestion());
+
+            // 创建变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.UPDATE_STANDARD_QUESTION);
+            changeLog.setChangedByUser(user);
+            changeLog.setCommitMessage(questionDTO.getCommitMessage());
+            
+            // 保存变更日志
+            try {
+                changeLog = changeLogRepository.save(changeLog);
+            } catch (Exception e) {
+                logger.error("修改标准问题失败 - 保存变更日志时出错", e);
+                throw new RuntimeException("保存变更日志时出错: " + e.getMessage());
+            }
+
+            // 设置变更日志关联
+            newVersion.setCreatedChangeLog(changeLog);
+
+            // 保存新版本
+            try {
+                newVersion = standardQuestionRepository.save(newVersion);
+            } catch (Exception e) {
+                logger.error("修改标准问题失败 - 保存新版本时出错", e);
+                throw new RuntimeException("保存新版本时出错: " + e.getMessage());
+            }
+
+            // 处理标签关联
+            if (questionDTO.getTags() != null && !questionDTO.getTags().isEmpty()) {
+                processQuestionTags(newVersion, questionDTO.getTags(), user, changeLog);
+            }
+
+            // 更新变更日志的关联问题
+            changeLog.setAssociatedStandardQuestion(newVersion);
+            try {
+                changeLogRepository.save(changeLog);
+            } catch (Exception e) {
+                logger.error("修改标准问题失败 - 更新变更日志关联时出错", e);
+                throw new RuntimeException("更新变更日志关联时出错: " + e.getMessage());
+            }
+
+            // 创建变更详情
+            List<ChangeLogDetail> details = ChangeLogUtils.compareAndCreateDetails(
+                changeLog,
+                EntityType.STANDARD_QUESTION,
+                newVersion.getId(),
+                originalQuestion,
+                newVersion,
+                "questionText", "questionType", "difficulty"
+            );
+
+            // 保存所有变更详情
+            for (ChangeLogDetail detail : details) {
+                changeLogDetailRepository.save(detail);
+            }
+
+            logger.info("成功修改标准问题 - 原问题ID: {}, 新版本ID: {}, 用户ID: {}", 
+                questionId, newVersion.getId(), userId);
+            return convertToDTO(newVersion);
+
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("修改标准问题时发生未预期的错误", e);
+            throw new RuntimeException("修改标准问题时发生错误: " + e.getMessage());
         }
     }
     
@@ -266,5 +364,157 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         if (!questionTags.isEmpty()) {
             standardQuestionTagRepository.saveAll(questionTags);
         }
+    }
+
+    private StandardQuestionDTO convertToDTO(StandardQuestion question) {
+        StandardQuestionDTO dto = new StandardQuestionDTO();
+        dto.setQuestionText(question.getQuestionText());
+        dto.setQuestionType(question.getQuestionType());
+        dto.setDifficulty(question.getDifficulty());
+        dto.setUserId(question.getCreatedByUser().getId());
+        
+        if (question.getParentStandardQuestion() != null) {
+            dto.setParentStandardQuestionId(question.getParentStandardQuestion().getId());
+        }
+        
+        if (question.getOriginalRawQuestion() != null) {
+            dto.setOriginalRawQuestionId(question.getOriginalRawQuestion().getId());
+        }
+        
+        List<String> tags = question.getQuestionTags().stream()
+            .map(tag -> tag.getTag().getTagName())
+            .collect(Collectors.toList());
+        dto.setTags(tags);
+        
+        return dto;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuestionHistoryDTO> getQuestionHistory(Long questionId) {
+        logger.debug("开始获取问题修改历史 - 问题ID: {}", questionId);
+        
+        StandardQuestion currentQuestion = standardQuestionRepository.findById(questionId)
+            .orElseThrow(() -> new IllegalArgumentException("问题不存在"));
+
+        List<QuestionHistoryDTO> history = new ArrayList<>();
+        collectQuestionHistory(currentQuestion, history);
+        
+        history.sort((a, b) -> b.getCreationTime().compareTo(a.getCreationTime()));
+        
+        logger.debug("成功获取问题修改历史 - 问题ID: {}, 版本数量: {}", questionId, history.size());
+        return history;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuestionHistoryDTO> getVersionTree(Long questionId) {
+        logger.debug("开始获取问题版本树 - 问题ID: {}", questionId);
+        
+        StandardQuestion currentQuestion = standardQuestionRepository.findById(questionId)
+            .orElseThrow(() -> new IllegalArgumentException("问题不存在"));
+
+        StandardQuestion rootQuestion = findRootQuestion(currentQuestion);
+        List<QuestionHistoryDTO> versionTree = new ArrayList<>();
+        buildVersionTree(rootQuestion, versionTree);
+        
+        logger.debug("成功获取问题版本树 - 问题ID: {}", questionId);
+        return versionTree;
+    }
+
+    private void collectQuestionHistory(StandardQuestion question, List<QuestionHistoryDTO> history) {
+        if (question == null) {
+            return;
+        }
+        
+        QuestionHistoryDTO historyDTO = convertToHistoryDTO(question);
+        history.add(historyDTO);
+        
+        if (question.getParentStandardQuestion() != null) {
+            collectQuestionHistory(question.getParentStandardQuestion(), history);
+        }
+    }
+
+    private StandardQuestion findRootQuestion(StandardQuestion question) {
+        StandardQuestion current = question;
+        while (current.getParentStandardQuestion() != null) {
+            current = current.getParentStandardQuestion();
+        }
+        return current;
+    }
+
+    private void buildVersionTree(StandardQuestion question, List<QuestionHistoryDTO> versionTree) {
+        if (question == null) {
+            return;
+        }
+
+        QuestionHistoryDTO node = convertToHistoryDTO(question);
+        versionTree.add(node);
+
+        List<StandardQuestion> children = standardQuestionRepository.findByParentStandardQuestionId(question.getId());
+        for (StandardQuestion child : children) {
+            buildVersionTree(child, versionTree);
+        }
+    }
+
+    private QuestionHistoryDTO convertToHistoryDTO(StandardQuestion question) {
+        QuestionHistoryDTO dto = new QuestionHistoryDTO();
+        dto.setId(question.getId());
+        dto.setQuestionText(question.getQuestionText());
+        dto.setQuestionType(question.getQuestionType().toString());
+        dto.setDifficulty(question.getDifficulty().toString());
+        dto.setCreationTime(question.getCreationTime());
+        dto.setCreatedByUserId(question.getCreatedByUser().getId());
+        
+        // 添加用户详细信息
+        User createdByUser = question.getCreatedByUser();
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put("id", createdByUser.getId());
+        userInfo.put("username", createdByUser.getUsername());
+        userInfo.put("name", createdByUser.getName());
+        userInfo.put("role", createdByUser.getRole());
+        userInfo.put("contactInfo", createdByUser.getContactInfo());
+        dto.setCreatedByUser(userInfo);
+        
+        if (question.getParentStandardQuestion() != null) {
+            dto.setParentQuestionId(question.getParentStandardQuestion().getId());
+        }
+        
+        List<String> tags = question.getQuestionTags().stream()
+            .map(tag -> tag.getTag().getTagName())
+            .collect(Collectors.toList());
+        dto.setTags(tags);
+        
+        // 获取变更日志
+        ChangeLog changeLog = changeLogRepository.findByAssociatedStandardQuestion(question);
+        if (changeLog != null) {
+            dto.setCommitMessage(changeLog.getCommitMessage());
+            
+            // 获取变更详情
+            List<ChangeDetailDTO> changes = changeLogDetailRepository.findByChangeLog(changeLog)
+                .stream()
+                .map(this::convertToChangeDetailDTO)
+                .collect(Collectors.toList());
+            dto.setChanges(changes);
+        }
+        
+        return dto;
+    }
+
+    private ChangeDetailDTO convertToChangeDetailDTO(ChangeLogDetail detail) {
+        ChangeDetailDTO dto = new ChangeDetailDTO();
+        dto.setAttributeName(detail.getAttributeName());
+        dto.setOldValue(detail.getOldValue() != null ? detail.getOldValue().toString() : null);
+        dto.setNewValue(detail.getNewValue() != null ? detail.getNewValue().toString() : null);
+        
+        if (detail.getOldValue() == null && detail.getNewValue() != null) {
+            dto.setChangeType("ADD");
+        } else if (detail.getOldValue() != null && detail.getNewValue() == null) {
+            dto.setChangeType("DELETE");
+        } else {
+            dto.setChangeType("MODIFY");
+        }
+        
+        return dto;
     }
 } 

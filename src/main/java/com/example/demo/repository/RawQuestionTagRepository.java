@@ -15,4 +15,5 @@ public interface RawQuestionTagRepository extends JpaRepository<RawQuestionTag, 
     List<RawQuestionTag> findByTag(Tag tag);
     void deleteByRawQuestionAndTag(RawQuestion rawQuestion, Tag tag);
     boolean existsByRawQuestionAndTag(RawQuestion rawQuestion, Tag tag);
+    List<RawQuestionTag> findByRawQuestionId(Long rawQuestionId);
 } 

@@ -328,28 +328,90 @@ public class RawDataServiceImpl implements RawDataService {
     @Transactional(readOnly = true)
     public Page<RawQuestionDisplayDTO> findQuestionsByTags(List<String> tags, Pageable pageable) {
         if (tags == null || tags.isEmpty()) {
-            return Page.empty(pageable);
+            return findAllRawQuestions(pageable);
         }
         
-        // 将标签列表转换为小写，并去重
-        List<String> normalizedTags = tags.stream()
-                .map(String::trim)
-                .map(String::toLowerCase)
-                .distinct()
-                .collect(Collectors.toList());
+        return questionRepository.findByTagNames(tags, (long)tags.size(), pageable)
+                .map(this::convertToDisplayDTO);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteRawQuestion(Long questionId) {
+        logger.debug("开始删除原始问题 - ID: {}", questionId);
         
-        logger.debug("开始根据标签查询问题 - 标签: {}", normalizedTags);
+        // 验证问题ID
+        if (questionId == null) {
+            throw new IllegalArgumentException("问题ID不能为空");
+        }
         
-        // 查询同时包含所有指定标签的问题
-        Page<RawQuestion> questions = rawQuestionRepository.findByTagNames(
-                normalizedTags, 
-                (long) normalizedTags.size(),
-                pageable
-        );
+        // 检查问题是否存在
+        RawQuestion question = questionRepository.findById(questionId)
+            .orElseThrow(() -> {
+                logger.error("删除原始问题失败 - 问题不存在: {}", questionId);
+                return new IllegalArgumentException("问题不存在");
+            });
         
-        logger.debug("查询到 {} 条记录", questions.getTotalElements());
+        // 检查是否被标准化
+        List<StandardQuestion> standardQuestions = standardQuestionRepository.findByOriginalRawQuestionId(questionId);
+        if (standardQuestions != null && !standardQuestions.isEmpty()) {
+            String errorMsg = String.format("问题(ID:%d)已被标准化，不能删除", questionId);
+            logger.error("删除原始问题失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
         
-        return questions.map(this::convertToDisplayDTO);
+        try {
+            // 删除问题前先删除关联的回答和标签
+            // 注意：如果使用了级联删除，这一步可能不是必须的
+            // 但为了确保清理干净，我们手动处理
+            List<RawAnswer> answers = answerRepository.findByRawQuestionId(questionId);
+            if (answers != null && !answers.isEmpty()) {
+                answerRepository.deleteAll(answers);
+                logger.debug("已删除问题关联的{}个回答", answers.size());
+            }
+            
+            List<RawQuestionTag> tags = rawQuestionTagRepository.findByRawQuestionId(questionId);
+            if (tags != null && !tags.isEmpty()) {
+                rawQuestionTagRepository.deleteAll(tags);
+                logger.debug("已删除问题关联的{}个标签", tags.size());
+            }
+            
+            // 删除问题
+            questionRepository.delete(question);
+            logger.info("原始问题删除成功 - ID: {}", questionId);
+            return true;
+        } catch (Exception e) {
+            logger.error("删除原始问题失败", e);
+            throw new RuntimeException("删除原始问题失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    @Transactional
+    public boolean deleteRawAnswer(Long answerId) {
+        logger.debug("开始删除原始回答 - ID: {}", answerId);
+        
+        // 验证回答ID
+        if (answerId == null) {
+            throw new IllegalArgumentException("回答ID不能为空");
+        }
+        
+        // 检查回答是否存在
+        RawAnswer answer = answerRepository.findById(answerId)
+            .orElseThrow(() -> {
+                logger.error("删除原始回答失败 - 回答不存在: {}", answerId);
+                return new IllegalArgumentException("回答不存在");
+            });
+        
+        try {
+            // 删除回答
+            answerRepository.delete(answer);
+            logger.info("原始回答删除成功 - ID: {}, 问题ID: {}", answerId, answer.getRawQuestion().getId());
+            return true;
+        } catch (Exception e) {
+            logger.error("删除原始回答失败", e);
+            throw new RuntimeException("删除原始回答失败: " + e.getMessage());
+        }
     }
 
     // 转换为展示DTO的辅助方法

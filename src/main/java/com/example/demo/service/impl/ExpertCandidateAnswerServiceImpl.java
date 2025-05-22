@@ -110,6 +110,92 @@ public class ExpertCandidateAnswerServiceImpl implements ExpertCandidateAnswerSe
         return convertToDTO(updatedAnswer);
     }
     
+    @Override
+    @Transactional
+    public ExpertCandidateAnswerDTO updateExpertCandidateAnswer(
+            Long answerId, Long userId, String answerText) {
+        logger.debug("开始修改专家候选回答 - 回答ID: {}, 用户ID: {}", answerId, userId);
+        
+        // 验证参数
+        if (answerId == null) {
+            throw new IllegalArgumentException("回答ID不能为空");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        if (!StringUtils.hasText(answerText)) {
+            throw new IllegalArgumentException("回答内容不能为空");
+        }
+        
+        // 查找专家回答
+        ExpertCandidateAnswer answer = expertCandidateAnswerRepository.findById(answerId)
+            .orElseThrow(() -> {
+                logger.error("修改专家候选回答失败 - 回答不存在: {}", answerId);
+                return new IllegalArgumentException("回答不存在");
+            });
+        
+        // 检查权限 - 只有创建者可以修改自己的回答
+        if (!answer.getUser().getId().equals(userId)) {
+            String errorMsg = String.format("用户(ID:%d)无权修改其他用户(ID:%d)的回答", 
+                userId, answer.getUser().getId());
+            logger.error("修改专家候选回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        try {
+            // 更新回答内容
+            answer.setCandidateAnswerText(answerText);
+            
+            // 保存并返回
+            ExpertCandidateAnswer savedAnswer = expertCandidateAnswerRepository.save(answer);
+            logger.info("专家候选回答修改成功 - ID: {}, 用户ID: {}", 
+                savedAnswer.getId(), savedAnswer.getUser().getId());
+            return convertToDTO(savedAnswer);
+        } catch (Exception e) {
+            logger.error("保存修改的专家候选回答失败", e);
+            throw new RuntimeException("保存修改的专家候选回答失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    @Transactional
+    public boolean deleteExpertCandidateAnswer(Long answerId, Long userId) {
+        logger.debug("开始删除专家候选回答 - 回答ID: {}, 操作用户ID: {}", answerId, userId);
+        
+        // 验证参数
+        if (answerId == null) {
+            throw new IllegalArgumentException("回答ID不能为空");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        
+        // 查找专家回答
+        ExpertCandidateAnswer answer = expertCandidateAnswerRepository.findById(answerId)
+            .orElseThrow(() -> {
+                logger.error("删除专家候选回答失败 - 回答不存在: {}", answerId);
+                return new IllegalArgumentException("回答不存在");
+            });
+        
+        // 检查权限 - 只有创建者可以删除自己的回答
+        if (!answer.getUser().getId().equals(userId)) {
+            String errorMsg = String.format("用户(ID:%d)无权删除其他用户(ID:%d)的回答", 
+                userId, answer.getUser().getId());
+            logger.error("删除专家候选回答失败 - {}", errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+        
+        try {
+            // 删除回答
+            expertCandidateAnswerRepository.delete(answer);
+            logger.info("专家候选回答删除成功 - ID: {}, 用户ID: {}", answerId, userId);
+            return true;
+        } catch (Exception e) {
+            logger.error("删除专家候选回答失败", e);
+            throw new RuntimeException("删除专家候选回答失败: " + e.getMessage());
+        }
+    }
+    
     // 将实体转换为DTO
     private ExpertCandidateAnswerDTO convertToDTO(ExpertCandidateAnswer answer) {
         ExpertCandidateAnswerDTO dto = new ExpertCandidateAnswerDTO();
