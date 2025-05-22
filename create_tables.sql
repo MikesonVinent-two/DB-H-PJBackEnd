@@ -171,25 +171,6 @@ CREATE TABLE `standard_subjective_answers` (
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- -- 12. standard_answer_checklist_items (标准答案检查项表)
--- DROP TABLE IF EXISTS `standard_answer_checklist_items`;
--- CREATE TABLE `standard_answer_checklist_items` (
---     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
---     `standard_question_id` BIGINT NOT NULL COMMENT '关联到特定的标准问题版本',
---     `item_text` TEXT NOT NULL COMMENT '检查项的具体描述 (e.g., "是否提到了疾病的常见症状")',
---     `item_type` ENUM('POSITIVE_POINT', 'NEGATIVE_POINT', 'STYLE_POINT', 'FACTUAL_CHECK', 'OTHER') NOT NULL COMMENT '检查项的类型',
---     `weight_score` DECIMAL(10, 2) NOT NULL COMMENT '该检查项的分值或权重 (可以是正或负)',
---     `order_in_list` INT NULL COMMENT '在清单中的显示顺序',
---     `guidance` TEXT NULL COMMENT '针对此检查项给评测员的额外指导',
---     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
---     `created_by_user_id` BIGINT NOT NULL,
---     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此检查项的 change_log 条目',
---     `deleted_at` DATETIME NULL COMMENT '软删除标记',
---     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
---     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
---     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- 13. tags (标签表)
 DROP TABLE IF EXISTS `tags`;
 CREATE TABLE `tags` (
@@ -286,21 +267,92 @@ CREATE TABLE `llm_models` (
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 17.5. evaluation_batches (评测批次表)
+DROP TABLE IF EXISTS `evaluation_batches`;
+CREATE TABLE `evaluation_batches` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL COMMENT '评测批次名称',
+    `description` TEXT NULL COMMENT '评测批次描述',
+    `dataset_version_id` BIGINT NOT NULL COMMENT '使用的数据集版本',
+    `creation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '整体状态',
+    `single_choice_prompt_id` BIGINT NULL COMMENT '单选题使用的提示词ID',
+    `multiple_choice_prompt_id` BIGINT NULL COMMENT '多选题使用的提示词ID',
+    `simple_fact_prompt_id` BIGINT NULL COMMENT '简单事实题使用的提示词ID',
+    `subjective_prompt_id` BIGINT NULL COMMENT '主观题使用的提示词ID',
+    `global_parameters` JSON NULL COMMENT '应用于所有模型的全局参数',
+    `created_by_user_id` BIGINT NULL COMMENT '创建者',
+    `completed_at` DATETIME NULL COMMENT '完成时间',
+    `last_processed_question_id` BIGINT NULL COMMENT '上次处理到的问题ID',
+    `last_processed_run_id` BIGINT NULL COMMENT '上次处理到的运行ID',
+    `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
+    `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
+    `resume_count` INT NOT NULL DEFAULT 0 COMMENT '重启次数',
+    `pause_time` DATETIME NULL COMMENT '暂停时间',
+    `pause_reason` TEXT NULL COMMENT '暂停原因',
+    `answer_repeat_count` INT NOT NULL DEFAULT 1 COMMENT '每个问题获取回答的次数',
+    FOREIGN KEY (`dataset_version_id`) REFERENCES `dataset_versions`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`single_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`multiple_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`simple_fact_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`subjective_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 18. evaluation_runs (评测运行表)
 DROP TABLE IF EXISTS `evaluation_runs`;
 CREATE TABLE `evaluation_runs` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `evaluation_batch_id` BIGINT NOT NULL COMMENT '所属的评测批次',
     `llm_model_id` BIGINT NOT NULL COMMENT '被评测的LLM模型',
-    `dataset_version_id` BIGINT NOT NULL COMMENT '使用的数据集版本',
-    `run_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '运行时间',
-    `status` ENUM('PENDING', 'GENERATING_ANSWERS', 'ANSWER_GENERATION_FAILED', 'READY_FOR_EVALUATION', 'EVALUATING', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'PENDING' COMMENT '运行状态',
+    `run_name` VARCHAR(255) NOT NULL COMMENT '运行名称',
     `run_description` TEXT NULL COMMENT '运行描述',
-    `parameters` JSON NULL COMMENT '运行参数',
+    `run_index` INT NOT NULL DEFAULT 0 COMMENT '同一模型在批次中的运行索引，0表示第一次',
+    `run_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '运行时间',
+    `status` ENUM('PENDING', 'GENERATING_ANSWERS', 'ANSWER_GENERATION_FAILED', 'READY_FOR_EVALUATION', 'EVALUATING', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '运行状态',
+    `parameters` JSON NULL COMMENT '运行参数，可覆盖批次的全局参数',
+    `single_choice_prompt_id` BIGINT NULL COMMENT '单选题使用的提示词ID，如果为NULL则使用批次设置',
+    `multiple_choice_prompt_id` BIGINT NULL COMMENT '多选题使用的提示词ID，如果为NULL则使用批次设置',
+    `simple_fact_prompt_id` BIGINT NULL COMMENT '简单事实题使用的提示词ID，如果为NULL则使用批次设置',
+    `subjective_prompt_id` BIGINT NULL COMMENT '主观题使用的提示词ID，如果为NULL则使用批次设置',
     `error_message` TEXT NULL COMMENT '如果失败，记录错误信息',
     `created_by_user_id` BIGINT NULL COMMENT '发起评测的用户',
+    `last_processed_question_id` BIGINT NULL COMMENT '上次处理到的问题ID',
+    `last_processed_question_index` INT NULL COMMENT '上次处理到的问题在数据集中的索引',
+    `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
+    `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
+    `resume_count` INT NOT NULL DEFAULT 0 COMMENT '重启次数',
+    `pause_time` DATETIME NULL COMMENT '暂停时间',
+    `pause_reason` TEXT NULL COMMENT '暂停原因',
+    `completed_questions_count` INT NOT NULL DEFAULT 0 COMMENT '已完成问题数量',
+    `total_questions_count` INT NULL COMMENT '总问题数量',
+    `failed_questions_count` INT NOT NULL DEFAULT 0 COMMENT '失败的问题数量',
+    `failed_questions_ids` JSON NULL COMMENT '失败的问题ID列表',
+    FOREIGN KEY (`evaluation_batch_id`) REFERENCES `evaluation_batches`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`dataset_version_id`) REFERENCES `dataset_versions`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`single_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`multiple_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`simple_fact_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`subjective_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    UNIQUE (`evaluation_batch_id`, `llm_model_id`, `run_index`) COMMENT '确保同一个批次中同一个模型的运行索引唯一'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 18.5. run_checkpoints (运行检查点表)
+DROP TABLE IF EXISTS `run_checkpoints`;
+CREATE TABLE `run_checkpoints` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `evaluation_run_id` BIGINT NOT NULL COMMENT '关联的评测运行',
+    `checkpoint_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '检查点时间',
+    `checkpoint_type` ENUM('AUTO', 'MANUAL', 'ERROR', 'PAUSE', 'RESUME') NOT NULL COMMENT '检查点类型',
+    `last_processed_question_id` BIGINT NULL COMMENT '上次处理到的问题ID',
+    `progress_percentage` DECIMAL(5,2) NULL COMMENT '当前进度百分比',
+    `checkpoint_data` JSON NULL COMMENT '检查点详细数据',
+    `status_before_checkpoint` VARCHAR(50) NULL COMMENT '检查点前的状态',
+    `notes` TEXT NULL COMMENT '备注信息',
+    FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 19. llm_answers (LLM回答表)
@@ -314,9 +366,13 @@ CREATE TABLE `llm_answers` (
     `error_message` TEXT NULL COMMENT '如果生成失败，记录错误信息',
     `generation_time` DATETIME NULL COMMENT '答案生成时间',
     `prompt_used` TEXT NULL COMMENT '生成答案时使用的prompt',
+    `question_type_prompt_id` BIGINT NULL COMMENT '使用的题型提示词ID',
+    `raw_model_response` TEXT NULL COMMENT '模型的原始响应',
     `other_metadata` JSON NULL COMMENT '其他元数据',
+    `repeat_index` INT NOT NULL DEFAULT 0 COMMENT '重复回答的索引，0表示第一次',
     FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`dataset_question_mapping_id`) REFERENCES `dataset_question_mapping`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`dataset_question_mapping_id`) REFERENCES `dataset_question_mapping`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`question_type_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 20. evaluators (评测员/裁判模型表)
@@ -357,23 +413,7 @@ CREATE TABLE `evaluation_criteria` (
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 22. checklist_item_criteria (检查项-评测标准关联表)
-DROP TABLE IF EXISTS `checklist_item_criteria`;
-CREATE TABLE `checklist_item_criteria` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `checklist_item_id` BIGINT NOT NULL,
-    `criterion_id` BIGINT NOT NULL,
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NULL,
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
-    FOREIGN KEY (`checklist_item_id`) REFERENCES `standard_answer_checklist_items`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`checklist_item_id`, `criterion_id`) COMMENT '防止重复关联'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 23. ai_evaluation_prompts (AI评测提示词表)
+-- 22. ai_evaluation_prompts (AI评测提示词表)
 DROP TABLE IF EXISTS `ai_evaluation_prompts`;
 CREATE TABLE `ai_evaluation_prompts` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -393,23 +433,61 @@ CREATE TABLE `ai_evaluation_prompts` (
     CONSTRAINT `fk_ai_prompt_changelog` FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 24. ai_prompt_tags (AI提示词-标签关联表)
-DROP TABLE IF EXISTS `ai_prompt_tags`;
-CREATE TABLE `ai_prompt_tags` (
+-- 22.5. ai_question_type_prompts (AI题型提示词表)
+DROP TABLE IF EXISTS `ai_question_type_prompts`;
+CREATE TABLE `ai_question_type_prompts` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `ai_prompt_id` BIGINT NOT NULL,
+    `name` VARCHAR(255) NOT NULL COMMENT '提示词名称',
+    `question_type` ENUM('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT', 'SUBJECTIVE') NOT NULL COMMENT '适用的题型',
+    `prompt_template` TEXT NOT NULL COMMENT '提示词模板',
+    `description` TEXT NULL COMMENT '提示词描述',
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否激活使用',
+    `response_format` TEXT NULL COMMENT '期望的回答格式说明',
+    `response_example` TEXT NULL COMMENT '回答示例',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_prompt_id` BIGINT NULL COMMENT '父提示词ID，用于版本控制',
+    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此提示词的 change_log 条目',
+    `deleted_at` DATETIME NULL COMMENT '软删除标记',
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 23. ai_evaluation_prompt_tags (AI评测提示词-标签关联表)
+DROP TABLE IF EXISTS `ai_evaluation_prompt_tags`;
+CREATE TABLE `ai_evaluation_prompt_tags` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `ai_evaluation_prompt_id` BIGINT NOT NULL,
     `tag_id` BIGINT NOT NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_by_user_id` BIGINT NULL,
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
-    FOREIGN KEY (`ai_prompt_id`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`ai_evaluation_prompt_id`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`ai_prompt_id`, `tag_id`) COMMENT '防止重复标签'
+    UNIQUE (`ai_evaluation_prompt_id`, `tag_id`) COMMENT '防止重复标签'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 25. evaluations (评测表)
+-- 23.5. ai_question_type_prompt_tags (AI题型提示词-标签关联表)
+DROP TABLE IF EXISTS `ai_question_type_prompt_tags`;
+CREATE TABLE `ai_question_type_prompt_tags` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `ai_question_type_prompt_id` BIGINT NOT NULL,
+    `tag_id` BIGINT NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NULL,
+    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
+    FOREIGN KEY (`ai_question_type_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    UNIQUE (`ai_question_type_prompt_id`, `tag_id`) COMMENT '防止重复标签'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 24. evaluations (评测表)
 DROP TABLE IF EXISTS `evaluations`;
 CREATE TABLE `evaluations` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -418,19 +496,24 @@ CREATE TABLE `evaluations` (
     `evaluation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '评测时间',
     `overall_score` DECIMAL(10, 2) NULL COMMENT '总体评分',
     `feedback_text` TEXT NULL COMMENT '评测反馈文本',
-    `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'NEEDS_REVIEW') NOT NULL DEFAULT 'COMPLETED' COMMENT '评测状态',
+    `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'NEEDS_REVIEW', 'PAUSED') NOT NULL DEFAULT 'COMPLETED' COMMENT '评测状态',
     `raw_evaluator_output` JSON NULL COMMENT '原始评测输出',
     `error_message` TEXT NULL COMMENT '如果评测失败，记录错误信息',
-    `ai_prompt_id_used` BIGINT NULL COMMENT '如果是AI评测，使用的提示词',
+    `ai_evaluation_prompt_id_used` BIGINT NULL COMMENT '如果是AI评测，使用的评测提示词',
     `prompt_text_rendered` TEXT NULL COMMENT '如果是AI评测，实际渲染后的提示词文本',
     `created_by_user_id` BIGINT NULL COMMENT '创建此评测记录的用户',
+    `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
+    `pause_reason` TEXT NULL COMMENT '暂停原因',
+    `is_aggregate_evaluation` BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否为多次回答的聚合评测',
+    `aggregated_answer_ids` JSON NULL COMMENT '如果是聚合评测，包含的所有回答ID',
     FOREIGN KEY (`llm_answer_id`) REFERENCES `llm_answers`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`evaluator_id`) REFERENCES `evaluators`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`ai_prompt_id_used`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`ai_evaluation_prompt_id_used`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 26. evaluation_scores (评测分数表)
+-- 25. evaluation_scores (评测分数表)
 DROP TABLE IF EXISTS `evaluation_scores`;
 CREATE TABLE `evaluation_scores` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
