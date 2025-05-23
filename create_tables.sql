@@ -1,6 +1,10 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- =============================================
+-- 核心用户和权限管理
+-- =============================================
+
 -- 1. users (用户/专家表)
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
@@ -12,20 +16,28 @@ CREATE TABLE `users` (
     `contact_info` VARCHAR(255) NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` DATETIME NULL COMMENT '软删除标记，非空表示已删除'
+    `deleted_at` DATETIME NULL COMMENT '软删除标记，非空表示已删除',
+    INDEX `idx_users_role` (`role`),
+    INDEX `idx_users_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 原始数据采集
+-- =============================================
 
 -- 2. raw_questions (原始问题表)
 DROP TABLE IF EXISTS `raw_questions`;
 CREATE TABLE `raw_questions` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `source_url` VARCHAR(255) UNIQUE NOT NULL COMMENT '原始来源URL',
+    `source_url` VARCHAR(512) UNIQUE NOT NULL COMMENT '原始来源URL',
     `source_site` VARCHAR(255) NULL COMMENT '原始站点名称',
     `title` VARCHAR(512) NOT NULL,
     `content` TEXT NULL COMMENT '问题描述或详细内容',
     `crawl_time` DATETIME NOT NULL,
     `tags` JSON NULL COMMENT '标签列表，例如: ["医学", "疾病", "治疗"]',
-    `other_metadata` JSON NULL COMMENT '存储原始站点的其他信息 (e.g., 原始ID, 作者)'
+    `other_metadata` JSON NULL COMMENT '存储原始站点的其他信息 (e.g., 原始ID, 作者)',
+    INDEX `idx_raw_questions_site_time` (`source_site`, `crawl_time`),
+    INDEX `idx_raw_questions_crawl_time` (`crawl_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. raw_answers (原始回答表)
@@ -39,8 +51,14 @@ CREATE TABLE `raw_answers` (
     `upvotes` INT DEFAULT 0,
     `is_accepted` BOOLEAN NULL COMMENT '是否被采纳为最佳答案',
     `other_metadata` JSON NULL COMMENT '存储原始站点的其他信息',
-    FOREIGN KEY (`raw_question_id`) REFERENCES `raw_questions`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`raw_question_id`) REFERENCES `raw_questions`(`id`) ON DELETE CASCADE,
+    INDEX `idx_raw_answers_question` (`raw_question_id`),
+    INDEX `idx_raw_answers_accepted` (`is_accepted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 变更日志系统
+-- =============================================
 
 -- 4. change_log (变更日志主表)
 DROP TABLE IF EXISTS `change_log`;
@@ -48,10 +66,12 @@ CREATE TABLE `change_log` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `change_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `changed_by_user_id` BIGINT NOT NULL,
-    `change_type` VARCHAR(255) NOT NULL COMMENT '变更集的总体类型 (e.g., "Create Question and Answer", "Update Answer Content", "Add Checklist Items", "Update Criterion", "Create Dataset Version")',
+    `change_type` VARCHAR(255) NOT NULL COMMENT '变更集的总体类型',
     `commit_message` TEXT NULL COMMENT '类似Git的提交消息，描述本次变更的目的或内容',
-    `associated_standard_question_id` BIGINT NULL COMMENT '本次变更集主要关联的标准问题ID (可以是新创建的或被修改的某个版本) - 非强制，但常用',
-    FOREIGN KEY (`changed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT
+    `associated_standard_question_id` BIGINT NULL COMMENT '本次变更集主要关联的标准问题ID',
+    FOREIGN KEY (`changed_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    INDEX `idx_change_log_user_time` (`changed_by_user_id`, `change_time`),
+    INDEX `idx_change_log_question` (`associated_standard_question_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. change_log_details (变更日志详情表)
@@ -59,13 +79,19 @@ DROP TABLE IF EXISTS `change_log_details`;
 CREATE TABLE `change_log_details` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `change_log_id` BIGINT NOT NULL COMMENT '关联到所属的变更日志主条目',
-    `entity_type` ENUM('STANDARD_QUESTION', 'STD_OBJECTIVE_ANSWER', 'STD_SIMPLE_ANSWER', 'STD_SUBJECTIVE_ANSWER', 'CHECKLIST_ITEM', 'EVAL_CRITERION', 'AI_PROMPT', 'TAG', 'DATASET_VERSION', 'LLM_MODEL', 'EVALUATOR', 'STANDARD_QUESTION_TAGS', 'DATASET_QUESTION_MAPPING', 'AI_PROMPT_TAGS') NOT NULL COMMENT '发生变更的实体类型',
+    `entity_type` ENUM('STANDARD_QUESTION', 'STD_OBJECTIVE_ANSWER', 'STD_SIMPLE_ANSWER', 'STD_SUBJECTIVE_ANSWER', 'TAG', 'DATASET_VERSION', 'LLM_MODEL', 'EVALUATOR', 'STANDARD_QUESTION_TAGS', 'DATASET_QUESTION_MAPPING', 'ANSWER_TAG_PROMPT', 'ANSWER_QUESTION_TYPE_PROMPT', 'EVALUATION_TAG_PROMPT', 'EVALUATION_SUBJECTIVE_PROMPT') NOT NULL COMMENT '发生变更的实体类型',
     `entity_id` BIGINT NOT NULL COMMENT '发生变更的具体实体记录的ID',
-    `attribute_name` VARCHAR(255) NOT NULL COMMENT '发生变更的字段名称 (e.g., "question_text", "answer_text", "options", "item_text", "deleted_at", "version", "prompt_template", "tag_id", "standard_question_id", "ai_prompt_id", "tag_id")',
-    `old_value` JSON NULL COMMENT '字段变更前的值 (创建时为NULL，软删除时是有效数据)',
-    `new_value` JSON NULL COMMENT '字段变更后的值 (软删除时是删除时间戳，删除记录时可以是NULL)',
-    FOREIGN KEY (`change_log_id`) REFERENCES `change_log`(`id`) ON DELETE CASCADE
+    `attribute_name` VARCHAR(255) NOT NULL COMMENT '发生变更的字段名称',
+    `old_value` JSON NULL COMMENT '字段变更前的值',
+    `new_value` JSON NULL COMMENT '字段变更后的值',
+    FOREIGN KEY (`change_log_id`) REFERENCES `change_log`(`id`) ON DELETE CASCADE,
+    INDEX `idx_change_details_log` (`change_log_id`),
+    INDEX `idx_change_details_entity` (`entity_type`, `entity_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 标准问题体系
+-- =============================================
 
 -- 6. standard_questions (标准问题基表)
 DROP TABLE IF EXISTS `standard_questions`;
@@ -83,10 +109,13 @@ CREATE TABLE `standard_questions` (
     FOREIGN KEY (`original_raw_question_id`) REFERENCES `raw_questions`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`parent_standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_standard_questions_type_difficulty` (`question_type`, `difficulty`),
+    INDEX `idx_standard_questions_creator_time` (`created_by_user_id`, `creation_time`),
+    INDEX `idx_standard_questions_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Add FK for associated_standard_question_id in change_log if you decide to enforce it.
+-- Add FK for associated_standard_question_id in change_log
 ALTER TABLE `change_log` ADD CONSTRAINT `fk_change_log_assoc_sq` FOREIGN KEY (`associated_standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE SET NULL;
 
 -- 7. expert_candidate_answers (专家候选答案表)
@@ -100,7 +129,9 @@ CREATE TABLE `expert_candidate_answers` (
     `quality_score` INT NULL COMMENT '可选的质量评分',
     `feedback` TEXT NULL COMMENT '可选的反馈或备注',
     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    INDEX `idx_candidate_answers_question` (`standard_question_id`),
+    INDEX `idx_candidate_answers_user_time` (`user_id`, `submission_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 8. crowdsourced_answers (众包答案表)
@@ -108,32 +139,38 @@ DROP TABLE IF EXISTS `crowdsourced_answers`;
 CREATE TABLE `crowdsourced_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `standard_question_id` BIGINT NOT NULL COMMENT '问题ID',
-    `user_id` BIGINT NOT NULL COMMENT '提供答案的用户ID (通常是 Annotator 或 CrowdsourceUser)',
+    `user_id` BIGINT NOT NULL COMMENT '提供答案的用户ID',
     `answer_text` TEXT NOT NULL COMMENT '用户提交的答案文本',
     `submission_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间',
-    `task_batch_id` BIGINT NULL COMMENT '如果答案是作为某个众包任务的一部分收集的，可以关联任务批次ID (未来可加外键)',
+    `task_batch_id` BIGINT NULL COMMENT '众包任务批次ID',
     `quality_review_status` ENUM('PENDING', 'ACCEPTED', 'REJECTED', 'FLAGGED') DEFAULT 'PENDING' COMMENT '众包答案的质量审核状态',
-    `reviewed_by_user_id` BIGINT NULL COMMENT '审核该众包答案的用户ID (如 Curator 或 Expert)',
+    `reviewed_by_user_id` BIGINT NULL COMMENT '审核该众包答案的用户ID',
     `review_time` DATETIME NULL COMMENT '审核时间',
     `review_feedback` TEXT NULL COMMENT '审核反馈',
     `other_metadata` JSON NULL COMMENT '存储其他众包相关元数据',
     UNIQUE (`standard_question_id`, `user_id`, `task_batch_id`) COMMENT '确保一个用户在一个任务批次中对同一个问题只提交一次答案',
     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    INDEX `idx_crowdsourced_status` (`quality_review_status`),
+    INDEX `idx_crowdsourced_reviewer_time` (`reviewed_by_user_id`, `review_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 标准答案体系
+-- =============================================
 
 -- 9. standard_objective_answers (标准客观题答案表)
 DROP TABLE IF EXISTS `standard_objective_answers`;
 CREATE TABLE `standard_objective_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一/零关联 (当 question_type 是 single_choice 或 multiple_choice)',
-    `options` JSON NOT NULL COMMENT '所有选项的列表，例如: [{"id": "A", "text": "..."}, {"id": "B", "text": "..."}]',
-    `correct_ids` JSON NOT NULL COMMENT '正确选项的ID列表，例如: ["A"] 或 ["A", "C"]',
+    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一关联',
+    `options` JSON NOT NULL COMMENT '所有选项的列表',
+    `correct_ids` JSON NOT NULL COMMENT '正确选项的ID列表',
     `determined_by_user_id` BIGINT NOT NULL COMMENT '确定此标准答案的用户',
     `determined_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此答案记录的 change_log 条目',
-    `deleted_at` DATETIME NULL COMMENT '软删除标记 (通常随 standard_question 版本的删除而删除)',
+    `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`determined_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
@@ -143,9 +180,9 @@ CREATE TABLE `standard_objective_answers` (
 DROP TABLE IF EXISTS `standard_simple_answers`;
 CREATE TABLE `standard_simple_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一/零关联 (当 question_type 是 simple_fact)',
+    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一关联',
     `answer_text` TEXT NOT NULL COMMENT '主要的标准短回答文本',
-    `alternative_answers` JSON NULL COMMENT '可接受的同义词列表或变体，例如: ["回答变体1", "回答变体2"]',
+    `alternative_answers` JSON NULL COMMENT '可接受的同义词列表或变体',
     `determined_by_user_id` BIGINT NOT NULL,
     `determined_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此答案记录的 change_log 条目',
@@ -159,7 +196,7 @@ CREATE TABLE `standard_simple_answers` (
 DROP TABLE IF EXISTS `standard_subjective_answers`;
 CREATE TABLE `standard_subjective_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一/零关联 (当 question_type 是 subjective)',
+    `standard_question_id` BIGINT UNIQUE NOT NULL COMMENT '与标准问题一对一关联',
     `answer_text` TEXT NOT NULL COMMENT '完整的标准长回答文本',
     `scoring_guidance` TEXT NULL COMMENT '对评测员或裁判AI的评分指导说明',
     `determined_by_user_id` BIGINT NOT NULL,
@@ -171,21 +208,28 @@ CREATE TABLE `standard_subjective_answers` (
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 13. tags (标签表)
+-- =============================================
+-- 标签体系
+-- =============================================
+
+-- 12. tags (标签表)
 DROP TABLE IF EXISTS `tags`;
 CREATE TABLE `tags` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `tag_name` VARCHAR(255) UNIQUE NOT NULL,
     `tag_type` VARCHAR(255) NULL COMMENT '标签类型 (e.g., 疾病, 症状, 治疗)',
+    `description` TEXT NULL COMMENT '标签描述',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_by_user_id` BIGINT NULL COMMENT '谁创建的标签',
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此标签的 change_log 条目',
     `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_tags_type` (`tag_type`),
+    INDEX `idx_tags_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 14. standard_question_tags (标准问题-标签关联表)
+-- 13. standard_question_tags (标准问题-标签关联表)
 DROP TABLE IF EXISTS `standard_question_tags`;
 CREATE TABLE `standard_question_tags` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -198,10 +242,12 @@ CREATE TABLE `standard_question_tags` (
     FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`standard_question_id`, `tag_id`) COMMENT '防止重复标签'
+    UNIQUE (`standard_question_id`, `tag_id`) COMMENT '防止重复标签',
+    INDEX `idx_question_tags_question` (`standard_question_id`),
+    INDEX `idx_question_tags_tag` (`tag_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 14.5 raw_question_tags (原始问题-标签关联表)
+-- 14. raw_question_tags (原始问题-标签关联表)
 DROP TABLE IF EXISTS `raw_question_tags`;
 CREATE TABLE `raw_question_tags` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -217,7 +263,163 @@ CREATE TABLE `raw_question_tags` (
     UNIQUE (`raw_question_id`, `tag_id`) COMMENT '防止重复标签'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 15. dataset_versions (数据集版本表)
+-- =============================================
+-- 回答场景的Prompt系统
+-- =============================================
+
+-- 15. answer_tag_prompts (回答场景的标签提示词表)
+DROP TABLE IF EXISTS `answer_tag_prompts`;
+CREATE TABLE `answer_tag_prompts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `tag_id` BIGINT NOT NULL COMMENT '关联的标签ID',
+    `name` VARCHAR(255) NOT NULL COMMENT '提示词名称',
+    `prompt_template` TEXT NOT NULL COMMENT '标签相关的prompt片段',
+    `description` TEXT NULL COMMENT '提示词描述',
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否激活使用',
+    `prompt_priority` INT NOT NULL DEFAULT 50 COMMENT 'prompt优先级，数字越小越靠前',
+    `version` VARCHAR(50) NULL COMMENT '版本号',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_prompt_id` BIGINT NULL COMMENT '父版本ID',
+    `created_change_log_id` BIGINT NULL,
+    `deleted_at` DATETIME NULL,
+    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_prompt_id`) REFERENCES `answer_tag_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_answer_tag_active_priority` (`tag_id`, `is_active`, `prompt_priority`),
+    INDEX `idx_answer_tag_version` (`tag_id`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 16. answer_question_type_prompts (回答场景的题型提示词表)
+DROP TABLE IF EXISTS `answer_question_type_prompts`;
+CREATE TABLE `answer_question_type_prompts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL COMMENT '提示词名称',
+    `question_type` ENUM('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT', 'SUBJECTIVE') NOT NULL,
+    `prompt_template` TEXT NOT NULL COMMENT '题型相关的prompt片段',
+    `description` TEXT NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE,
+    `response_format_instruction` TEXT NULL COMMENT '回答格式要求',
+    `response_example` TEXT NULL COMMENT '回答示例',
+    `version` VARCHAR(50) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_prompt_id` BIGINT NULL,
+    `created_change_log_id` BIGINT NULL,
+    `deleted_at` DATETIME NULL,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_prompt_id`) REFERENCES `answer_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_answer_type_active` (`question_type`, `is_active`),
+    INDEX `idx_answer_type_version` (`question_type`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 17. answer_prompt_assembly_configs (回答场景的prompt组装配置表)
+DROP TABLE IF EXISTS `answer_prompt_assembly_configs`;
+CREATE TABLE `answer_prompt_assembly_configs` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL COMMENT '配置名称',
+    `description` TEXT NULL,
+    `base_system_prompt` TEXT NULL COMMENT '基础系统prompt',
+    `tag_prompts_section_header` VARCHAR(255) NULL DEFAULT '## 专业知识指导' COMMENT '标签prompts部分的标题',
+    `question_type_section_header` VARCHAR(255) NULL DEFAULT '## 回答要求' COMMENT '题型prompt部分的标题',
+    `tag_prompt_separator` VARCHAR(100) NULL DEFAULT '\n\n' COMMENT '标签prompts之间的分隔符',
+    `section_separator` VARCHAR(100) NULL DEFAULT '\n\n' COMMENT '不同部分之间的分隔符',
+    `final_instruction` TEXT NULL COMMENT '最终指令',
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `created_change_log_id` BIGINT NULL,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_answer_config_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 评测场景的Prompt系统
+-- =============================================
+
+-- 18. evaluation_tag_prompts (评测场景的标签提示词表)
+DROP TABLE IF EXISTS `evaluation_tag_prompts`;
+CREATE TABLE `evaluation_tag_prompts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `tag_id` BIGINT NOT NULL,
+    `name` VARCHAR(255) NOT NULL,
+    `prompt_template` TEXT NOT NULL COMMENT '评测相关的标签prompt片段',
+    `description` TEXT NULL,
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE,
+    `prompt_priority` INT NOT NULL DEFAULT 50,
+    `version` VARCHAR(50) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_prompt_id` BIGINT NULL,
+    `created_change_log_id` BIGINT NULL,
+    `deleted_at` DATETIME NULL,
+    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_prompt_id`) REFERENCES `evaluation_tag_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_eval_tag_active_priority` (`tag_id`, `is_active`, `prompt_priority`),
+    INDEX `idx_eval_tag_version` (`tag_id`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 19. evaluation_subjective_prompts (评测场景的主观题提示词表)
+DROP TABLE IF EXISTS `evaluation_subjective_prompts`;
+CREATE TABLE `evaluation_subjective_prompts` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL,
+    `prompt_template` TEXT NOT NULL COMMENT '主观题评测的prompt片段',
+    `description` TEXT NULL,
+    `evaluation_criteria_focus` JSON NULL COMMENT '重点关注的评测标准ID列表',
+    `scoring_instruction` TEXT NULL COMMENT '评分指导',
+    `output_format_instruction` TEXT NULL COMMENT '输出格式要求',
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE,
+    `version` VARCHAR(50) NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_prompt_id` BIGINT NULL,
+    `created_change_log_id` BIGINT NULL,
+    `deleted_at` DATETIME NULL,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_prompt_id`) REFERENCES `evaluation_subjective_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_eval_subj_active` (`is_active`),
+    INDEX `idx_eval_subj_version` (`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 20. evaluation_prompt_assembly_configs (评测场景的prompt组装配置表)
+DROP TABLE IF EXISTS `evaluation_prompt_assembly_configs`;
+CREATE TABLE `evaluation_prompt_assembly_configs` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL,
+    `description` TEXT NULL,
+    `base_system_prompt` TEXT NULL COMMENT '评测基础系统prompt',
+    `tag_prompts_section_header` VARCHAR(255) NULL DEFAULT '## 专业评测标准' COMMENT '标签prompts部分标题',
+    `subjective_section_header` VARCHAR(255) NULL DEFAULT '## 主观题评测要求' COMMENT '主观题评测部分标题',
+    `tag_prompt_separator` VARCHAR(100) NULL DEFAULT '\n\n',
+    `section_separator` VARCHAR(100) NULL DEFAULT '\n\n',
+    `final_instruction` TEXT NULL COMMENT '最终评测指令',
+    `is_active` BOOLEAN NOT NULL DEFAULT TRUE,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `created_change_log_id` BIGINT NULL,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_eval_config_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================
+-- 数据集版本管理
+-- =============================================
+
+-- 21. dataset_versions (数据集版本表)
 DROP TABLE IF EXISTS `dataset_versions`;
 CREATE TABLE `dataset_versions` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -229,10 +431,12 @@ CREATE TABLE `dataset_versions` (
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此数据集版本的 change_log 条目',
     `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_dataset_versions_time` (`creation_time`),
+    INDEX `idx_dataset_versions_creator` (`created_by_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 16. dataset_question_mapping (数据集-问题映射表)
+-- 22. dataset_question_mapping (数据集-问题映射表)
 DROP TABLE IF EXISTS `dataset_question_mapping`;
 CREATE TABLE `dataset_question_mapping` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -246,10 +450,16 @@ CREATE TABLE `dataset_question_mapping` (
     FOREIGN KEY (`standard_question_id`) REFERENCES `standard_questions`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`dataset_version_id`, `standard_question_id`) COMMENT '防止同一问题在同一数据集版本中重复出现'
+    UNIQUE (`dataset_version_id`, `standard_question_id`) COMMENT '防止同一问题在同一数据集版本中重复出现',
+    INDEX `idx_dataset_mapping_dataset` (`dataset_version_id`, `order_in_dataset`),
+    INDEX `idx_dataset_mapping_question` (`standard_question_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 17. llm_models (LLM模型表)
+-- =============================================
+-- LLM模型和评测系统
+-- =============================================
+
+-- 23. llm_models (LLM模型表)
 DROP TABLE IF EXISTS `llm_models`;
 CREATE TABLE `llm_models` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -259,15 +469,18 @@ CREATE TABLE `llm_models` (
     `description` TEXT NULL COMMENT '模型描述',
     `api_url` VARCHAR(512) NULL COMMENT 'API接口地址',
     `api_key` VARCHAR(512) NULL COMMENT 'API密钥',
+    `model_parameters` JSON NULL COMMENT '默认模型参数',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_by_user_id` BIGINT NULL,
     `created_change_log_id` BIGINT NULL COMMENT '关联到创建此模型记录的 change_log 条目',
     `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_llm_models_provider` (`provider`),
+    INDEX `idx_llm_models_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 17.5. evaluation_batches (评测批次表)
+-- 24. evaluation_batches (评测批次表)
 DROP TABLE IF EXISTS `evaluation_batches`;
 CREATE TABLE `evaluation_batches` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -276,10 +489,8 @@ CREATE TABLE `evaluation_batches` (
     `dataset_version_id` BIGINT NOT NULL COMMENT '使用的数据集版本',
     `creation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '整体状态',
-    `single_choice_prompt_id` BIGINT NULL COMMENT '单选题使用的提示词ID',
-    `multiple_choice_prompt_id` BIGINT NULL COMMENT '多选题使用的提示词ID',
-    `simple_fact_prompt_id` BIGINT NULL COMMENT '简单事实题使用的提示词ID',
-    `subjective_prompt_id` BIGINT NULL COMMENT '主观题使用的提示词ID',
+    `answer_assembly_config_id` BIGINT NULL COMMENT '回答阶段使用的prompt组装配置',
+    `evaluation_assembly_config_id` BIGINT NULL COMMENT '评测阶段使用的prompt组装配置',
     `global_parameters` JSON NULL COMMENT '应用于所有模型的全局参数',
     `created_by_user_id` BIGINT NULL COMMENT '创建者',
     `completed_at` DATETIME NULL COMMENT '完成时间',
@@ -294,13 +505,14 @@ CREATE TABLE `evaluation_batches` (
     `answer_repeat_count` INT NOT NULL DEFAULT 1 COMMENT '每个问题获取回答的次数',
     FOREIGN KEY (`dataset_version_id`) REFERENCES `dataset_versions`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`single_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`multiple_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`simple_fact_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`subjective_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`answer_assembly_config_id`) REFERENCES `answer_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`evaluation_assembly_config_id`) REFERENCES `evaluation_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
+    INDEX `idx_eval_batches_status` (`status`),
+    INDEX `idx_eval_batches_dataset` (`dataset_version_id`),
+    INDEX `idx_eval_batches_time` (`creation_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 18. evaluation_runs (评测运行表)
+-- 25. evaluation_runs (评测运行表)
 DROP TABLE IF EXISTS `evaluation_runs`;
 CREATE TABLE `evaluation_runs` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -312,10 +524,6 @@ CREATE TABLE `evaluation_runs` (
     `run_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '运行时间',
     `status` ENUM('PENDING', 'GENERATING_ANSWERS', 'ANSWER_GENERATION_FAILED', 'READY_FOR_EVALUATION', 'EVALUATING', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '运行状态',
     `parameters` JSON NULL COMMENT '运行参数，可覆盖批次的全局参数',
-    `single_choice_prompt_id` BIGINT NULL COMMENT '单选题使用的提示词ID，如果为NULL则使用批次设置',
-    `multiple_choice_prompt_id` BIGINT NULL COMMENT '多选题使用的提示词ID，如果为NULL则使用批次设置',
-    `simple_fact_prompt_id` BIGINT NULL COMMENT '简单事实题使用的提示词ID，如果为NULL则使用批次设置',
-    `subjective_prompt_id` BIGINT NULL COMMENT '主观题使用的提示词ID，如果为NULL则使用批次设置',
     `error_message` TEXT NULL COMMENT '如果失败，记录错误信息',
     `created_by_user_id` BIGINT NULL COMMENT '发起评测的用户',
     `last_processed_question_id` BIGINT NULL COMMENT '上次处理到的问题ID',
@@ -333,14 +541,13 @@ CREATE TABLE `evaluation_runs` (
     FOREIGN KEY (`evaluation_batch_id`) REFERENCES `evaluation_batches`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`single_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`multiple_choice_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`simple_fact_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`subjective_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    UNIQUE (`evaluation_batch_id`, `llm_model_id`, `run_index`) COMMENT '确保同一个批次中同一个模型的运行索引唯一'
+    UNIQUE (`evaluation_batch_id`, `llm_model_id`, `run_index`) COMMENT '确保同一个批次中同一个模型的运行索引唯一',
+    INDEX `idx_eval_runs_status` (`status`),
+    INDEX `idx_eval_runs_batch_model` (`evaluation_batch_id`, `llm_model_id`),
+    INDEX `idx_eval_runs_progress` (`progress_percentage`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 18.5. run_checkpoints (运行检查点表)
+-- 26. run_checkpoints (运行检查点表)
 DROP TABLE IF EXISTS `run_checkpoints`;
 CREATE TABLE `run_checkpoints` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -352,10 +559,11 @@ CREATE TABLE `run_checkpoints` (
     `checkpoint_data` JSON NULL COMMENT '检查点详细数据',
     `status_before_checkpoint` VARCHAR(50) NULL COMMENT '检查点前的状态',
     `notes` TEXT NULL COMMENT '备注信息',
-    FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE,
+    INDEX `idx_checkpoints_run_time` (`evaluation_run_id`, `checkpoint_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 19. llm_answers (LLM回答表)
+-- 27. llm_answers (LLM回答表)
 DROP TABLE IF EXISTS `llm_answers`;
 CREATE TABLE `llm_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -366,16 +574,43 @@ CREATE TABLE `llm_answers` (
     `error_message` TEXT NULL COMMENT '如果生成失败，记录错误信息',
     `generation_time` DATETIME NULL COMMENT '答案生成时间',
     `prompt_used` TEXT NULL COMMENT '生成答案时使用的prompt',
-    `question_type_prompt_id` BIGINT NULL COMMENT '使用的题型提示词ID',
     `raw_model_response` TEXT NULL COMMENT '模型的原始响应',
     `other_metadata` JSON NULL COMMENT '其他元数据',
     `repeat_index` INT NOT NULL DEFAULT 0 COMMENT '重复回答的索引，0表示第一次',
     FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`dataset_question_mapping_id`) REFERENCES `dataset_question_mapping`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`question_type_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL
+    INDEX `idx_llm_answers_run_status` (`evaluation_run_id`, `generation_status`),
+    INDEX `idx_llm_answers_question` (`dataset_question_mapping_id`),
+    INDEX `idx_llm_answers_time` (`generation_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 20. evaluators (评测员/裁判模型表)
+-- =============================================
+-- 评测标准和评测员
+-- =============================================
+
+-- 28. evaluation_criteria (评测标准表)
+DROP TABLE IF EXISTS `evaluation_criteria`;
+CREATE TABLE `evaluation_criteria` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL COMMENT '标准名称',
+    `version` VARCHAR(255) NULL COMMENT '标准版本',
+    `description` TEXT NULL COMMENT '标准描述',
+    `data_type` ENUM('SCORE', 'BOOLEAN', 'TEXT', 'CATEGORICAL') NOT NULL COMMENT '评分数据类型',
+    `score_range` VARCHAR(255) NULL COMMENT '如果是分值类型，定义分值范围',
+    `applicable_question_types` JSON NULL COMMENT '适用的问题类型列表',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_by_user_id` BIGINT NOT NULL,
+    `parent_criterion_id` BIGINT NULL COMMENT '父标准ID，用于版本控制',
+    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此标准的 change_log 条目',
+    `deleted_at` DATETIME NULL COMMENT '软删除标记',
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`parent_criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_eval_criteria_type` (`data_type`),
+    INDEX `idx_eval_criteria_deleted` (`deleted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 29. evaluators (评测员/裁判模型表)
 DROP TABLE IF EXISTS `evaluators`;
 CREATE TABLE `evaluators` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -390,104 +625,12 @@ CREATE TABLE `evaluators` (
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 21. evaluation_criteria (评测标准表)
-DROP TABLE IF EXISTS `evaluation_criteria`;
-CREATE TABLE `evaluation_criteria` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `name` VARCHAR(255) NOT NULL COMMENT '标准名称',
-    `version` VARCHAR(255) NULL COMMENT '标准版本',
-    `description` TEXT NULL COMMENT '标准描述',
-    `data_type` ENUM('SCORE', 'BOOLEAN', 'TEXT', 'CATEGORICAL') NOT NULL COMMENT '评分数据类型',
-    `score_range` VARCHAR(255) NULL COMMENT '如果是分值类型，定义分值范围 (e.g., "0-100", "1-5")',
-    `applicable_question_types` JSON NULL COMMENT '适用的问题类型列表',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NOT NULL,
-    `parent_criterion_id` BIGINT NULL COMMENT '父标准ID，用于版本控制',
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此标准的 change_log 条目',
-    `deleted_at` DATETIME NULL COMMENT '软删除标记',
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`parent_criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 22. ai_evaluation_prompts (AI评测提示词表)
-DROP TABLE IF EXISTS `ai_evaluation_prompts`;
-CREATE TABLE `ai_evaluation_prompts` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `name` VARCHAR(255) NOT NULL COMMENT '提示词名称',
-    `version` VARCHAR(255) NULL COMMENT '提示词版本',
-    `prompt_template` TEXT NOT NULL COMMENT '提示词模板',
-    `description` TEXT NULL COMMENT '提示词描述',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NOT NULL,
-    `parent_prompt_id` BIGINT NULL COMMENT '父提示词ID，用于版本控制',
-    `applicable_question_types` JSON NULL COMMENT '适用的问题类型列表',
-    `applicable_criteria_ids` JSON NULL COMMENT '适用的评测标准ID列表',
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此提示词的 change_log 条目',
-    `deleted_at` DATETIME NULL COMMENT '软删除标记',
-    CONSTRAINT `fk_ai_prompt_user` FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-    CONSTRAINT `fk_ai_prompt_parent` FOREIGN KEY (`parent_prompt_id`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE SET NULL,
-    CONSTRAINT `fk_ai_prompt_changelog` FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 22.5. ai_question_type_prompts (AI题型提示词表)
-DROP TABLE IF EXISTS `ai_question_type_prompts`;
-CREATE TABLE `ai_question_type_prompts` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `name` VARCHAR(255) NOT NULL COMMENT '提示词名称',
-    `question_type` ENUM('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT', 'SUBJECTIVE') NOT NULL COMMENT '适用的题型',
-    `prompt_template` TEXT NOT NULL COMMENT '提示词模板',
-    `description` TEXT NULL COMMENT '提示词描述',
-    `is_active` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否激活使用',
-    `response_format` TEXT NULL COMMENT '期望的回答格式说明',
-    `response_example` TEXT NULL COMMENT '回答示例',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NOT NULL,
-    `parent_prompt_id` BIGINT NULL COMMENT '父提示词ID，用于版本控制',
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此提示词的 change_log 条目',
-    `deleted_at` DATETIME NULL COMMENT '软删除标记',
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`parent_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 23. ai_evaluation_prompt_tags (AI评测提示词-标签关联表)
-DROP TABLE IF EXISTS `ai_evaluation_prompt_tags`;
-CREATE TABLE `ai_evaluation_prompt_tags` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `ai_evaluation_prompt_id` BIGINT NOT NULL,
-    `tag_id` BIGINT NOT NULL,
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NULL,
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
-    FOREIGN KEY (`ai_evaluation_prompt_id`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`ai_evaluation_prompt_id`, `tag_id`) COMMENT '防止重复标签'
+    INDEX `idx_evaluators_type` (`evaluator_type`),
+    INDEX `idx_evaluators_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 23.5. ai_question_type_prompt_tags (AI题型提示词-标签关联表)
-DROP TABLE IF EXISTS `ai_question_type_prompt_tags`;
-CREATE TABLE `ai_question_type_prompt_tags` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `ai_question_type_prompt_id` BIGINT NOT NULL,
-    `tag_id` BIGINT NOT NULL,
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `created_by_user_id` BIGINT NULL,
-    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此关联的 change_log 条目',
-    FOREIGN KEY (`ai_question_type_prompt_id`) REFERENCES `ai_question_type_prompts`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    UNIQUE (`ai_question_type_prompt_id`, `tag_id`) COMMENT '防止重复标签'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 24. evaluations (评测表)
+-- 30. evaluations (评测表)
 DROP TABLE IF EXISTS `evaluations`;
 CREATE TABLE `evaluations` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -499,8 +642,7 @@ CREATE TABLE `evaluations` (
     `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'NEEDS_REVIEW', 'PAUSED') NOT NULL DEFAULT 'COMPLETED' COMMENT '评测状态',
     `raw_evaluator_output` JSON NULL COMMENT '原始评测输出',
     `error_message` TEXT NULL COMMENT '如果评测失败，记录错误信息',
-    `ai_evaluation_prompt_id_used` BIGINT NULL COMMENT '如果是AI评测，使用的评测提示词',
-    `prompt_text_rendered` TEXT NULL COMMENT '如果是AI评测，实际渲染后的提示词文本',
+    `evaluation_prompt_used` TEXT NULL COMMENT '如果是AI评测，实际使用的评测提示词',
     `created_by_user_id` BIGINT NULL COMMENT '创建此评测记录的用户',
     `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
     `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
@@ -509,19 +651,94 @@ CREATE TABLE `evaluations` (
     `aggregated_answer_ids` JSON NULL COMMENT '如果是聚合评测，包含的所有回答ID',
     FOREIGN KEY (`llm_answer_id`) REFERENCES `llm_answers`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`evaluator_id`) REFERENCES `evaluators`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`ai_evaluation_prompt_id_used`) REFERENCES `ai_evaluation_prompts`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    INDEX `idx_evaluations_status_time` (`status`, `evaluation_time`),
+    INDEX `idx_evaluations_answer` (`llm_answer_id`),
+    INDEX `idx_evaluations_evaluator` (`evaluator_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 25. evaluation_scores (评测分数表)
+-- 31. evaluation_scores (评测分数表)
 DROP TABLE IF EXISTS `evaluation_scores`;
 CREATE TABLE `evaluation_scores` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `evaluation_id` BIGINT NOT NULL,
     `criterion_id` BIGINT NOT NULL,
-    `score_value` VARCHAR(255) NOT NULL COMMENT '评分值 (可能是数字分数、布尔值、文本或分类值，取决于criterion的data_type)',
+    `score_value` VARCHAR(255) NOT NULL COMMENT '评分值',
     FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE CASCADE
+    FOREIGN KEY (`criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE CASCADE,
+    INDEX `idx_eval_scores_evaluation` (`evaluation_id`),
+    INDEX `idx_eval_scores_criterion` (`criterion_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================
+-- 性能优化视图
+-- =============================================
+
+-- 评测结果摘要视图
+CREATE OR REPLACE VIEW `evaluation_summary` AS
+SELECT 
+    er.id as run_id,
+    er.run_name,
+    lm.name as model_name,
+    lm.provider as model_provider,
+    dv.name as dataset_name,
+    dv.version_number as dataset_version,
+    er.status as run_status,
+    er.progress_percentage,
+    er.completed_questions_count,
+    er.total_questions_count,
+    er.failed_questions_count,
+    COUNT(DISTINCT la.id) as total_answers,
+    COUNT(DISTINCT e.id) as total_evaluations,
+    AVG(e.overall_score) as avg_overall_score,
+    er.run_time,
+    er.last_activity_time
+FROM evaluation_runs er
+JOIN llm_models lm ON er.llm_model_id = lm.id
+JOIN evaluation_batches eb ON er.evaluation_batch_id = eb.id
+JOIN dataset_versions dv ON eb.dataset_version_id = dv.id
+LEFT JOIN llm_answers la ON er.id = la.evaluation_run_id
+LEFT JOIN evaluations e ON la.id = e.llm_answer_id
+GROUP BY er.id, er.run_name, lm.name, lm.provider, dv.name, dv.version_number, 
+         er.status, er.progress_percentage, er.completed_questions_count, 
+         er.total_questions_count, er.failed_questions_count, er.run_time, er.last_activity_time;
+
+-- 问题标签统计视图
+CREATE OR REPLACE VIEW `question_tag_stats` AS
+SELECT 
+    t.id as tag_id,
+    t.tag_name,
+    t.tag_type,
+    COUNT(DISTINCT sqt.standard_question_id) as question_count,
+    COUNT(DISTINCT atp.id) as answer_prompt_count,
+    COUNT(DISTINCT etp.id) as evaluation_prompt_count
+FROM tags t
+LEFT JOIN standard_question_tags sqt ON t.id = sqt.tag_id AND sqt.standard_question_id IN (SELECT id FROM standard_questions WHERE deleted_at IS NULL)
+LEFT JOIN answer_tag_prompts atp ON t.id = atp.tag_id AND atp.deleted_at IS NULL AND atp.is_active = TRUE
+LEFT JOIN evaluation_tag_prompts etp ON t.id = etp.tag_id AND etp.deleted_at IS NULL AND etp.is_active = TRUE
+WHERE t.deleted_at IS NULL
+GROUP BY t.id, t.tag_name, t.tag_type;
+
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================
+-- 初始化数据示例
+-- =============================================
+
+-- 插入默认管理员用户
+INSERT INTO `users` (`username`, `password`, `name`, `role`) VALUES 
+('admin', '$2a$10$8.UnVuG9HHmpz6z5n7gfpOELBjx7S8Y7VxC5z8.UmBq9l7EGo3cZy', '系统管理员', 'ADMIN');
+
+-- 插入默认回答prompt组装配置
+INSERT INTO `answer_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `is_active`, `created_by_user_id`) VALUES 
+('默认回答配置', '系统默认的回答prompt组装配置', '你是一个专业的医学AI助手，请根据以下指导回答问题。', TRUE, 1);
+
+-- 插入默认评测prompt组装配置
+INSERT INTO `evaluation_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `is_active`, `created_by_user_id`) VALUES 
+('默认评测配置', '系统默认的评测prompt组装配置', '你是一个专业的医学答案评测员，请根据以下标准评测答案质量。', TRUE, 1);
+
+-- 插入基础评测标准
+INSERT INTO `evaluation_criteria` (`name`, `description`, `data_type`, `score_range`, `created_by_user_id`) VALUES 
+('答案准确性', '评测答案内容的医学准确性', 'SCORE', '1-10', 1),
+('答案完整性', '评测答案是否全面回答了问题', 'SCORE', '1-10', 1),
+('专业程度', '评测答案的专业术语使用和表达规范性', 'SCORE', '1-10', 1);
