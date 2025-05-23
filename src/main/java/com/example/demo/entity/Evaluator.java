@@ -21,7 +21,7 @@ public class Evaluator {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "llm_model_id")
-    private LLMModel llmModel;
+    private LlmModel llmModel;
 
     @Column(nullable = false)
     private String name;
@@ -71,11 +71,11 @@ public class Evaluator {
         this.user = user;
     }
 
-    public LLMModel getLlmModel() {
+    public LlmModel getLlmModel() {
         return llmModel;
     }
 
-    public void setLlmModel(LLMModel llmModel) {
+    public void setLlmModel(LlmModel llmModel) {
         this.llmModel = llmModel;
     }
 

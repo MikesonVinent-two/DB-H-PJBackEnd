@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "llm_models")
-public class LLMModel {
+public class LlmModel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

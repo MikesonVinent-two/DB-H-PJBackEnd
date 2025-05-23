@@ -3,7 +3,7 @@ package com.example.demo.service.impl;
 import com.example.demo.dto.LLMModelDTO;
 import com.example.demo.dto.LLMModelRegistrationRequest;
 import com.example.demo.dto.LLMModelRegistrationResponse;
-import com.example.demo.entity.LLMModel;
+import com.example.demo.entity.LlmModel;
 import com.example.demo.repository.LLMModelRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.LLMModelService;
@@ -51,7 +51,7 @@ public class LLMModelServiceImpl implements LLMModelService {
             // 3. 保存模型信息到数据库
             List<LLMModelDTO> registeredModels = new ArrayList<>();
             for (Map<String, Object> modelInfo : availableModels) {
-                LLMModel model = new LLMModel();
+                LlmModel model = new LlmModel();
                 model.setName((String) modelInfo.get("id")); // 假设API返回的模型ID作为名称
                 model.setProvider(extractProviderFromModelId((String) modelInfo.get("id")));
                 model.setApiUrl(request.getApiUrl());
@@ -121,7 +121,7 @@ public class LLMModelServiceImpl implements LLMModelService {
         }
     }
 
-    private LLMModelDTO convertToDTO(LLMModel model) {
+    private LLMModelDTO convertToDTO(LlmModel model) {
         LLMModelDTO dto = new LLMModelDTO();
         dto.setId(model.getId());
         dto.setName(model.getName());
