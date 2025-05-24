@@ -1,10 +1,14 @@
 server:
   port: 8080
   servlet:
+    context-path: /api
     encoding:
       charset: UTF-8
       force: true
       enabled: true
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 spring:
   datasource:
@@ -24,8 +28,21 @@ spring:
     open-in-view: true
   messages:
     encoding: UTF-8
+  jackson:
+    serialization:
+      fail-on-empty-beans: false
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
 
-# LLM API配置
+# AI服务配置
+ai:
+  service:
+    url: https://api.openai.com/v1/chat/completions
+    api-key: your-api-key-here
+    model: gpt-3.5-turbo
+    timeout: 60000
+
+# LLM配置
 llm:
   default-api-url: https://api.openai.com/v1/chat/completions
   default-model: gpt-3.5-turbo
@@ -40,6 +57,7 @@ logging:
   level:
     root: INFO
     com.example.demo: DEBUG
+    com.example.demo.service.impl.EvaluationServiceImpl: DEBUG
     org.springframework.web: INFO
     org.hibernate: INFO
   pattern:

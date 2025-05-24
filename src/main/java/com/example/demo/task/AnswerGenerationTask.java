@@ -409,15 +409,11 @@ public class AnswerGenerationTask {
         run.setFailedQuestionsCount(run.getFailedQuestionsCount() + 1);
         
         // 添加到失败问题ID列表
-        Long[] failedIds = run.getFailedQuestionsIds();
+        List<Long> failedIds = run.getFailedQuestionsIds();
         if (failedIds == null) {
-            failedIds = new Long[]{questionId};
-        } else {
-            Long[] newFailedIds = new Long[failedIds.length + 1];
-            System.arraycopy(failedIds, 0, newFailedIds, 0, failedIds.length);
-            newFailedIds[failedIds.length] = questionId;
-            failedIds = newFailedIds;
+            failedIds = new ArrayList<>();
         }
+        failedIds.add(questionId);
         run.setFailedQuestionsIds(failedIds);
         
         runRepository.save(run);

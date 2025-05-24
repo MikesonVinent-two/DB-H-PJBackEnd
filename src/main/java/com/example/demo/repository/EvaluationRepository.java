@@ -44,7 +44,7 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
      * @param evaluationRunId 评测运行ID
      * @return 已完成评测数量
      */
-    @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.evaluationRun.id = :evaluationRunId AND e.evaluationStatus = 'SUCCESS'")
+    @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.evaluationRun.id = :evaluationRunId AND e.status = 'SUCCESS'")
     int countCompletedByEvaluationRunId(@Param("evaluationRunId") Long evaluationRunId);
     
     /**
@@ -53,7 +53,7 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
      * @param evaluationRunId 评测运行ID
      * @return 失败评测数量
      */
-    @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.evaluationRun.id = :evaluationRunId AND e.evaluationStatus = 'FAILED'")
+    @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.evaluationRun.id = :evaluationRunId AND e.status = 'FAILED'")
     int countFailedByEvaluationRunId(@Param("evaluationRunId") Long evaluationRunId);
     
     /**

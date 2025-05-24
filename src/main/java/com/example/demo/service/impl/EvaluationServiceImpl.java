@@ -438,17 +438,9 @@ public class EvaluationServiceImpl implements EvaluationService {
             Evaluation evaluation = evaluationRepository.findById(evaluationId)
                     .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测记录: " + evaluationId));
             
-            // 解析评测结果
-            if (evaluation.getEvaluationResults() == null || evaluation.getEvaluationResults().isEmpty()) {
-                return new ArrayList<>();
-            }
-            
-            Map<String, Object> results;
-            try {
-                results = objectMapper.readValue(evaluation.getEvaluationResults(), 
-                        new TypeReference<Map<String, Object>>() {});
-            } catch (JsonProcessingException e) {
-                logger.error("解析评测结果失败", e);
+            // 获取评测结果
+            Map<String, Object> results = getEvaluationResults(evaluation);
+            if (results.isEmpty()) {
                 return new ArrayList<>();
             }
             
@@ -593,7 +585,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             }
             
             // 获取总问题数量
-            int totalQuestions = modelAnswerRun.getTotalQuestions() != null ? modelAnswerRun.getTotalQuestions() : 0;
+            int totalQuestions = modelAnswerRun.getTotalQuestionsCount() != null ? modelAnswerRun.getTotalQuestionsCount() : 0;
             
             // 获取已评测的回答数量
             int evaluatedAnswers = evaluationRepository.countByEvaluationRunId(evaluationRunId);
@@ -827,7 +819,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             evaluation.setEvaluator(evaluator);
             evaluation.setCreatedByUser(user);
             evaluation.setCreationTime(LocalDateTime.now());
-            evaluation.setStatus(EvaluationStatus.IN_PROGRESS);
+            evaluation.setStatus(EvaluationStatus.PENDING);
             
             // 根据问题类型进行评测
             Map<String, Object> evaluationResult;
@@ -872,8 +864,8 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 更新评测记录
             evaluation.setScore(new BigDecimal(evaluationResult.get("score").toString()));
             evaluation.setComments((String) evaluationResult.get("comments"));
-            evaluation.setEvaluationResults(objectMapper.writeValueAsString(evaluationResult));
-            evaluation.setStatus(EvaluationStatus.COMPLETED);
+            evaluation.setEvaluationResults(evaluationResult);
+            evaluation.setStatus(EvaluationStatus.SUCCESS);
             evaluation.setCompletionTime(LocalDateTime.now());
             
             // 保存评测记录
@@ -1369,7 +1361,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             evaluation.setEvaluator(evaluator);
             evaluation.setCreatedByUser(user);
             evaluation.setCreationTime(LocalDateTime.now());
-            evaluation.setStatus(EvaluationStatus.IN_PROGRESS);
+            evaluation.setStatus(EvaluationStatus.PENDING);
             
             // 保存评测记录
             evaluation = evaluationRepository.save(evaluation);
@@ -1396,7 +1388,7 @@ public class EvaluationServiceImpl implements EvaluationService {
                     .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测记录: " + evaluationId));
             
             // 验证评测状态
-            if (evaluation.getStatus() != EvaluationStatus.IN_PROGRESS) {
+            if (evaluation.getStatus() != EvaluationStatus.PENDING) {
                 throw new IllegalStateException("评测记录状态不允许提交: " + evaluation.getStatus());
             }
             
@@ -1418,14 +1410,14 @@ public class EvaluationServiceImpl implements EvaluationService {
             evaluation.setScore(overallScore);
             evaluation.setComments(comments);
             
-            // 构建评测结果JSON
+            // 构建评测结果
             Map<String, Object> evaluationResults = new HashMap<>();
             evaluationResults.put("overall_score", overallScore);
             evaluationResults.put("overall_comments", comments);
             evaluationResults.put("criteria_scores", detailScores);
-            evaluation.setEvaluationResults(objectMapper.writeValueAsString(evaluationResults));
+            evaluation.setEvaluationResults(evaluationResults);
             
-            evaluation.setStatus(EvaluationStatus.COMPLETED);
+            evaluation.setStatus(EvaluationStatus.SUCCESS);
             evaluation.setCompletionTime(LocalDateTime.now());
             
             // 保存评测记录
@@ -1725,5 +1717,12 @@ public class EvaluationServiceImpl implements EvaluationService {
             logger.error("获取评测运行结果失败", e);
             throw new RuntimeException("获取评测运行结果失败: " + e.getMessage(), e);
         }
+    }
+
+    private Map<String, Object> getEvaluationResults(Evaluation evaluation) {
+        if (evaluation.getEvaluationResults() == null) {
+            return new HashMap<>();
+        }
+        return evaluation.getEvaluationResults();
     }
 } 

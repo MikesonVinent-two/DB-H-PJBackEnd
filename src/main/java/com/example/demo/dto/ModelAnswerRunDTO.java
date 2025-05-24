@@ -2,6 +2,7 @@ package com.example.demo.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import com.example.demo.entity.ModelAnswerRun.RunStatus;
@@ -31,7 +32,14 @@ public class ModelAnswerRunDTO {
     private Integer completedQuestionsCount;
     private Integer totalQuestionsCount;
     private Integer failedQuestionsCount;
-    private Long[] failedQuestionsIds;
+    private List<Long> failedQuestionsIds;
+    private Long lastProcessedQuestionId;
+    private Integer lastProcessedQuestionIndex;
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private LocalDateTime creationTime;
+    private Long createdBy;
+    private Long evaluationRunId;
     
     // Constructors
     public ModelAnswerRunDTO() {
@@ -222,11 +230,67 @@ public class ModelAnswerRunDTO {
         this.failedQuestionsCount = failedQuestionsCount;
     }
     
-    public Long[] getFailedQuestionsIds() {
+    public List<Long> getFailedQuestionsIds() {
         return failedQuestionsIds;
     }
     
-    public void setFailedQuestionsIds(Long[] failedQuestionsIds) {
+    public void setFailedQuestionsIds(List<Long> failedQuestionsIds) {
         this.failedQuestionsIds = failedQuestionsIds;
+    }
+    
+    public Long getLastProcessedQuestionId() {
+        return lastProcessedQuestionId;
+    }
+    
+    public void setLastProcessedQuestionId(Long lastProcessedQuestionId) {
+        this.lastProcessedQuestionId = lastProcessedQuestionId;
+    }
+    
+    public Integer getLastProcessedQuestionIndex() {
+        return lastProcessedQuestionIndex;
+    }
+    
+    public void setLastProcessedQuestionIndex(Integer lastProcessedQuestionIndex) {
+        this.lastProcessedQuestionIndex = lastProcessedQuestionIndex;
+    }
+    
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+    
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+    
+    public LocalDateTime getEndTime() {
+        return endTime;
+    }
+    
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
+    
+    public LocalDateTime getCreationTime() {
+        return creationTime;
+    }
+    
+    public void setCreationTime(LocalDateTime creationTime) {
+        this.creationTime = creationTime;
+    }
+    
+    public Long getCreatedBy() {
+        return createdBy;
+    }
+    
+    public void setCreatedBy(Long createdBy) {
+        this.createdBy = createdBy;
+    }
+    
+    public Long getEvaluationRunId() {
+        return evaluationRunId;
+    }
+    
+    public void setEvaluationRunId(Long evaluationRunId) {
+        this.evaluationRunId = evaluationRunId;
     }
 } 

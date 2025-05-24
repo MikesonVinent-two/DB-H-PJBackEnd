@@ -31,17 +31,17 @@ public interface EvaluatorRepository extends JpaRepository<Evaluator, Long> {
     /**
      * 根据类型查找评测者
      * 
-     * @param type 评测者类型
+     * @param evaluatorType 评测者类型
      * @return 评测者列表
      */
-    List<Evaluator> findByType(String type);
+    List<Evaluator> findByEvaluatorType(Evaluator.EvaluatorType evaluatorType);
     
     /**
      * 根据类型和激活状态查找评测者
      * 
-     * @param type 评测者类型
+     * @param evaluatorType 评测者类型
      * @param isActive 是否激活
      * @return 评测者列表
      */
-    List<Evaluator> findByTypeAndIsActive(String type, boolean isActive);
+    List<Evaluator> findByEvaluatorTypeAndIsActive(Evaluator.EvaluatorType evaluatorType, boolean isActive);
 } 

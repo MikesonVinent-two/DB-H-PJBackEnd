@@ -44,6 +44,9 @@ public class User {
     @Column(name = "updated_at")
     private java.time.LocalDateTime updatedAt;
     
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+    
     // 构造函数
     public User() {
         this.createdAt = java.time.LocalDateTime.now();
@@ -120,6 +123,14 @@ public class User {
     
     public void setUpdatedAt(java.time.LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    public java.time.LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+    
+    public void setDeletedAt(java.time.LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
     
     // 更新时间的方法

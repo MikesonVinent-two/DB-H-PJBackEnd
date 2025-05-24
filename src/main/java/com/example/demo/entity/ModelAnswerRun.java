@@ -3,6 +3,7 @@ package com.example.demo.entity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -79,17 +80,15 @@ public class ModelAnswerRun {
     @Column(name = "completed_questions_count", nullable = false)
     private Integer completedQuestionsCount = 0;
     
-    @Column(name = "total_questions_count")
-    private Integer totalQuestionsCount;
-    
     @Column(name = "failed_questions_count", nullable = false)
     private Integer failedQuestionsCount = 0;
     
     @Column(name = "failed_questions_ids", columnDefinition = "json")
-    private Long[] failedQuestionsIds;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<Long> failedQuestionsIds;
     
     @Column(name = "total_questions_count")
-    private Integer totalQuestions;
+    private Integer totalQuestionsCount;
     
     public enum RunStatus {
         PENDING,                  // 等待中
@@ -264,14 +263,6 @@ public class ModelAnswerRun {
         this.completedQuestionsCount = completedQuestionsCount;
     }
 
-    public Integer getTotalQuestionsCount() {
-        return totalQuestionsCount;
-    }
-
-    public void setTotalQuestionsCount(Integer totalQuestionsCount) {
-        this.totalQuestionsCount = totalQuestionsCount;
-    }
-
     public Integer getFailedQuestionsCount() {
         return failedQuestionsCount;
     }
@@ -280,19 +271,19 @@ public class ModelAnswerRun {
         this.failedQuestionsCount = failedQuestionsCount;
     }
 
-    public Long[] getFailedQuestionsIds() {
+    public List<Long> getFailedQuestionsIds() {
         return failedQuestionsIds;
     }
 
-    public void setFailedQuestionsIds(Long[] failedQuestionsIds) {
+    public void setFailedQuestionsIds(List<Long> failedQuestionsIds) {
         this.failedQuestionsIds = failedQuestionsIds;
     }
 
-    public Integer getTotalQuestions() {
-        return totalQuestions;
+    public Integer getTotalQuestionsCount() {
+        return totalQuestionsCount;
     }
 
-    public void setTotalQuestions(Integer totalQuestions) {
-        this.totalQuestions = totalQuestions;
+    public void setTotalQuestionsCount(Integer totalQuestionsCount) {
+        this.totalQuestionsCount = totalQuestionsCount;
     }
 } 

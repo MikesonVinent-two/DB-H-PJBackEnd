@@ -717,3 +717,194 @@ LEFT JOIN evaluations e ON la.id = e.llm_answer_id
 GROUP BY mar.id, mar.run_name, lm.name, lm.provider, dv.name, dv.version_number, 
          mar.status, mar.progress_percentage, mar.completed_questions_count, 
          mar.total_questions_count, mar.failed_questions_count, mar.run_time, mar.last_activity_time;
+
+-- =============================================
+-- 插入示例数据
+-- =============================================
+
+-- 插入用户数据
+INSERT INTO `users` (`username`, `password`, `name`, `role`, `contact_info`) VALUES
+('admin', '$2a$10$rJELrG6LpF1WC1UPD8kZPeYwZR0dDiXXJ5qpkWP0JKZWzKFg3ydJi', '系统管理员', 'ADMIN', 'admin@example.com'),
+('expert1', '$2a$10$rJELrG6LpF1WC1UPD8kZPeYwZR0dDiXXJ5qpkWP0JKZWzKFg3ydJi', '张医生', 'EXPERT', 'expert1@example.com'),
+('expert2', '$2a$10$rJELrG6LpF1WC1UPD8kZPeYwZR0dDiXXJ5qpkWP0JKZWzKFg3ydJi', '李医生', 'EXPERT', 'expert2@example.com'),
+('curator1', '$2a$10$rJELrG6LpF1WC1UPD8kZPeYwZR0dDiXXJ5qpkWP0JKZWzKFg3ydJi', '王编辑', 'CURATOR', 'curator1@example.com');
+
+-- 插入标签数据
+INSERT INTO `tags` (`tag_name`, `tag_type`, `description`, `created_by_user_id`) VALUES
+('内科', '科室', '内科相关问题', 1),
+('外科', '科室', '外科相关问题', 1),
+('心脏病', '疾病', '心脏病相关问题', 1),
+('高血压', '疾病', '高血压相关问题', 1),
+('糖尿病', '疾病', '糖尿病相关问题', 1),
+('诊断', '类型', '诊断相关问题', 1),
+('治疗', '类型', '治疗相关问题', 1),
+('预防', '类型', '预防相关问题', 1);
+
+-- 插入标准问题数据
+INSERT INTO `standard_questions` (`question_text`, `question_type`, `difficulty`, `created_by_user_id`) VALUES
+('高血压的主要症状有哪些？', 'SUBJECTIVE', 'MEDIUM', 1),
+('糖尿病患者的日常饮食应该注意什么？', 'SUBJECTIVE', 'MEDIUM', 1),
+('以下哪些是冠心病的典型症状？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
+('正常人的空腹血糖值范围是多少？', 'SINGLE_CHOICE', 'EASY', 1),
+('心绞痛的典型症状和处理方法是什么？', 'SUBJECTIVE', 'MEDIUM', 1),
+('如何预防和控制糖尿病的并发症？', 'SUBJECTIVE', 'HARD', 1),
+('以下哪些是高血压的危险因素？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
+('二型糖尿病的主要发病机制是？', 'SINGLE_CHOICE', 'HARD', 1),
+('心肌梗塞的急救措施包括哪些？', 'SUBJECTIVE', 'HARD', 1);
+
+-- 插入标准客观题答案
+INSERT INTO `standard_objective_answers` (`standard_question_id`, `options`, `correct_ids`, `determined_by_user_id`) VALUES
+(3, '[{"id":"A","text":"胸痛"},{"id":"B","text":"气短"},{"id":"C","text":"出汗"},{"id":"D","text":"恶心"}]', '["A","B","C"]', 2),
+(4, '[{"id":"A","text":"3.9-6.1 mmol/L"},{"id":"B","text":"7.0-8.0 mmol/L"},{"id":"C","text":"2.0-3.5 mmol/L"},{"id":"D","text":"8.0-10.0 mmol/L"}]', '["A"]', 2),
+(7, '[{"id":"A","text":"肥胖"},{"id":"B","text":"吸烟"},{"id":"C","text":"压力大"},{"id":"D","text":"缺乏运动"},{"id":"E","text":"高盐饮食"}]', '["A","B","C","D","E"]', 2),
+(8, '[{"id":"A","text":"胰岛素抵抗和分泌不足"},{"id":"B","text":"单纯的胰岛素分泌不足"},{"id":"C","text":"胰腺炎症"},{"id":"D","text":"自身免疫反应"}]', '["A"]', 2);
+
+-- 插入标准主观题答案
+INSERT INTO `standard_subjective_answers` (`standard_question_id`, `answer_text`, `scoring_guidance`, `determined_by_user_id`) VALUES
+(1, '高血压的主要症状包括：\n1. 头痛，特别是后脑部\n2. 头晕和眩晕\n3. 耳鸣\n4. 心悸\n5. 疲劳\n6. 视物模糊\n7. 失眠\n\n需要注意的是，早期高血压可能没有明显症状，因此定期测量血压很重要。', '评分要点：\n1. 症状的完整性（3分）\n2. 症状的准确性（4分）\n3. 补充说明的合理性（3分）', 2),
+(2, '糖尿病患者的日常饮食注意事项：\n1. 控制总热量摄入\n2. 定时定量进餐\n3. 主食以复杂碳水化合物为主\n4. 增加膳食纤维的摄入\n5. 限制单糖和双糖的摄入\n6. 适量摄入优质蛋白\n7. 限制饱和脂肪酸的摄入\n8. 补充适量维生素和矿物质', '评分要点：\n1. 饮食原则的完整性（4分）\n2. 具体建议的实用性（3分）\n3. 说明的合理性（3分）', 2),
+(5, '心绞痛的典型症状和处理方法：\n\n典型症状：\n1. 胸骨后压榨性疼痛\n2. 可向左肩、左臂放射\n3. 常在劳累或情绪激动时发作\n4. 休息或含服硝酸甘油可缓解\n5. 持续时间通常3-5分钟\n\n处理方法：\n1. 立即停止活动，保持安静\n2. 含服硝酸甘油\n3. 如症状持续，考虑就医\n4. 记录发作情况\n5. 控制危险因素\n\n长期管理：\n1. 规律服药\n2. 合理运动\n3. 控制饮食\n4. 戒烟限酒\n5. 定期复查', '评分要点：\n1. 症状描述的准确性和完整性（4分）\n2. 急性发作处理方法的正确性（3分）\n3. 长期管理建议的合理性（3分）', 2),
+(6, '糖尿病并发症的预防和控制：\n\n1. 血糖控制\n- 定期监测血糖\n- 严格遵医嘱用药\n- 保持血糖稳定\n\n2. 血压管理\n- 控制在130/80mmHg以下\n- 定期测量血压\n- 必要时使用降压药\n\n3. 血脂管理\n- 控制总胆固醇和甘油三酯\n- 合理饮食\n- 必要时服用调脂药\n\n4. 生活方式干预\n- 合理饮食\n- 规律运动\n- 戒烟限酒\n\n5. 定期筛查\n- 眼底检查\n- 肾功能检查\n- 足部检查\n- 心电图检查\n\n6. 并发症早期识别\n- 了解早期症状\n- 及时就医\n- 积极治疗', '评分要点：\n1. 预防措施的完整性（4分）\n2. 控制方法的具体性（3分）\n3. 建议的实用性（3分）', 2),
+(9, '心肌梗塞的急救措施：\n\n立即措施：\n1. 立即停止活动，平卧休息\n2. 舌下含服硝酸甘油\n3. 服用阿司匹林300mg咀嚼\n4. 保持呼吸道通畅\n5. 监测生命体征\n\n呼救措施：\n1. 立即拨打急救电话\n2. 准确描述症状和地址\n3. 等待救护车到达\n\n注意事项：\n1. 保持镇静\n2. 松开紧身衣物\n3. 保暖\n4. 禁止剧烈活动\n\n医院前准备：\n1. 携带近期用药记录\n2. 准备个人基本信息\n3. 联系家属', '评分要点：\n1. 急救措施的及时性和准确性（4分）\n2. 操作步骤的完整性（3分）\n3. 注意事项的合理性（3分）', 2);
+
+-- 插入评测标准
+INSERT INTO `evaluation_criteria` (`name`, `description`, `data_type`, `score_range`, `applicable_question_types`, `created_by_user_id`) VALUES
+('专业性', '答案在医学专业方面的准确性和规范性', 'SCORE', '0-10', '["SUBJECTIVE", "MULTIPLE_CHOICE", "SINGLE_CHOICE"]', 1),
+('完整性', '答案是否完整覆盖了问题的各个方面', 'SCORE', '0-10', '["SUBJECTIVE", "MULTIPLE_CHOICE"]', 1),
+('逻辑性', '答案的逻辑结构是否清晰', 'SCORE', '0-10', '["SUBJECTIVE"]', 1),
+('实用性', '答案是否具有实际应用价值', 'SCORE', '0-10', '["SUBJECTIVE", "SIMPLE_FACT"]', 1);
+
+-- 插入评测者数据
+INSERT INTO `evaluators` (`name`, `evaluator_type`, `llm_model_id`, `created_by_user_id`) VALUES
+('GPT-4评测器', 'AI_MODEL', NULL, 1);
+
+INSERT INTO `evaluators` (`name`, `evaluator_type`, `user_id`, `created_by_user_id`) VALUES
+('专家评测组A', 'HUMAN', 2, 1);  -- 假设user_id=2是专家用户
+
+-- 插入问题标签关联
+INSERT INTO `standard_question_tags` (`standard_question_id`, `tag_id`, `created_by_user_id`) VALUES
+(1, 4, 1),  -- 高血压问题关联"高血压"标签
+(1, 6, 1),  -- 高血压问题关联"诊断"标签
+(2, 5, 1),  -- 糖尿病问题关联"糖尿病"标签
+(2, 7, 1),  -- 糖尿病问题关联"治疗"标签
+(3, 3, 1),  -- 冠心病问题关联"心脏病"标签
+(3, 6, 1),  -- 冠心病问题关联"诊断"标签
+(4, 5, 1),  -- 血糖问题关联"糖尿病"标签
+(4, 6, 1),  -- 血糖问题关联"诊断"标签
+(5, 3, 1),  -- 心绞痛问题关联"心脏病"标签
+(5, 6, 1),  -- 心绞痛问题关联"诊断"标签
+(5, 7, 1),  -- 心绞痛问题关联"治疗"标签
+(6, 5, 1),  -- 糖尿病并发症关联"糖尿病"标签
+(6, 8, 1),  -- 糖尿病并发症关联"预防"标签
+(7, 4, 1),  -- 高血压危险因素关联"高血压"标签
+(7, 8, 1),  -- 高血压危险因素关联"预防"标签
+(8, 5, 1),  -- 糖尿病发病机制关联"糖尿病"标签
+(8, 6, 1),  -- 糖尿病发病机制关联"诊断"标签
+(9, 3, 1),  -- 心肌梗塞关联"心脏病"标签
+(9, 7, 1);  -- 心肌梗塞关联"治疗"标签
+
+-- =============================================
+-- 插入示例Prompt数据
+-- =============================================
+
+-- 插入回答场景的标签提示词
+INSERT INTO `answer_tag_prompts` (`tag_id`, `name`, `prompt_template`, `description`, `prompt_priority`, `created_by_user_id`) VALUES
+(1, '内科基础知识prompt', '作为一名内科医生，你需要：\n1. 使用准确的医学术语\n2. 解释复杂的内科疾病机制\n3. 强调疾病的系统性表现\n4. 注重药物治疗的详细说明', '内科回答的基础指导prompt', 10, 1),
+(3, '心脏病专业prompt', '在回答心脏病相关问题时：\n1. 详细说明心血管系统的病理生理变化\n2. 强调症状与体征的关联性\n3. 说明心电图等检查的重要性\n4. 突出用药注意事项和禁忌症', '心脏病问题的专业指导prompt', 20, 1),
+(4, '高血压专业prompt', '回答高血压相关问题时：\n1. 强调血压值的正常范围和异常标准\n2. 详细说明生活方式的影响\n3. 解释各类降压药物的作用机制\n4. 说明并发症的预防措施', '高血压问题的专业指导prompt', 20, 1),
+(6, '诊断类prompt', '对于诊断类问题：\n1. 系统性列举症状和体征\n2. 说明必要的检查项目\n3. 解释鉴别诊断要点\n4. 强调诊断的金标准', '诊断类问题的通用prompt', 30, 1),
+(7, '治疗类prompt', '对于治疗类问题：\n1. 按照循证医学证据等级排序治疗方案\n2. 详细说明用药方案和注意事项\n3. 解释非药物治疗的重要性\n4. 说明治疗效果评估方法', '治疗类问题的通用prompt', 30, 1);
+
+-- 插入回答场景的题型提示词
+INSERT INTO `answer_question_type_prompts` (`name`, `question_type`, `prompt_template`, `response_format_instruction`, `response_example`, `created_by_user_id`) VALUES
+('单选题回答prompt', 'SINGLE_CHOICE', '请仔细分析每个选项，选择最准确的一个答案。\n需要：\n1. 明确指出正确选项\n2. 解释为什么这个选项是正确的\n3. 简要说明其他选项不正确的原因', '回答格式：\n正确答案：[选项字母]\n选择理由：[解释]\n其他选项分析：[分析]', '正确答案：A\n选择理由：该选项准确描述了正常空腹血糖范围\n其他选项分析：B、C、D的数值都超出正常范围', 1),
+('多选题回答prompt', 'MULTIPLE_CHOICE', '请仔细分析所有选项，选择所有正确的答案。\n需要：\n1. 明确指出所有正确选项\n2. 解释每个正确选项的原因\n3. 说明为什么排除其他选项', '回答格式：\n正确答案：[选项字母列表]\n选择理由：[解释]\n排除理由：[分析]', '正确答案：A,B,C\n选择理由：这些都是典型的冠心病症状\n排除理由：D选项不是典型症状', 1),
+('主观题回答prompt', 'SUBJECTIVE', '请提供详细、系统的回答。\n需要：\n1. 结构化组织内容\n2. 使用专业准确的医学术语\n3. 提供具体的例子或解释\n4. 注意回答的完整性和逻辑性', '回答格式：\n[主要观点]\n1. [要点1]\n2. [要点2]\n...\n补充说明：[其他重要信息]', '高血压的主要症状：\n1. 头痛（特别是后枕部）\n2. 头晕\n3. 视物模糊\n补充说明：部分患者可能无明显症状', 1);
+
+-- 插入评测场景的标签提示词
+INSERT INTO `evaluation_tag_prompts` (`tag_id`, `name`, `prompt_template`, `prompt_priority`, `created_by_user_id`) VALUES
+(1, '内科评测prompt', '评估内科问题回答时，请注意：\n1. 医学术语使用的准确性（0-10分）\n2. 病理生理机制解释的深度（0-10分）\n3. 治疗方案的规范性（0-10分）\n4. 整体专业水平（0-10分）', 10, 1),
+(3, '心脏病评测prompt', '评估心脏病相关回答时，重点关注：\n1. 心血管病理生理的解释准确性（0-10分）\n2. 症状体征描述的完整性（0-10分）\n3. 检查方法推荐的合理性（0-10分）\n4. 治疗方案的循证医学支持（0-10分）', 20, 1),
+(6, '诊断评测prompt', '评估诊断相关回答时，请考虑：\n1. 诊断思路的清晰度（0-10分）\n2. 鉴别诊断的完整性（0-10分）\n3. 检查建议的必要性（0-10分）\n4. 诊断依据的循证等级（0-10分）', 30, 1);
+
+-- 插入评测场景的主观题提示词
+INSERT INTO `evaluation_subjective_prompts` (`name`, `prompt_template`, `scoring_instruction`, `output_format_instruction`, `created_by_user_id`) VALUES
+('标准主观题评测prompt', '请对以下回答进行全面评估：\n1. 专业性（医学术语、概念准确性）\n2. 完整性（要点覆盖程度）\n3. 逻辑性（条理性、结构性）\n4. 实用性（临床应用价值）', '评分标准：\n专业性（0-25分）：\n- 术语准确：0-10分\n- 概念清晰：0-15分\n\n完整性（0-25分）：\n- 核心要点：0-15分\n- 补充信息：0-10分\n\n逻辑性（0-25分）：\n- 结构完整：0-10分\n- 条理清晰：0-15分\n\n实用性（0-25分）：\n- 临床相关：0-15分\n- 可操作性：0-10分', '请按以下格式输出评分：\n{\n  "专业性": {\n    "分数": X,\n    "评语": "..."\n  },\n  "完整性": {\n    "分数": X,\n    "评语": "..."\n  },\n  "逻辑性": {\n    "分数": X,\n    "评语": "..."\n  },\n  "实用性": {\n    "分数": X,\n    "评语": "..."\n  },\n  "总分": X,\n  "总评": "..."\n}', 1);
+
+-- 插入prompt组装配置
+INSERT INTO `answer_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `tag_prompts_section_header`, `question_type_section_header`, `final_instruction`, `created_by_user_id`) VALUES
+('标准医学回答配置', '用于医学问题回答的标准prompt组装配置', '你是一个专业的医学AI助手，请基于循证医学和最新指南提供准确、专业的回答。', '## 专业知识要求', '## 回答要求', '请严格按照上述要求进行回答，确保专业性和准确性。', 1);
+
+INSERT INTO `evaluation_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `tag_prompts_section_header`, `subjective_section_header`, `final_instruction`, `created_by_user_id`) VALUES
+('标准医学评测配置', '用于医学问题评测的标准prompt组装配置', '你是一个专业的医学评测专家，请基于专业知识对回答进行客观、公正的评估。', '## 专业评测标准', '## 评分要求', '请严格按照评分标准进行评估，给出详细的评分依据和建议。', 1);
+
+-- 添加更多标准问题数据
+INSERT INTO `standard_questions` (`question_text`, `question_type`, `difficulty`, `created_by_user_id`) VALUES
+('心绞痛的典型症状和处理方法是什么？', 'SUBJECTIVE', 'MEDIUM', 1),
+('如何预防和控制糖尿病的并发症？', 'SUBJECTIVE', 'HARD', 1),
+('以下哪些是高血压的危险因素？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
+('二型糖尿病的主要发病机制是？', 'SINGLE_CHOICE', 'HARD', 1),
+('心肌梗塞的急救措施包括哪些？', 'SUBJECTIVE', 'HARD', 1);
+
+-- 添加对应的标准客观题答案
+INSERT INTO `standard_objective_answers` (`standard_question_id`, `options`, `correct_ids`, `determined_by_user_id`) VALUES
+(7, '[{"id":"A","text":"肥胖"},{"id":"B","text":"吸烟"},{"id":"C","text":"压力大"},{"id":"D","text":"缺乏运动"},{"id":"E","text":"高盐饮食"}]', '["A","B","C","D","E"]', 2),
+(8, '[{"id":"A","text":"胰岛素抵抗和分泌不足"},{"id":"B","text":"单纯的胰岛素分泌不足"},{"id":"C","text":"胰腺炎症"},{"id":"D","text":"自身免疫反应"}]', '["A"]', 2);
+
+-- 添加对应的标准主观题答案
+INSERT INTO `standard_subjective_answers` (`standard_question_id`, `answer_text`, `scoring_guidance`, `determined_by_user_id`) VALUES
+(5, '心绞痛的典型症状和处理方法：\n\n典型症状：\n1. 胸骨后压榨性疼痛\n2. 可向左肩、左臂放射\n3. 常在劳累或情绪激动时发作\n4. 休息或含服硝酸甘油可缓解\n5. 持续时间通常3-5分钟\n\n处理方法：\n1. 立即停止活动，保持安静\n2. 含服硝酸甘油\n3. 如症状持续，考虑就医\n4. 记录发作情况\n5. 控制危险因素\n\n长期管理：\n1. 规律服药\n2. 合理运动\n3. 控制饮食\n4. 戒烟限酒\n5. 定期复查', '评分要点：\n1. 症状描述的准确性和完整性（4分）\n2. 急性发作处理方法的正确性（3分）\n3. 长期管理建议的合理性（3分）', 2),
+(6, '糖尿病并发症的预防和控制：\n\n1. 血糖控制\n- 定期监测血糖\n- 严格遵医嘱用药\n- 保持血糖稳定\n\n2. 血压管理\n- 控制在130/80mmHg以下\n- 定期测量血压\n- 必要时使用降压药\n\n3. 血脂管理\n- 控制总胆固醇和甘油三酯\n- 合理饮食\n- 必要时服用调脂药\n\n4. 生活方式干预\n- 合理饮食\n- 规律运动\n- 戒烟限酒\n\n5. 定期筛查\n- 眼底检查\n- 肾功能检查\n- 足部检查\n- 心电图检查\n\n6. 并发症早期识别\n- 了解早期症状\n- 及时就医\n- 积极治疗', '评分要点：\n1. 预防措施的完整性（4分）\n2. 控制方法的具体性（3分）\n3. 建议的实用性（3分）', 2),
+(9, '心肌梗塞的急救措施：\n\n立即措施：\n1. 立即停止活动，平卧休息\n2. 舌下含服硝酸甘油\n3. 服用阿司匹林300mg咀嚼\n4. 保持呼吸道通畅\n5. 监测生命体征\n\n呼救措施：\n1. 立即拨打急救电话\n2. 准确描述症状和地址\n3. 等待救护车到达\n\n注意事项：\n1. 保持镇静\n2. 松开紧身衣物\n3. 保暖\n4. 禁止剧烈活动\n\n医院前准备：\n1. 携带近期用药记录\n2. 准备个人基本信息\n3. 联系家属', '评分要点：\n1. 急救措施的及时性和准确性（4分）\n2. 操作步骤的完整性（3分）\n3. 注意事项的合理性（3分）', 2);
+
+-- 添加问题标签关联
+INSERT INTO `standard_question_tags` (`standard_question_id`, `tag_id`, `created_by_user_id`) VALUES
+(5, 3, 1),  -- 心绞痛问题关联"心脏病"标签
+(5, 6, 1),  -- 心绞痛问题关联"诊断"标签
+(5, 7, 1),  -- 心绞痛问题关联"治疗"标签
+(6, 5, 1),  -- 糖尿病并发症关联"糖尿病"标签
+(6, 8, 1),  -- 糖尿病并发症关联"预防"标签
+(7, 4, 1),  -- 高血压危险因素关联"高血压"标签
+(7, 8, 1),  -- 高血压危险因素关联"预防"标签
+(8, 5, 1),  -- 糖尿病发病机制关联"糖尿病"标签
+(8, 6, 1),  -- 糖尿病发病机制关联"诊断"标签
+(9, 3, 1),  -- 心肌梗塞关联"心脏病"标签
+(9, 7, 1);  -- 心肌梗塞关联"治疗"标签
+
+-- 添加LLM模型数据
+INSERT INTO `llm_models` (`name`, `provider`, `version`, `description`, `api_type`, `model_parameters`, `created_by_user_id`) VALUES
+('GPT-4', 'OpenAI', '4.0', 'OpenAI的GPT-4模型', 'OpenAI', '{"temperature": 0.7, "max_tokens": 2000}', 1),
+('Claude-2', 'Anthropic', '2.0', 'Anthropic的Claude-2模型', 'Anthropic', '{"temperature": 0.7, "max_tokens": 2000}', 1),
+('文心一言', '百度', '2.0', '百度的文心一言模型', 'REST', '{"temperature": 0.8, "max_tokens": 1500}', 1);
+
+-- 添加数据集版本
+INSERT INTO `dataset_versions` (`version_number`, `name`, `description`, `created_by_user_id`) VALUES
+('v1.0.0', '医学问答基础数据集', '包含基础医学问题的标准数据集', 1),
+('v1.1.0', '心血管疾病专题数据集', '专注于心血管疾病相关问题的数据集', 1),
+('v1.2.0', '代谢疾病专题数据集', '专注于糖尿病等代谢疾病相关问题的数据集', 1);
+
+-- 添加数据集问题映射
+INSERT INTO `dataset_question_mapping` (`dataset_version_id`, `standard_question_id`, `order_in_dataset`, `created_by_user_id`) VALUES
+(1, 1, 1, 1),
+(1, 2, 2, 1),
+(1, 3, 3, 1),
+(1, 4, 4, 1),
+(2, 5, 1, 1),
+(2, 3, 2, 1),
+(2, 9, 3, 1),
+(3, 2, 1, 1),
+(3, 4, 2, 1),
+(3, 6, 3, 1),
+(3, 8, 4, 1);
+
+-- 添加回答生成批次
+INSERT INTO `answer_generation_batches` (`name`, `description`, `dataset_version_id`, `status`, `answer_assembly_config_id`, `evaluation_assembly_config_id`, `created_by_user_id`, `answer_repeat_count`) VALUES
+('心血管疾病评测批次-20240301', '使用v1.1.0数据集评测各模型对心血管疾病问题的回答能力', 2, 'COMPLETED', 1, 1, 1, 1),
+('代谢疾病评测批次-20240301', '使用v1.2.0数据集评测各模型对代谢疾病问题的回答能力', 3, 'IN_PROGRESS', 1, 1, 1, 1);
+
+-- 添加模型回答运行记录
+INSERT INTO `model_answer_runs` (`answer_generation_batch_id`, `llm_model_id`, `run_name`, `status`, `created_by_user_id`, `completed_questions_count`, `total_questions_count`, `progress_percentage`) VALUES
+(1, 1, 'GPT-4心血管疾病评测', 'COMPLETED', 1, 3, 3, 100.00),
+(1, 2, 'Claude-2心血管疾病评测', 'COMPLETED', 1, 3, 3, 100.00),
+(2, 1, 'GPT-4代谢疾病评测', 'IN_PROGRESS', 1, 2, 4, 50.00),
+(2, 2, 'Claude-2代谢疾病评测', 'IN_PROGRESS', 1, 2, 4, 50.00);

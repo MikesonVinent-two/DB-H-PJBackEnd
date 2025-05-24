@@ -3,6 +3,9 @@ package com.example.demo.entity;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "evaluations")
@@ -32,13 +35,14 @@ public class Evaluation {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "evaluation_status", nullable = false)
-    private EvaluationStatus status;
+    private EvaluationStatus status = EvaluationStatus.PENDING;
 
     @Column(name = "error_message")
     private String errorMessage;
 
-    @Column(name = "evaluation_results")
-    private String evaluationResults;
+    @Column(name = "evaluation_results", columnDefinition = "json")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> evaluationResults;
 
     @Column(name = "prompt_used")
     private String promptUsed;
@@ -67,9 +71,7 @@ public class Evaluation {
     public enum EvaluationStatus {
         SUCCESS,        // 评测成功
         FAILED,         // 评测失败
-        PENDING,        // 待评测
-        IN_PROGRESS,    // 评测进行中
-        COMPLETED       // 评测完成
+        PENDING        // 待评测
     }
 
     // Getters and Setters
@@ -137,11 +139,11 @@ public class Evaluation {
         this.errorMessage = errorMessage;
     }
     
-    public String getEvaluationResults() {
+    public Map<String, Object> getEvaluationResults() {
         return evaluationResults;
     }
 
-    public void setEvaluationResults(String evaluationResults) {
+    public void setEvaluationResults(Map<String, Object> evaluationResults) {
         this.evaluationResults = evaluationResults;
     }
 
