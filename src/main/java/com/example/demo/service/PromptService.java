@@ -2,8 +2,12 @@ package com.example.demo.service;
 
 import com.example.demo.dto.AnswerQuestionTypePromptDTO;
 import com.example.demo.dto.AnswerTagPromptDTO;
+import com.example.demo.dto.EvaluationSubjectivePromptDTO;
+import com.example.demo.dto.EvaluationTagPromptDTO;
 import com.example.demo.entity.AnswerQuestionTypePrompt;
 import com.example.demo.entity.AnswerTagPrompt;
+import com.example.demo.entity.EvaluationSubjectivePrompt;
+import com.example.demo.entity.EvaluationTagPrompt;
 import com.example.demo.entity.QuestionType;
 
 import java.util.List;
@@ -70,4 +74,68 @@ public interface PromptService {
      * 删除题型提示词（软删除）
      */
     void deleteAnswerQuestionTypePrompt(Long id, Long userId);
+    
+    // ===== 评测标签提示词相关方法 =====
+    
+    /**
+     * 创建评测标签提示词
+     */
+    EvaluationTagPrompt createEvaluationTagPrompt(EvaluationTagPromptDTO dto, Long userId);
+    
+    /**
+     * 更新评测标签提示词
+     */
+    EvaluationTagPrompt updateEvaluationTagPrompt(Long id, EvaluationTagPromptDTO dto, Long userId);
+    
+    /**
+     * 获取评测标签提示词详情
+     */
+    Optional<EvaluationTagPrompt> getEvaluationTagPromptById(Long id);
+    
+    /**
+     * 按标签ID获取激活状态的评测提示词
+     */
+    List<EvaluationTagPrompt> getActiveEvaluationTagPromptsByTagId(Long tagId);
+    
+    /**
+     * 获取所有评测标签提示词
+     */
+    List<EvaluationTagPrompt> getAllEvaluationTagPrompts();
+    
+    /**
+     * 删除评测标签提示词（软删除）
+     */
+    void deleteEvaluationTagPrompt(Long id, Long userId);
+    
+    // ===== 评测主观题提示词相关方法 =====
+    
+    /**
+     * 创建评测主观题提示词
+     */
+    EvaluationSubjectivePrompt createEvaluationSubjectivePrompt(EvaluationSubjectivePromptDTO dto, Long userId);
+    
+    /**
+     * 更新评测主观题提示词
+     */
+    EvaluationSubjectivePrompt updateEvaluationSubjectivePrompt(Long id, EvaluationSubjectivePromptDTO dto, Long userId);
+    
+    /**
+     * 获取评测主观题提示词详情
+     */
+    Optional<EvaluationSubjectivePrompt> getEvaluationSubjectivePromptById(Long id);
+    
+    /**
+     * 获取所有激活状态的评测主观题提示词
+     */
+    List<EvaluationSubjectivePrompt> getActiveEvaluationSubjectivePrompts();
+    
+    /**
+     * 获取所有评测主观题提示词
+     */
+    List<EvaluationSubjectivePrompt> getAllEvaluationSubjectivePrompts();
+    
+    /**
+     * 删除评测主观题提示词（软删除）
+     */
+    void deleteEvaluationSubjectivePrompt(Long id, Long userId);
 } 

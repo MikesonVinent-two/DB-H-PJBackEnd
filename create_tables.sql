@@ -586,11 +586,67 @@ CREATE TABLE `llm_answers` (
     INDEX `idx_llm_answers_time` (`generation_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =============================================
--- 评测标准和评测员
--- =============================================
+-- 28. evaluations (评测结果表)
+DROP TABLE IF EXISTS `evaluations`;
+CREATE TABLE `evaluations` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `llm_answer_id` BIGINT NOT NULL COMMENT '关联的LLM回答ID',
+    `evaluator_id` BIGINT NOT NULL COMMENT '评测员/裁判ID',
+    `evaluation_run_id` BIGINT NULL COMMENT '关联的评测运行ID',
+    `overall_score` DECIMAL(5,2) NULL COMMENT '总体评分',
+    `evaluation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '评测时间',
+    `evaluation_status` ENUM('SUCCESS', 'FAILED', 'PENDING') NOT NULL DEFAULT 'PENDING' COMMENT '评测状态',
+    `error_message` TEXT NULL COMMENT '如果评测失败，记录错误信息',
+    `evaluation_results` JSON NULL COMMENT '详细评测结果，包含各评测标准的得分',
+    `prompt_used` TEXT NULL COMMENT '评测使用的prompt',
+    `comments` TEXT NULL COMMENT '评测员的补充说明或建议',
+    `raw_evaluator_response` TEXT NULL COMMENT '评测员/裁判的原始响应',
+    `created_by_user_id` BIGINT NULL COMMENT '发起评测的用户ID',
+    `created_change_log_id` BIGINT NULL COMMENT '关联到创建此评测的change_log条目',
+    FOREIGN KEY (`llm_answer_id`) REFERENCES `llm_answers`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`evaluator_id`) REFERENCES `evaluators`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
+    INDEX `idx_evaluations_answer` (`llm_answer_id`),
+    INDEX `idx_evaluations_evaluator` (`evaluator_id`),
+    INDEX `idx_evaluations_status` (`evaluation_status`),
+    INDEX `idx_evaluations_score` (`overall_score`),
+    INDEX `idx_evaluations_time` (`evaluation_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 28. evaluation_criteria (评测标准表)
+-- 29. evaluation_runs (评测运行表)
+DROP TABLE IF EXISTS `evaluation_runs`;
+CREATE TABLE `evaluation_runs` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `model_answer_run_id` BIGINT NOT NULL COMMENT '关联的模型回答运行',
+    `evaluator_id` BIGINT NOT NULL COMMENT '评测员/裁判ID',
+    `run_name` VARCHAR(255) NOT NULL COMMENT '评测运行名称',
+    `run_description` TEXT NULL COMMENT '评测运行描述',
+    `run_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '运行开始时间',
+    `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '运行状态',
+    `parameters` JSON NULL COMMENT '评测参数',
+    `error_message` TEXT NULL COMMENT '如果失败，记录错误信息',
+    `created_by_user_id` BIGINT NULL COMMENT '发起评测的用户',
+    `last_processed_answer_id` BIGINT NULL COMMENT '上次处理到的回答ID',
+    `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
+    `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `completed_answers_count` INT NOT NULL DEFAULT 0 COMMENT '已完成评测的回答数量',
+    `total_answers_count` INT NULL COMMENT '总回答数量',
+    `failed_evaluations_count` INT NOT NULL DEFAULT 0 COMMENT '失败的评测数量',
+    `resume_count` INT NOT NULL DEFAULT 0 COMMENT '重启次数',
+    `completed_at` DATETIME NULL COMMENT '完成时间',
+    FOREIGN KEY (`model_answer_run_id`) REFERENCES `model_answer_runs`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`evaluator_id`) REFERENCES `evaluators`(`id`) ON DELETE RESTRICT,
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+    INDEX `idx_evaluation_runs_status` (`status`),
+    INDEX `idx_evaluation_runs_answer_run` (`model_answer_run_id`),
+    INDEX `idx_evaluation_runs_progress` (`progress_percentage`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 添加外键约束
+ALTER TABLE `evaluations` ADD CONSTRAINT `fk_evaluations_run` FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE SET NULL;
+
+-- 30. evaluation_criteria (评测标准表)
 DROP TABLE IF EXISTS `evaluation_criteria`;
 CREATE TABLE `evaluation_criteria` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -612,7 +668,7 @@ CREATE TABLE `evaluation_criteria` (
     INDEX `idx_eval_criteria_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 29. evaluators (评测员/裁判模型表)
+-- 31. evaluators (评测员/裁判模型表)
 DROP TABLE IF EXISTS `evaluators`;
 CREATE TABLE `evaluators` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -626,7 +682,7 @@ CREATE TABLE `evaluators` (
     `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`)
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================

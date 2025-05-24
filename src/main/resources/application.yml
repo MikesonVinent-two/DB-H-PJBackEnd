@@ -14,7 +14,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:
@@ -22,7 +22,6 @@ spring:
         format_sql: true
     database-platform: org.hibernate.dialect.MySQLDialect
     open-in-view: true
-  
   messages:
     encoding: UTF-8
 
@@ -30,14 +29,11 @@ spring:
 llm:
   default-api-url: https://api.openai.com/v1/chat/completions
   default-model: gpt-3.5-turbo
-  connection-timeout: 30 # 秒
-  read-timeout: 60 # 秒 (默认模型的超时设置)
-  # 特定模型类型有特殊超时设置：
-  # - deepsearch/deepresearch 类型模型: 300秒 (5分钟)
-  # - 思考类模型: 180秒 (3分钟)
+  connection-timeout: 30
+  read-timeout: 60
   retry:
     max-attempts: 3
-    backoff-delay: 1000 # 毫秒
+    backoff-delay: 1000
 
 # 日志配置
 logging:
@@ -47,4 +43,4 @@ logging:
     org.springframework.web: INFO
     org.hibernate: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" 
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

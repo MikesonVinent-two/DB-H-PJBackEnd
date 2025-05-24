@@ -6,27 +6,41 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.ClientHttpRequestFactory;
 
 import java.time.Duration;
 
 /**
- * RestTemplate配置类
+ * RestTemplate配置类，用于创建和配置RestTemplate实例
  */
 @Configuration
 public class RestTemplateConfig {
 
+    /**
+     * 创建RestTemplate Bean
+     * 
+     * @return 配置好的RestTemplate实例
+     */
     @Bean
     public RestTemplate restTemplate() {
+        return new RestTemplateBuilder()
+                .setConnectTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(30))
+                .requestFactory(this::clientHttpRequestFactory)
+                .build();
+    }
+    
+    /**
+     * 创建ClientHttpRequestFactory
+     * 
+     * @return ClientHttpRequestFactory实例
+     */
+    private ClientHttpRequestFactory clientHttpRequestFactory() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        // 设置连接超时时间（30秒）
-        factory.setConnectTimeout(30000);
-        // 设置读取超时时间（120秒，大型模型可能需要较长响应时间）
-        factory.setReadTimeout(120000);
-            
-        // 使用BufferingClientHttpRequestFactory以允许多次读取响应
-        BufferingClientHttpRequestFactory bufferingFactory = new BufferingClientHttpRequestFactory(factory);
-        
-        return new RestTemplate(bufferingFactory);
+        factory.setConnectTimeout(5000); // 连接超时，单位毫秒
+        factory.setReadTimeout(30000);   // 读取超时，单位毫秒
+        factory.setBufferRequestBody(false); // 对于大请求体不缓存
+        return factory;
     }
     
     /**

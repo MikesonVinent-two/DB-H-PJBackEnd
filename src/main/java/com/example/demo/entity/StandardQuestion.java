@@ -67,6 +67,9 @@ public class StandardQuestion {
     @JsonManagedReference
     private List<StandardQuestionTag> questionTags = new ArrayList<>();
 
+    @OneToMany(mappedBy = "standardQuestion", cascade = CascadeType.ALL)
+    private List<DatasetQuestionMapping> datasetMappings = new ArrayList<>();
+
     // 添加标签关联
     public void addTag(StandardQuestionTag tag) {
         questionTags.add(tag);
@@ -179,5 +182,17 @@ public class StandardQuestion {
         return questionTags.stream()
                 .map(StandardQuestionTag::getTag)
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * 获取数据集映射列表
+     * @return 数据集映射列表
+     */
+    public List<DatasetQuestionMapping> getDatasetMappings() {
+        return datasetMappings;
+    }
+    
+    public void setDatasetMappings(List<DatasetQuestionMapping> datasetMappings) {
+        this.datasetMappings = datasetMappings;
     }
 } 

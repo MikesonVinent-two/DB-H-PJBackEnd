@@ -1,6 +1,7 @@
 package com.example.demo.entity;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,24 +13,27 @@ public class EvaluationRun {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "llm_model_id", nullable = false)
-    private LlmModel llmModel;
+    @JoinColumn(name = "model_answer_run_id", nullable = false)
+    private ModelAnswerRun modelAnswerRun;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "dataset_version_id", nullable = false)
-    private DatasetVersion datasetVersion;
+    @JoinColumn(name = "evaluator_id", nullable = false)
+    private Evaluator evaluator;
 
-    @Column(name = "run_time", nullable = false)
-    private LocalDateTime runTime = LocalDateTime.now();
-
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    private RunStatus status = RunStatus.PENDING;
+    @Column(name = "run_name", nullable = false)
+    private String runName;
 
     @Column(name = "run_description", columnDefinition = "TEXT")
     private String runDescription;
 
-    @Column(columnDefinition = "json")
+    @Column(name = "run_time", nullable = false)
+    private LocalDateTime runTime = LocalDateTime.now();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private RunStatus status = RunStatus.PENDING;
+
+    @Column(name = "parameters", columnDefinition = "JSON")
     private String parameters;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
@@ -39,15 +43,38 @@ public class EvaluationRun {
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
 
+    @Column(name = "last_processed_answer_id")
+    private Long lastProcessedAnswerId;
+
+    @Column(name = "progress_percentage", precision = 5, scale = 2)
+    private BigDecimal progressPercentage;
+
+    @Column(name = "last_activity_time")
+    private LocalDateTime lastActivityTime;
+
+    @Column(name = "completed_answers_count", nullable = false)
+    private Integer completedAnswersCount = 0;
+
+    @Column(name = "total_answers_count")
+    private Integer totalAnswersCount;
+
+    @Column(name = "failed_evaluations_count", nullable = false)
+    private Integer failedEvaluationsCount = 0;
+
+    @Column(name = "resume_count", nullable = false)
+    private Integer resumeCount = 0;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     // 运行状态枚举
     public enum RunStatus {
-        PENDING,                    // 等待中
-        GENERATING_ANSWERS,         // 生成答案中
-        ANSWER_GENERATION_FAILED,   // 答案生成失败
-        READY_FOR_EVALUATION,       // 准备评测
-        EVALUATING,                 // 评测中
-        COMPLETED,                  // 已完成
-        FAILED                      // 失败
+        PENDING,      // 等待中
+        IN_PROGRESS,  // 进行中
+        COMPLETED,    // 已完成
+        FAILED,       // 失败
+        PAUSED,       // 暂停
+        RESUMING      // 恢复中
     }
 
     // Getters and Setters
@@ -59,20 +86,36 @@ public class EvaluationRun {
         this.id = id;
     }
 
-    public LlmModel getLlmModel() {
-        return llmModel;
+    public ModelAnswerRun getModelAnswerRun() {
+        return modelAnswerRun;
     }
 
-    public void setLlmModel(LlmModel llmModel) {
-        this.llmModel = llmModel;
+    public void setModelAnswerRun(ModelAnswerRun modelAnswerRun) {
+        this.modelAnswerRun = modelAnswerRun;
     }
 
-    public DatasetVersion getDatasetVersion() {
-        return datasetVersion;
+    public Evaluator getEvaluator() {
+        return evaluator;
     }
 
-    public void setDatasetVersion(DatasetVersion datasetVersion) {
-        this.datasetVersion = datasetVersion;
+    public void setEvaluator(Evaluator evaluator) {
+        this.evaluator = evaluator;
+    }
+
+    public String getRunName() {
+        return runName;
+    }
+
+    public void setRunName(String runName) {
+        this.runName = runName;
+    }
+
+    public String getRunDescription() {
+        return runDescription;
+    }
+
+    public void setRunDescription(String runDescription) {
+        this.runDescription = runDescription;
     }
 
     public LocalDateTime getRunTime() {
@@ -89,14 +132,6 @@ public class EvaluationRun {
 
     public void setStatus(RunStatus status) {
         this.status = status;
-    }
-
-    public String getRunDescription() {
-        return runDescription;
-    }
-
-    public void setRunDescription(String runDescription) {
-        this.runDescription = runDescription;
     }
 
     public String getParameters() {
@@ -121,5 +156,69 @@ public class EvaluationRun {
 
     public void setCreatedByUser(User createdByUser) {
         this.createdByUser = createdByUser;
+    }
+
+    public Long getLastProcessedAnswerId() {
+        return lastProcessedAnswerId;
+    }
+
+    public void setLastProcessedAnswerId(Long lastProcessedAnswerId) {
+        this.lastProcessedAnswerId = lastProcessedAnswerId;
+    }
+
+    public BigDecimal getProgressPercentage() {
+        return progressPercentage;
+    }
+
+    public void setProgressPercentage(BigDecimal progressPercentage) {
+        this.progressPercentage = progressPercentage;
+    }
+
+    public LocalDateTime getLastActivityTime() {
+        return lastActivityTime;
+    }
+
+    public void setLastActivityTime(LocalDateTime lastActivityTime) {
+        this.lastActivityTime = lastActivityTime;
+    }
+
+    public Integer getCompletedAnswersCount() {
+        return completedAnswersCount;
+    }
+
+    public void setCompletedAnswersCount(Integer completedAnswersCount) {
+        this.completedAnswersCount = completedAnswersCount;
+    }
+
+    public Integer getTotalAnswersCount() {
+        return totalAnswersCount;
+    }
+
+    public void setTotalAnswersCount(Integer totalAnswersCount) {
+        this.totalAnswersCount = totalAnswersCount;
+    }
+
+    public Integer getFailedEvaluationsCount() {
+        return failedEvaluationsCount;
+    }
+
+    public void setFailedEvaluationsCount(Integer failedEvaluationsCount) {
+        this.failedEvaluationsCount = failedEvaluationsCount;
+    }
+
+    public Integer getResumeCount() {
+        return resumeCount;
+    }
+
+    public void setResumeCount(Integer resumeCount) {
+        this.resumeCount = resumeCount;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 } 

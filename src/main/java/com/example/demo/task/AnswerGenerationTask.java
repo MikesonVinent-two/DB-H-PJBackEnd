@@ -10,15 +10,22 @@ import com.example.demo.dto.WebSocketMessage.MessageType;
 import com.example.demo.entity.AnswerGenerationBatch;
 import com.example.demo.entity.ModelAnswerRun;
 import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.ModelAnswer;
+import com.example.demo.entity.LlmAnswer;
 import com.example.demo.entity.LlmModel;
 import com.example.demo.entity.AnswerPromptAssemblyConfig;
 import com.example.demo.entity.AnswerGenerationBatch.BatchStatus;
 import com.example.demo.entity.ModelAnswerRun.RunStatus;
+import com.example.demo.entity.DatasetQuestionMapping;
+import com.example.demo.entity.Tag;
+import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.AnswerTagPrompt;
+import com.example.demo.entity.AnswerQuestionTypePrompt;
 import com.example.demo.repository.AnswerGenerationBatchRepository;
 import com.example.demo.repository.ModelAnswerRunRepository;
 import com.example.demo.repository.StandardQuestionRepository;
-import com.example.demo.repository.ModelAnswerRepository;
+import com.example.demo.repository.LlmAnswerRepository;
+import com.example.demo.repository.AnswerTagPromptRepository;
+import com.example.demo.repository.AnswerQuestionTypePromptRepository;
 import com.example.demo.service.WebSocketService;
 import com.example.demo.service.LlmApiService;
 
@@ -32,6 +39,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+
+
 
 /**
  * 回答生成异步任务
@@ -47,23 +56,29 @@ public class AnswerGenerationTask {
     private final AnswerGenerationBatchRepository batchRepository;
     private final ModelAnswerRunRepository runRepository;
     private final StandardQuestionRepository questionRepository;
-    private final ModelAnswerRepository answerRepository;
+    private final LlmAnswerRepository answerRepository;
     private final WebSocketService webSocketService;
     private final LlmApiService llmApiService;
+    private final AnswerTagPromptRepository answerTagPromptRepository;
+    private final AnswerQuestionTypePromptRepository answerQuestionTypePromptRepository;
     
     public AnswerGenerationTask(
             AnswerGenerationBatchRepository batchRepository,
             ModelAnswerRunRepository runRepository,
             StandardQuestionRepository questionRepository,
-            ModelAnswerRepository answerRepository,
+            LlmAnswerRepository answerRepository,
             WebSocketService webSocketService,
-            LlmApiService llmApiService) {
+            LlmApiService llmApiService,
+            AnswerTagPromptRepository answerTagPromptRepository,
+            AnswerQuestionTypePromptRepository answerQuestionTypePromptRepository) {
         this.batchRepository = batchRepository;
         this.runRepository = runRepository;
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.webSocketService = webSocketService;
         this.llmApiService = llmApiService;
+        this.answerTagPromptRepository = answerTagPromptRepository;
+        this.answerQuestionTypePromptRepository = answerQuestionTypePromptRepository;
     }
     
     /**
@@ -251,8 +266,25 @@ public class AnswerGenerationTask {
                 promptBuilder.append(config.getTagPromptsSectionHeader());
                 promptBuilder.append("\n");
                 
-                // TODO: 根据标签获取相应的提示
-                // 这里需要根据具体业务逻辑添加标签相关的提示
+                // 根据标签获取相应的提示
+                List<Tag> tags = question.getTags();
+                for (Tag tag : tags) {
+                    try {
+                        // 获取该标签的激活状态提示词
+                        List<AnswerTagPrompt> tagPrompts = answerTagPromptRepository
+                            .findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
+                        
+                        if (!tagPrompts.isEmpty()) {
+                            // 使用优先级最高的提示词（列表已按优先级排序）
+                            AnswerTagPrompt prompt = tagPrompts.get(0);
+                            promptBuilder.append("【").append(tag.getTagName()).append("】: ");
+                            promptBuilder.append(prompt.getPromptTemplate());
+                            promptBuilder.append(config.getTagPromptSeparator());
+                        }
+                    } catch (Exception e) {
+                        logger.warn("获取标签提示词失败，标签ID: {}", tag.getId(), e);
+                    }
+                }
                 
                 promptBuilder.append(config.getSectionSeparator());
             }
@@ -262,8 +294,35 @@ public class AnswerGenerationTask {
                 promptBuilder.append(config.getQuestionTypeSectionHeader());
                 promptBuilder.append("\n");
                 
-                // TODO: 根据问题类型添加特定要求
-                // 这里需要根据具体业务逻辑添加问题类型相关的要求
+                // 根据问题类型添加特定要求
+                QuestionType questionType = question.getQuestionType();
+                if (questionType != null) {
+                    try {
+                        // 获取该问题类型的激活状态提示词
+                        List<AnswerQuestionTypePrompt> typePrompts = answerQuestionTypePromptRepository
+                            .findByQuestionTypeAndIsActiveTrueAndDeletedAtIsNull(questionType);
+                        
+                        if (!typePrompts.isEmpty()) {
+                            // 使用最新创建的提示词（假设列表已按创建时间排序）
+                            AnswerQuestionTypePrompt prompt = typePrompts.get(0);
+                            promptBuilder.append(prompt.getPromptTemplate());
+                            
+                            // 添加回答格式要求（如果有）
+                            if (prompt.getResponseFormatInstruction() != null && !prompt.getResponseFormatInstruction().isEmpty()) {
+                                promptBuilder.append("\n\n回答格式要求:\n");
+                                promptBuilder.append(prompt.getResponseFormatInstruction());
+                            }
+                            
+                            // 添加回答示例（如果有）
+                            if (prompt.getResponseExample() != null && !prompt.getResponseExample().isEmpty()) {
+                                promptBuilder.append("\n\n回答示例:\n");
+                                promptBuilder.append(prompt.getResponseExample());
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("获取问题类型提示词失败，问题类型: {}", questionType, e);
+                    }
+                }
                 
                 promptBuilder.append(config.getSectionSeparator());
             }
@@ -321,14 +380,23 @@ public class AnswerGenerationTask {
      */
     @Transactional
     public void saveModelAnswer(ModelAnswerRun run, StandardQuestion question, String answerText, int repeatIndex) {
-        ModelAnswer answer = new ModelAnswer();
+        LlmAnswer answer = new LlmAnswer();
         answer.setModelAnswerRun(run);
-        answer.setStandardQuestion(question);
+        // 需要从StandardQuestion获取对应的DatasetQuestionMapping
+        DatasetQuestionMapping mapping = question.getDatasetMappings()
+            .stream()
+            .filter(m -> m.getDatasetVersion().equals(run.getAnswerGenerationBatch().getDatasetVersion()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("找不到问题对应的数据集映射: " + question.getId()));
+        
+        answer.setDatasetQuestionMapping(mapping);
         answer.setAnswerText(answerText);
         answer.setRepeatIndex(repeatIndex);
         answer.setGenerationTime(LocalDateTime.now());
+        answer.setGenerationStatus(LlmAnswer.GenerationStatus.SUCCESS);
         
-        // 可以添加其他字段，如令牌使用量等
+        // 可以添加其他字段
+        answer.setPromptUsed(assemblePrompt(run, question));
         
         answerRepository.save(answer);
     }
@@ -548,8 +616,8 @@ public class AnswerGenerationTask {
         payload.put("questionId", question.getId());
         payload.put("questionText", question.getQuestionText());
         payload.put("repeatIndex", repeatIndex);
+        payload.put("timestamp", System.currentTimeMillis());
         payload.put("error", error);
-        payload.put("failedCount", run.getFailedQuestionsCount());
         
         webSocketService.sendRunMessage(run.getId(), MessageType.QUESTION_FAILED, payload);
     }

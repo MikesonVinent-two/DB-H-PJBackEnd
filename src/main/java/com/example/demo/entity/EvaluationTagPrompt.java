@@ -4,46 +4,53 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "ai_evaluation_prompts")
-public class AiEvaluationPrompt {
+@Table(name = "evaluation_tag_prompts")
+public class EvaluationTagPrompt {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(name = "name", nullable = false)
+    
+    @ManyToOne
+    @JoinColumn(name = "tag_id", nullable = false)
+    private Tag tag;
+    
+    @Column(nullable = false)
     private String name;
-
-    @Column(name = "version")
-    private String version;
-
+    
     @Column(name = "prompt_template", nullable = false, columnDefinition = "TEXT")
     private String promptTemplate;
-
-    @Column(name = "description", columnDefinition = "TEXT")
+    
+    @Column(columnDefinition = "TEXT")
     private String description;
-
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+    
+    @Column(name = "prompt_priority", nullable = false)
+    private Integer promptPriority = 50;
+    
+    @Column
+    private String version;
+    
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+    
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
+    
+    @ManyToOne
     @JoinColumn(name = "created_by_user_id", nullable = false)
     private User createdByUser;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    
+    @ManyToOne
     @JoinColumn(name = "parent_prompt_id")
-    private AiEvaluationPrompt parentPrompt;
-
-    @Column(name = "applicable_question_types", columnDefinition = "json")
-    private String applicableQuestionTypes;
-
-    @Column(name = "applicable_criteria_ids", columnDefinition = "json")
-    private String applicableCriteriaIds;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    private EvaluationTagPrompt parentPrompt;
+    
+    @ManyToOne
     @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
-
+    
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -56,20 +63,20 @@ public class AiEvaluationPrompt {
         this.id = id;
     }
 
+    public Tag getTag() {
+        return tag;
+    }
+
+    public void setTag(Tag tag) {
+        this.tag = tag;
+    }
+
     public String getName() {
         return name;
     }
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getVersion() {
-        return version;
-    }
-
-    public void setVersion(String version) {
-        this.version = version;
     }
 
     public String getPromptTemplate() {
@@ -88,12 +95,44 @@ public class AiEvaluationPrompt {
         this.description = description;
     }
 
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public Integer getPromptPriority() {
+        return promptPriority;
+    }
+
+    public void setPromptPriority(Integer promptPriority) {
+        this.promptPriority = promptPriority;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 
     public User getCreatedByUser() {
@@ -104,28 +143,12 @@ public class AiEvaluationPrompt {
         this.createdByUser = createdByUser;
     }
 
-    public AiEvaluationPrompt getParentPrompt() {
+    public EvaluationTagPrompt getParentPrompt() {
         return parentPrompt;
     }
 
-    public void setParentPrompt(AiEvaluationPrompt parentPrompt) {
+    public void setParentPrompt(EvaluationTagPrompt parentPrompt) {
         this.parentPrompt = parentPrompt;
-    }
-
-    public String getApplicableQuestionTypes() {
-        return applicableQuestionTypes;
-    }
-
-    public void setApplicableQuestionTypes(String applicableQuestionTypes) {
-        this.applicableQuestionTypes = applicableQuestionTypes;
-    }
-
-    public String getApplicableCriteriaIds() {
-        return applicableCriteriaIds;
-    }
-
-    public void setApplicableCriteriaIds(String applicableCriteriaIds) {
-        this.applicableCriteriaIds = applicableCriteriaIds;
     }
 
     public ChangeLog getCreatedChangeLog() {

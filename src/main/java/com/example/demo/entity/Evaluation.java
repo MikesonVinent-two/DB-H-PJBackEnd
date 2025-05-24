@@ -19,44 +19,49 @@ public class Evaluation {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "evaluator_id", nullable = false)
     private Evaluator evaluator;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "evaluation_run_id")
+    private EvaluationRun evaluationRun;
 
-    @Column(name = "evaluation_time", nullable = false)
-    private LocalDateTime evaluationTime;
-
-    @Column(name = "overall_score", precision = 10, scale = 2)
+    @Column(name = "overall_score", precision = 5, scale = 2)
     private BigDecimal overallScore;
 
-    @Column(name = "feedback_text", columnDefinition = "TEXT")
-    private String feedbackText;
+    @Column(name = "evaluation_time", nullable = false)
+    private LocalDateTime evaluationTime = LocalDateTime.now();
 
-    @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
-    private EvaluationStatus status = EvaluationStatus.COMPLETED;
-
-    @Column(name = "raw_evaluator_output", columnDefinition = "json")
-    private String rawEvaluatorOutput;
+    @Column(name = "evaluation_status", nullable = false)
+    private EvaluationStatus evaluationStatus = EvaluationStatus.PENDING;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ai_prompt_id_used")
-    private AiEvaluationPrompt aiPromptUsed;
+    @Column(name = "evaluation_results", columnDefinition = "JSON")
+    private String evaluationResults;
 
-    @Column(name = "prompt_text_rendered", columnDefinition = "TEXT")
-    private String promptTextRendered;
+    @Column(name = "prompt_used", columnDefinition = "TEXT")
+    private String promptUsed;
+
+    @Column(name = "comments", columnDefinition = "TEXT")
+    private String comments;
+
+    @Column(name = "raw_evaluator_response", columnDefinition = "TEXT")
+    private String rawEvaluatorResponse;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_change_log_id")
+    private ChangeLog createdChangeLog;
 
     // 评测状态枚举
     public enum EvaluationStatus {
-        PENDING,        // 待评测
-        IN_PROGRESS,    // 评测中
-        COMPLETED,      // 已完成
-        FAILED,         // 失败
-        NEEDS_REVIEW    // 需要复核
+        SUCCESS,    // 评测成功
+        FAILED,     // 评测失败
+        PENDING     // 待评测
     }
 
     // Getters and Setters
@@ -83,13 +88,13 @@ public class Evaluation {
     public void setEvaluator(Evaluator evaluator) {
         this.evaluator = evaluator;
     }
-
-    public LocalDateTime getEvaluationTime() {
-        return evaluationTime;
+    
+    public EvaluationRun getEvaluationRun() {
+        return evaluationRun;
     }
 
-    public void setEvaluationTime(LocalDateTime evaluationTime) {
-        this.evaluationTime = evaluationTime;
+    public void setEvaluationRun(EvaluationRun evaluationRun) {
+        this.evaluationRun = evaluationRun;
     }
 
     public BigDecimal getOverallScore() {
@@ -100,28 +105,20 @@ public class Evaluation {
         this.overallScore = overallScore;
     }
 
-    public String getFeedbackText() {
-        return feedbackText;
+    public LocalDateTime getEvaluationTime() {
+        return evaluationTime;
     }
 
-    public void setFeedbackText(String feedbackText) {
-        this.feedbackText = feedbackText;
+    public void setEvaluationTime(LocalDateTime evaluationTime) {
+        this.evaluationTime = evaluationTime;
     }
 
-    public EvaluationStatus getStatus() {
-        return status;
+    public EvaluationStatus getEvaluationStatus() {
+        return evaluationStatus;
     }
 
-    public void setStatus(EvaluationStatus status) {
-        this.status = status;
-    }
-
-    public String getRawEvaluatorOutput() {
-        return rawEvaluatorOutput;
-    }
-
-    public void setRawEvaluatorOutput(String rawEvaluatorOutput) {
-        this.rawEvaluatorOutput = rawEvaluatorOutput;
+    public void setEvaluationStatus(EvaluationStatus evaluationStatus) {
+        this.evaluationStatus = evaluationStatus;
     }
 
     public String getErrorMessage() {
@@ -131,21 +128,37 @@ public class Evaluation {
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
     }
-
-    public AiEvaluationPrompt getAiPromptUsed() {
-        return aiPromptUsed;
+    
+    public String getEvaluationResults() {
+        return evaluationResults;
     }
 
-    public void setAiPromptUsed(AiEvaluationPrompt aiPromptUsed) {
-        this.aiPromptUsed = aiPromptUsed;
+    public void setEvaluationResults(String evaluationResults) {
+        this.evaluationResults = evaluationResults;
     }
 
-    public String getPromptTextRendered() {
-        return promptTextRendered;
+    public String getPromptUsed() {
+        return promptUsed;
     }
 
-    public void setPromptTextRendered(String promptTextRendered) {
-        this.promptTextRendered = promptTextRendered;
+    public void setPromptUsed(String promptUsed) {
+        this.promptUsed = promptUsed;
+    }
+
+    public String getComments() {
+        return comments;
+    }
+
+    public void setComments(String comments) {
+        this.comments = comments;
+    }
+
+    public String getRawEvaluatorResponse() {
+        return rawEvaluatorResponse;
+    }
+
+    public void setRawEvaluatorResponse(String rawEvaluatorResponse) {
+        this.rawEvaluatorResponse = rawEvaluatorResponse;
     }
 
     public User getCreatedByUser() {
@@ -154,5 +167,37 @@ public class Evaluation {
 
     public void setCreatedByUser(User createdByUser) {
         this.createdByUser = createdByUser;
+    }
+    
+    public ChangeLog getCreatedChangeLog() {
+        return createdChangeLog;
+    }
+
+    public void setCreatedChangeLog(ChangeLog createdChangeLog) {
+        this.createdChangeLog = createdChangeLog;
+    }
+    
+    /**
+     * 获取关联的问题
+     * 
+     * @return 标准问题实体
+     */
+    public StandardQuestion getQuestion() {
+        if (llmAnswer != null && llmAnswer.getDatasetQuestionMapping() != null) {
+            return llmAnswer.getDatasetQuestionMapping().getStandardQuestion();
+        }
+        return null;
+    }
+    
+    /**
+     * 获取回答文本
+     * 
+     * @return 回答文本
+     */
+    public String getAnswerText() {
+        if (llmAnswer != null) {
+            return llmAnswer.getAnswerText();
+        }
+        return null;
     }
 } 

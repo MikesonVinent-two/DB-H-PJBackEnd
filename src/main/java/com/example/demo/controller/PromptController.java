@@ -2,8 +2,12 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.AnswerQuestionTypePromptDTO;
 import com.example.demo.dto.AnswerTagPromptDTO;
+import com.example.demo.dto.EvaluationSubjectivePromptDTO;
+import com.example.demo.dto.EvaluationTagPromptDTO;
 import com.example.demo.entity.AnswerQuestionTypePrompt;
 import com.example.demo.entity.AnswerTagPrompt;
+import com.example.demo.entity.EvaluationSubjectivePrompt;
+import com.example.demo.entity.EvaluationTagPrompt;
 import com.example.demo.entity.QuestionType;
 import com.example.demo.service.PromptService;
 import jakarta.validation.Valid;
@@ -126,6 +130,102 @@ public class PromptController {
     @GetMapping("/question-types/supported-types")
     public ResponseEntity<QuestionType[]> getSupportedQuestionTypes() {
         return ResponseEntity.ok(QuestionType.values());
+    }
+    
+    //===== 评测标签提示词API =====
+    
+    @PostMapping("/evaluation/tags")
+    public ResponseEntity<EvaluationTagPrompt> createEvaluationTagPrompt(
+            @Valid @RequestBody EvaluationTagPromptDTO dto) {
+        logger.info("接收到创建评测标签提示词请求");
+        EvaluationTagPrompt prompt = promptService.createEvaluationTagPrompt(dto, dto.getUserId());
+        return new ResponseEntity<>(prompt, HttpStatus.CREATED);
+    }
+    
+    @PutMapping("/evaluation/tags/{id}")
+    public ResponseEntity<EvaluationTagPrompt> updateEvaluationTagPrompt(
+            @PathVariable Long id,
+            @Valid @RequestBody EvaluationTagPromptDTO dto) {
+        logger.info("接收到更新评测标签提示词请求，ID: {}", id);
+        EvaluationTagPrompt prompt = promptService.updateEvaluationTagPrompt(id, dto, dto.getUserId());
+        return ResponseEntity.ok(prompt);
+    }
+    
+    @GetMapping("/evaluation/tags/{id}")
+    public ResponseEntity<EvaluationTagPrompt> getEvaluationTagPromptById(@PathVariable Long id) {
+        return promptService.getEvaluationTagPromptById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @GetMapping("/evaluation/tags")
+    public ResponseEntity<List<EvaluationTagPrompt>> getAllEvaluationTagPrompts() {
+        List<EvaluationTagPrompt> prompts = promptService.getAllEvaluationTagPrompts();
+        return ResponseEntity.ok(prompts);
+    }
+    
+    @GetMapping("/evaluation/tags/active/tag/{tagId}")
+    public ResponseEntity<List<EvaluationTagPrompt>> getActiveEvaluationTagPromptsByTagId(@PathVariable Long tagId) {
+        List<EvaluationTagPrompt> prompts = promptService.getActiveEvaluationTagPromptsByTagId(tagId);
+        return ResponseEntity.ok(prompts);
+    }
+    
+    @DeleteMapping("/evaluation/tags/{id}")
+    public ResponseEntity<Void> deleteEvaluationTagPrompt(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> requestBody) {
+        Long userId = requestBody.get("userId");
+        logger.info("接收到删除评测标签提示词请求，ID: {}", id);
+        promptService.deleteEvaluationTagPrompt(id, userId);
+        return ResponseEntity.noContent().build();
+    }
+    
+    //===== 评测主观题提示词API =====
+    
+    @PostMapping("/evaluation/subjective")
+    public ResponseEntity<EvaluationSubjectivePrompt> createEvaluationSubjectivePrompt(
+            @Valid @RequestBody EvaluationSubjectivePromptDTO dto) {
+        logger.info("接收到创建评测主观题提示词请求");
+        EvaluationSubjectivePrompt prompt = promptService.createEvaluationSubjectivePrompt(dto, dto.getUserId());
+        return new ResponseEntity<>(prompt, HttpStatus.CREATED);
+    }
+    
+    @PutMapping("/evaluation/subjective/{id}")
+    public ResponseEntity<EvaluationSubjectivePrompt> updateEvaluationSubjectivePrompt(
+            @PathVariable Long id,
+            @Valid @RequestBody EvaluationSubjectivePromptDTO dto) {
+        logger.info("接收到更新评测主观题提示词请求，ID: {}", id);
+        EvaluationSubjectivePrompt prompt = promptService.updateEvaluationSubjectivePrompt(id, dto, dto.getUserId());
+        return ResponseEntity.ok(prompt);
+    }
+    
+    @GetMapping("/evaluation/subjective/{id}")
+    public ResponseEntity<EvaluationSubjectivePrompt> getEvaluationSubjectivePromptById(@PathVariable Long id) {
+        return promptService.getEvaluationSubjectivePromptById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @GetMapping("/evaluation/subjective")
+    public ResponseEntity<List<EvaluationSubjectivePrompt>> getAllEvaluationSubjectivePrompts() {
+        List<EvaluationSubjectivePrompt> prompts = promptService.getAllEvaluationSubjectivePrompts();
+        return ResponseEntity.ok(prompts);
+    }
+    
+    @GetMapping("/evaluation/subjective/active")
+    public ResponseEntity<List<EvaluationSubjectivePrompt>> getActiveEvaluationSubjectivePrompts() {
+        List<EvaluationSubjectivePrompt> prompts = promptService.getActiveEvaluationSubjectivePrompts();
+        return ResponseEntity.ok(prompts);
+    }
+    
+    @DeleteMapping("/evaluation/subjective/{id}")
+    public ResponseEntity<Void> deleteEvaluationSubjectivePrompt(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> requestBody) {
+        Long userId = requestBody.get("userId");
+        logger.info("接收到删除评测主观题提示词请求，ID: {}", id);
+        promptService.deleteEvaluationSubjectivePrompt(id, userId);
+        return ResponseEntity.noContent().build();
     }
     
     @ExceptionHandler(Exception.class)
