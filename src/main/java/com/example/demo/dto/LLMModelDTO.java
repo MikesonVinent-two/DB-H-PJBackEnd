@@ -6,6 +6,7 @@ public class LLMModelDTO {
     private String provider;
     private String version;
     private String description;
+    private String apiType;
 
     // Getters and Setters
     public Long getId() {
@@ -46,5 +47,13 @@ public class LLMModelDTO {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getApiType() {
+        return apiType;
+    }
+
+    public void setApiType(String apiType) {
+        this.apiType = apiType;
     }
 } 

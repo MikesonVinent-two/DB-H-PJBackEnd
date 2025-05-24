@@ -11,32 +11,38 @@ public class LlmAnswer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "evaluation_run_id", nullable = false)
-    private EvaluationRun evaluationRun;
+    @ManyToOne
+    @JoinColumn(name = "model_answer_run_id", nullable = false)
+    private ModelAnswerRun modelAnswerRun;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "dataset_question_mapping_id", nullable = false)
     private DatasetQuestionMapping datasetQuestionMapping;
 
-    @Column(name = "answer_text", columnDefinition = "TEXT")
+    @Column(name = "answer_text", columnDefinition = "text")
     private String answerText;
 
-    @Column(name = "generation_status", nullable = false)
     @Enumerated(EnumType.STRING)
+    @Column(name = "generation_status", nullable = false)
     private GenerationStatus generationStatus;
 
-    @Column(name = "error_message", columnDefinition = "TEXT")
+    @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 
     @Column(name = "generation_time")
     private LocalDateTime generationTime;
 
-    @Column(name = "prompt_used", columnDefinition = "TEXT")
+    @Column(name = "prompt_used", columnDefinition = "text")
     private String promptUsed;
+
+    @Column(name = "raw_model_response", columnDefinition = "text")
+    private String rawModelResponse;
 
     @Column(name = "other_metadata", columnDefinition = "json")
     private String otherMetadata;
+
+    @Column(name = "repeat_index", nullable = false)
+    private Integer repeatIndex = 0;
 
     // 生成状态枚举
     public enum GenerationStatus {
@@ -53,12 +59,12 @@ public class LlmAnswer {
         this.id = id;
     }
 
-    public EvaluationRun getEvaluationRun() {
-        return evaluationRun;
+    public ModelAnswerRun getModelAnswerRun() {
+        return modelAnswerRun;
     }
 
-    public void setEvaluationRun(EvaluationRun evaluationRun) {
-        this.evaluationRun = evaluationRun;
+    public void setModelAnswerRun(ModelAnswerRun modelAnswerRun) {
+        this.modelAnswerRun = modelAnswerRun;
     }
 
     public DatasetQuestionMapping getDatasetQuestionMapping() {
@@ -109,11 +115,27 @@ public class LlmAnswer {
         this.promptUsed = promptUsed;
     }
 
+    public String getRawModelResponse() {
+        return rawModelResponse;
+    }
+
+    public void setRawModelResponse(String rawModelResponse) {
+        this.rawModelResponse = rawModelResponse;
+    }
+
     public String getOtherMetadata() {
         return otherMetadata;
     }
 
     public void setOtherMetadata(String otherMetadata) {
         this.otherMetadata = otherMetadata;
+    }
+
+    public Integer getRepeatIndex() {
+        return repeatIndex;
+    }
+
+    public void setRepeatIndex(Integer repeatIndex) {
+        this.repeatIndex = repeatIndex;
     }
 } 

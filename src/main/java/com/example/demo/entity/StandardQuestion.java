@@ -3,6 +3,7 @@ package com.example.demo.entity;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
@@ -165,5 +166,18 @@ public class StandardQuestion {
 
     public void setQuestionTags(List<StandardQuestionTag> questionTags) {
         this.questionTags = questionTags;
+    }
+    
+    /**
+     * 获取问题的标签列表
+     * @return 标签列表
+     */
+    public List<Tag> getTags() {
+        if (questionTags == null) {
+            return new ArrayList<>();
+        }
+        return questionTags.stream()
+                .map(StandardQuestionTag::getTag)
+                .collect(Collectors.toList());
     }
 } 

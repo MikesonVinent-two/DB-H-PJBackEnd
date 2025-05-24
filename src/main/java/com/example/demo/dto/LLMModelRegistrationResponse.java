@@ -17,6 +17,14 @@ public class LLMModelRegistrationResponse {
         response.setRegisteredModels(models);
         return response;
     }
+    
+    public static LLMModelRegistrationResponse success(String message, List<LLMModelDTO> models) {
+        LLMModelRegistrationResponse response = new LLMModelRegistrationResponse();
+        response.setSuccess(true);
+        response.setMessage(message);
+        response.setRegisteredModels(models);
+        return response;
+    }
 
     public static LLMModelRegistrationResponse error(String message, String errorDetails) {
         LLMModelRegistrationResponse response = new LLMModelRegistrationResponse();

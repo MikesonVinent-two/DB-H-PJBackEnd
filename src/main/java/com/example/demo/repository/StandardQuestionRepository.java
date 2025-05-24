@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import com.example.demo.entity.StandardQuestion;
 import java.util.List;
 import java.util.Optional;
@@ -20,4 +21,8 @@ public interface StandardQuestionRepository extends JpaRepository<StandardQuesti
     
     // 根据原始问题ID查找所有关联的标准问题
     List<StandardQuestion> findByOriginalRawQuestionId(Long rawQuestionId);
+    
+    // 根据数据集版本ID查找标准问题
+    @Query("SELECT sq FROM StandardQuestion sq JOIN DatasetQuestionMapping dqm ON sq.id = dqm.standardQuestion.id WHERE dqm.datasetVersion.id = :datasetVersionId")
+    List<StandardQuestion> findByDatasetVersionId(@Param("datasetVersionId") Long datasetVersionId);
 } 

@@ -13,6 +13,9 @@ public class LLMModelRegistrationRequest {
     @NotBlank(message = "API Key不能为空")
     private String apiKey;
 
+    @NotBlank(message = "API Type不能为空")
+    private String apiType;
+
     // Getters and Setters
     public Long getUserId() {
         return userId;
@@ -36,5 +39,13 @@ public class LLMModelRegistrationRequest {
 
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
+    }
+
+    public String getApiType() {
+        return apiType;
+    }
+
+    public void setApiType(String apiType) {
+        this.apiType = apiType;
     }
 } 

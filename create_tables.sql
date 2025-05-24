@@ -469,6 +469,7 @@ CREATE TABLE `llm_models` (
     `description` TEXT NULL COMMENT '模型描述',
     `api_url` VARCHAR(512) NULL COMMENT 'API接口地址',
     `api_key` VARCHAR(512) NULL COMMENT 'API密钥',
+    `api_type` VARCHAR(50) NULL COMMENT '调用方式或接口类型，如OpenAI、Azure、Anthropic等',
     `model_parameters` JSON NULL COMMENT '默认模型参数',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `created_by_user_id` BIGINT NULL,
@@ -477,15 +478,16 @@ CREATE TABLE `llm_models` (
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
     INDEX `idx_llm_models_provider` (`provider`),
+    INDEX `idx_llm_models_api_type` (`api_type`),
     INDEX `idx_llm_models_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 24. evaluation_batches (评测批次表)
-DROP TABLE IF EXISTS `evaluation_batches`;
-CREATE TABLE `evaluation_batches` (
+-- 24.  _batches (回答生成批次表)
+DROP TABLE IF EXISTS `answer_generation_batches`;
+CREATE TABLE `answer_generation_batches` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `name` VARCHAR(255) NOT NULL COMMENT '评测批次名称',
-    `description` TEXT NULL COMMENT '评测批次描述',
+    `name` VARCHAR(255) NOT NULL COMMENT '回答生成批次名称',
+    `description` TEXT NULL COMMENT '回答生成批次描述',
     `dataset_version_id` BIGINT NOT NULL COMMENT '使用的数据集版本',
     `creation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '整体状态',
@@ -507,17 +509,17 @@ CREATE TABLE `evaluation_batches` (
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`answer_assembly_config_id`) REFERENCES `answer_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`evaluation_assembly_config_id`) REFERENCES `evaluation_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
-    INDEX `idx_eval_batches_status` (`status`),
-    INDEX `idx_eval_batches_dataset` (`dataset_version_id`),
-    INDEX `idx_eval_batches_time` (`creation_time`)
+    INDEX `idx_answer_gen_batches_status` (`status`),
+    INDEX `idx_answer_gen_batches_dataset` (`dataset_version_id`),
+    INDEX `idx_answer_gen_batches_time` (`creation_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 25. evaluation_runs (评测运行表)
-DROP TABLE IF EXISTS `evaluation_runs`;
-CREATE TABLE `evaluation_runs` (
+-- 25. model_answer_runs (模型回答运行表)
+DROP TABLE IF EXISTS `model_answer_runs`;
+CREATE TABLE `model_answer_runs` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `evaluation_batch_id` BIGINT NOT NULL COMMENT '所属的评测批次',
-    `llm_model_id` BIGINT NOT NULL COMMENT '被评测的LLM模型',
+    `answer_generation_batch_id` BIGINT NOT NULL COMMENT '所属的回答生成批次',
+    `llm_model_id` BIGINT NOT NULL COMMENT '生成回答的LLM模型',
     `run_name` VARCHAR(255) NOT NULL COMMENT '运行名称',
     `run_description` TEXT NULL COMMENT '运行描述',
     `run_index` INT NOT NULL DEFAULT 0 COMMENT '同一模型在批次中的运行索引，0表示第一次',
@@ -525,7 +527,7 @@ CREATE TABLE `evaluation_runs` (
     `status` ENUM('PENDING', 'GENERATING_ANSWERS', 'ANSWER_GENERATION_FAILED', 'READY_FOR_EVALUATION', 'EVALUATING', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '运行状态',
     `parameters` JSON NULL COMMENT '运行参数，可覆盖批次的全局参数',
     `error_message` TEXT NULL COMMENT '如果失败，记录错误信息',
-    `created_by_user_id` BIGINT NULL COMMENT '发起评测的用户',
+    `created_by_user_id` BIGINT NULL COMMENT '发起回答生成的用户',
     `last_processed_question_id` BIGINT NULL COMMENT '上次处理到的问题ID',
     `last_processed_question_index` INT NULL COMMENT '上次处理到的问题在数据集中的索引',
     `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
@@ -538,13 +540,13 @@ CREATE TABLE `evaluation_runs` (
     `total_questions_count` INT NULL COMMENT '总问题数量',
     `failed_questions_count` INT NOT NULL DEFAULT 0 COMMENT '失败的问题数量',
     `failed_questions_ids` JSON NULL COMMENT '失败的问题ID列表',
-    FOREIGN KEY (`evaluation_batch_id`) REFERENCES `evaluation_batches`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`answer_generation_batch_id`) REFERENCES `answer_generation_batches`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    UNIQUE (`evaluation_batch_id`, `llm_model_id`, `run_index`) COMMENT '确保同一个批次中同一个模型的运行索引唯一',
-    INDEX `idx_eval_runs_status` (`status`),
-    INDEX `idx_eval_runs_batch_model` (`evaluation_batch_id`, `llm_model_id`),
-    INDEX `idx_eval_runs_progress` (`progress_percentage`)
+    UNIQUE (`answer_generation_batch_id`, `llm_model_id`, `run_index`) COMMENT '确保同一个批次中同一个模型的运行索引唯一',
+    INDEX `idx_model_answer_runs_status` (`status`),
+    INDEX `idx_model_answer_runs_batch_model` (`answer_generation_batch_id`, `llm_model_id`),
+    INDEX `idx_model_answer_runs_progress` (`progress_percentage`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 26. run_checkpoints (运行检查点表)
@@ -567,7 +569,7 @@ CREATE TABLE `run_checkpoints` (
 DROP TABLE IF EXISTS `llm_answers`;
 CREATE TABLE `llm_answers` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `evaluation_run_id` BIGINT NOT NULL COMMENT '所属的评测运行',
+    `model_answer_run_id` BIGINT NOT NULL COMMENT '所属的模型回答运行',
     `dataset_question_mapping_id` BIGINT NOT NULL COMMENT '对应的数据集问题',
     `answer_text` TEXT NULL COMMENT 'LLM生成的答案文本',
     `generation_status` ENUM('SUCCESS', 'FAILED') NOT NULL COMMENT '生成状态',
@@ -577,9 +579,9 @@ CREATE TABLE `llm_answers` (
     `raw_model_response` TEXT NULL COMMENT '模型的原始响应',
     `other_metadata` JSON NULL COMMENT '其他元数据',
     `repeat_index` INT NOT NULL DEFAULT 0 COMMENT '重复回答的索引，0表示第一次',
-    FOREIGN KEY (`evaluation_run_id`) REFERENCES `evaluation_runs`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`model_answer_run_id`) REFERENCES `model_answer_runs`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`dataset_question_mapping_id`) REFERENCES `dataset_question_mapping`(`id`) ON DELETE CASCADE,
-    INDEX `idx_llm_answers_run_status` (`evaluation_run_id`, `generation_status`),
+    INDEX `idx_llm_answers_run_status` (`model_answer_run_id`, `generation_status`),
     INDEX `idx_llm_answers_question` (`dataset_question_mapping_id`),
     INDEX `idx_llm_answers_time` (`generation_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -624,50 +626,7 @@ CREATE TABLE `evaluators` (
     `deleted_at` DATETIME NULL COMMENT '软删除标记',
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`llm_model_id`) REFERENCES `llm_models`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    FOREIGN KEY (`created_change_log_id`) REFERENCES `change_log`(`id`) ON DELETE SET NULL,
-    INDEX `idx_evaluators_type` (`evaluator_type`),
-    INDEX `idx_evaluators_deleted` (`deleted_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 30. evaluations (评测表)
-DROP TABLE IF EXISTS `evaluations`;
-CREATE TABLE `evaluations` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `llm_answer_id` BIGINT NOT NULL COMMENT '被评测的LLM答案',
-    `evaluator_id` BIGINT NOT NULL COMMENT '评测员',
-    `evaluation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '评测时间',
-    `overall_score` DECIMAL(10, 2) NULL COMMENT '总体评分',
-    `feedback_text` TEXT NULL COMMENT '评测反馈文本',
-    `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'NEEDS_REVIEW', 'PAUSED') NOT NULL DEFAULT 'COMPLETED' COMMENT '评测状态',
-    `raw_evaluator_output` JSON NULL COMMENT '原始评测输出',
-    `error_message` TEXT NULL COMMENT '如果评测失败，记录错误信息',
-    `evaluation_prompt_used` TEXT NULL COMMENT '如果是AI评测，实际使用的评测提示词',
-    `created_by_user_id` BIGINT NULL COMMENT '创建此评测记录的用户',
-    `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
-    `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
-    `pause_reason` TEXT NULL COMMENT '暂停原因',
-    `is_aggregate_evaluation` BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否为多次回答的聚合评测',
-    `aggregated_answer_ids` JSON NULL COMMENT '如果是聚合评测，包含的所有回答ID',
-    FOREIGN KEY (`llm_answer_id`) REFERENCES `llm_answers`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`evaluator_id`) REFERENCES `evaluators`(`id`) ON DELETE RESTRICT,
-    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    INDEX `idx_evaluations_status_time` (`status`, `evaluation_time`),
-    INDEX `idx_evaluations_answer` (`llm_answer_id`),
-    INDEX `idx_evaluations_evaluator` (`evaluator_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 31. evaluation_scores (评测分数表)
-DROP TABLE IF EXISTS `evaluation_scores`;
-CREATE TABLE `evaluation_scores` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `evaluation_id` BIGINT NOT NULL,
-    `criterion_id` BIGINT NOT NULL,
-    `score_value` VARCHAR(255) NOT NULL COMMENT '评分值',
-    FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`criterion_id`) REFERENCES `evaluation_criteria`(`id`) ON DELETE CASCADE,
-    INDEX `idx_eval_scores_evaluation` (`evaluation_id`),
-    INDEX `idx_eval_scores_criterion` (`criterion_id`)
+    FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================
@@ -677,68 +636,28 @@ CREATE TABLE `evaluation_scores` (
 -- 评测结果摘要视图
 CREATE OR REPLACE VIEW `evaluation_summary` AS
 SELECT 
-    er.id as run_id,
-    er.run_name,
+    mar.id as run_id,
+    mar.run_name,
     lm.name as model_name,
     lm.provider as model_provider,
     dv.name as dataset_name,
     dv.version_number as dataset_version,
-    er.status as run_status,
-    er.progress_percentage,
-    er.completed_questions_count,
-    er.total_questions_count,
-    er.failed_questions_count,
+    mar.status as run_status,
+    mar.progress_percentage,
+    mar.completed_questions_count,
+    mar.total_questions_count,
+    mar.failed_questions_count,
     COUNT(DISTINCT la.id) as total_answers,
     COUNT(DISTINCT e.id) as total_evaluations,
     AVG(e.overall_score) as avg_overall_score,
-    er.run_time,
-    er.last_activity_time
-FROM evaluation_runs er
-JOIN llm_models lm ON er.llm_model_id = lm.id
-JOIN evaluation_batches eb ON er.evaluation_batch_id = eb.id
-JOIN dataset_versions dv ON eb.dataset_version_id = dv.id
-LEFT JOIN llm_answers la ON er.id = la.evaluation_run_id
+    mar.run_time,
+    mar.last_activity_time
+FROM model_answer_runs mar
+JOIN llm_models lm ON mar.llm_model_id = lm.id
+JOIN answer_generation_batches agb ON mar.answer_generation_batch_id = agb.id
+JOIN dataset_versions dv ON agb.dataset_version_id = dv.id
+LEFT JOIN llm_answers la ON mar.id = la.model_answer_run_id
 LEFT JOIN evaluations e ON la.id = e.llm_answer_id
-GROUP BY er.id, er.run_name, lm.name, lm.provider, dv.name, dv.version_number, 
-         er.status, er.progress_percentage, er.completed_questions_count, 
-         er.total_questions_count, er.failed_questions_count, er.run_time, er.last_activity_time;
-
--- 问题标签统计视图
-CREATE OR REPLACE VIEW `question_tag_stats` AS
-SELECT 
-    t.id as tag_id,
-    t.tag_name,
-    t.tag_type,
-    COUNT(DISTINCT sqt.standard_question_id) as question_count,
-    COUNT(DISTINCT atp.id) as answer_prompt_count,
-    COUNT(DISTINCT etp.id) as evaluation_prompt_count
-FROM tags t
-LEFT JOIN standard_question_tags sqt ON t.id = sqt.tag_id AND sqt.standard_question_id IN (SELECT id FROM standard_questions WHERE deleted_at IS NULL)
-LEFT JOIN answer_tag_prompts atp ON t.id = atp.tag_id AND atp.deleted_at IS NULL AND atp.is_active = TRUE
-LEFT JOIN evaluation_tag_prompts etp ON t.id = etp.tag_id AND etp.deleted_at IS NULL AND etp.is_active = TRUE
-WHERE t.deleted_at IS NULL
-GROUP BY t.id, t.tag_name, t.tag_type;
-
-SET FOREIGN_KEY_CHECKS = 1;
-
--- =============================================
--- 初始化数据示例
--- =============================================
-
--- 插入默认管理员用户
-INSERT INTO `users` (`username`, `password`, `name`, `role`) VALUES 
-('admin', '$2a$10$8.UnVuG9HHmpz6z5n7gfpOELBjx7S8Y7VxC5z8.UmBq9l7EGo3cZy', '系统管理员', 'ADMIN');
-
--- 插入默认回答prompt组装配置
-INSERT INTO `answer_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `is_active`, `created_by_user_id`) VALUES 
-('默认回答配置', '系统默认的回答prompt组装配置', '你是一个专业的医学AI助手，请根据以下指导回答问题。', TRUE, 1);
-
--- 插入默认评测prompt组装配置
-INSERT INTO `evaluation_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `is_active`, `created_by_user_id`) VALUES 
-('默认评测配置', '系统默认的评测prompt组装配置', '你是一个专业的医学答案评测员，请根据以下标准评测答案质量。', TRUE, 1);
-
--- 插入基础评测标准
-INSERT INTO `evaluation_criteria` (`name`, `description`, `data_type`, `score_range`, `created_by_user_id`) VALUES 
-('答案准确性', '评测答案内容的医学准确性', 'SCORE', '1-10', 1),
-('答案完整性', '评测答案是否全面回答了问题', 'SCORE', '1-10', 1),
-('专业程度', '评测答案的专业术语使用和表达规范性', 'SCORE', '1-10', 1);
+GROUP BY mar.id, mar.run_name, lm.name, lm.provider, dv.name, dv.version_number, 
+         mar.status, mar.progress_percentage, mar.completed_questions_count, 
+         mar.total_questions_count, mar.failed_questions_count, mar.run_time, mar.last_activity_time;

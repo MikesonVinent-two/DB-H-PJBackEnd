@@ -4,7 +4,8 @@ import com.example.demo.dto.LLMModelDTO;
 import com.example.demo.dto.LLMModelRegistrationRequest;
 import com.example.demo.dto.LLMModelRegistrationResponse;
 import com.example.demo.entity.LlmModel;
-import com.example.demo.repository.LLMModelRepository;
+import com.example.demo.entity.User;
+import com.example.demo.repository.LlmModelRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.LLMModelService;
 import org.slf4j.Logger;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,7 @@ public class LLMModelServiceImpl implements LLMModelService {
     private static final Logger logger = LoggerFactory.getLogger(LLMModelServiceImpl.class);
     
     @Autowired
-    private LLMModelRepository llmModelRepository;
+    private LlmModelRepository llmModelRepository;
     
     @Autowired
     private UserRepository userRepository;
@@ -41,43 +43,51 @@ public class LLMModelServiceImpl implements LLMModelService {
             if (!userRepository.existsById(request.getUserId())) {
                 return LLMModelRegistrationResponse.error("用户不存在", null);
             }
+            
+            // 获取用户对象
+            User user = userRepository.findById(request.getUserId()).orElse(null);
 
             // 2. 调用API获取可用模型列表
             List<Map<String, Object>> availableModels = fetchAvailableModels(request.getApiUrl(), request.getApiKey());
             if (availableModels == null || availableModels.isEmpty()) {
-                return LLMModelRegistrationResponse.error("无法获取可用模型列表", "API调用未返回有效数据");
+                return LLMModelRegistrationResponse.error("从API无法获取有效的模型列表", null);
             }
-
-            // 3. 保存模型信息到数据库
+            
+            // 3. 将获取的模型信息保存到数据库
             List<LLMModelDTO> registeredModels = new ArrayList<>();
-            for (Map<String, Object> modelInfo : availableModels) {
-                LlmModel model = new LlmModel();
-                model.setName((String) modelInfo.get("id")); // 假设API返回的模型ID作为名称
-                model.setProvider(extractProviderFromModelId((String) modelInfo.get("id")));
-                model.setApiUrl(request.getApiUrl());
-                model.setApiKey(request.getApiKey());
-                model.setCreatedByUserId(request.getUserId());
+            
+            for (Map<String, Object> modelData : availableModels) {
+                String modelId = (String) modelData.get("id");
+                String modelName = modelData.containsKey("name") ? (String) modelData.get("name") : modelId;
                 
-                // 如果API返回了其他信息，也可以设置
-                if (modelInfo.get("description") != null) {
-                    model.setDescription((String) modelInfo.get("description"));
+                // 检查模型是否已存在
+                if (llmModelRepository.existsByNameAndApiUrl(modelName, request.getApiUrl())) {
+                    logger.info("模型已存在: {}", modelName);
+                    continue;
                 }
-                if (modelInfo.get("version") != null) {
-                    model.setVersion((String) modelInfo.get("version"));
-                }
-
-                // 保存到数据库
-                model = llmModelRepository.save(model);
                 
-                // 转换为DTO并添加到结果列表
-                registeredModels.add(convertToDTO(model));
+                LlmModel llmModel = new LlmModel();
+                llmModel.setName(modelName);
+                llmModel.setProvider(extractProviderFromModelId(modelId));
+                llmModel.setApiUrl(request.getApiUrl());
+                llmModel.setApiKey(request.getApiKey());
+                llmModel.setApiType(request.getApiType()); // 设置API类型
+                llmModel.setCreatedByUser(user);
+                llmModel.setCreatedAt(LocalDateTime.now());
+                
+                LlmModel savedModel = llmModelRepository.save(llmModel);
+                registeredModels.add(convertToDTO(savedModel));
             }
-
-            return LLMModelRegistrationResponse.success(registeredModels);
-
+            
+            if (registeredModels.isEmpty()) {
+                return LLMModelRegistrationResponse.error("没有新模型被注册", null);
+            }
+            
+            return LLMModelRegistrationResponse.success("成功注册 " + registeredModels.size() + " 个模型", registeredModels);
+            
         } catch (Exception e) {
             logger.error("注册模型时发生错误", e);
-            return LLMModelRegistrationResponse.error("注册模型失败", e.getMessage());
+            return LLMModelRegistrationResponse.error("注册模型时发生错误: " + e.getMessage(), null);
         }
     }
 
@@ -128,6 +138,7 @@ public class LLMModelServiceImpl implements LLMModelService {
         dto.setProvider(model.getProvider());
         dto.setVersion(model.getVersion());
         dto.setDescription(model.getDescription());
+        dto.setApiType(model.getApiType()); // 添加API类型
         return dto;
     }
 } 
