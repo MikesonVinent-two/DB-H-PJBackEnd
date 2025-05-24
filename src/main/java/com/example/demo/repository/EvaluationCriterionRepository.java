@@ -50,4 +50,6 @@ public interface EvaluationCriterionRepository extends JpaRepository<EvaluationC
      * @return 评测标准
      */
     Optional<EvaluationCriterion> findByIdAndNameAndDeletedAtIsNull(Long id, String name);
+
+    List<EvaluationCriterion> findByQuestionType(QuestionType questionType);
 } 

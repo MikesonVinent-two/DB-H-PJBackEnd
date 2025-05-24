@@ -11,17 +11,17 @@ public class StandardSubjectiveAnswer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "standard_question_id", nullable = false, unique = true)
+    @OneToOne
+    @JoinColumn(name = "standard_question_id", nullable = false)
     private StandardQuestion standardQuestion;
 
-    @Column(name = "answer_text", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "answer_text", nullable = false)
     private String answerText;
 
-    @Column(name = "scoring_guidance", columnDefinition = "TEXT")
+    @Column(name = "scoring_guidance")
     private String scoringGuidance;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "determined_by_user_id", nullable = false)
     private User determinedByUser;
 

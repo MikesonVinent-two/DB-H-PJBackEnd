@@ -23,13 +23,13 @@ public class EvaluationDetail {
     @JoinColumn(name = "criterion_id", nullable = true)
     private EvaluationCriterion criterion;
     
-    @Column(name = "criterion_name")
+    @Column(name = "criterion_name", nullable = false)
     private String criterionName;
     
-    @Column(name = "score", precision = 5, scale = 2)
+    @Column(name = "score", precision = 10, scale = 2)
     private BigDecimal score;
     
-    @Column(name = "comments", columnDefinition = "TEXT")
+    @Column(name = "comments")
     private String comments;
     
     @Column(name = "created_at", nullable = false)

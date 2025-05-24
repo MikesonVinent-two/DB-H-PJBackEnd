@@ -12,44 +12,44 @@ public class Evaluation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "llm_answer_id", nullable = false)
     private LlmAnswer llmAnswer;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "evaluator_id", nullable = false)
     private Evaluator evaluator;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "evaluation_run_id")
     private EvaluationRun evaluationRun;
 
-    @Column(name = "overall_score", precision = 5, scale = 2)
-    private BigDecimal overallScore;
+    @Column(name = "overall_score")
+    private BigDecimal score;
 
     @Column(name = "evaluation_time", nullable = false)
-    private LocalDateTime evaluationTime = LocalDateTime.now();
+    private LocalDateTime evaluationTime;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "evaluation_status", nullable = false)
-    private EvaluationStatus evaluationStatus = EvaluationStatus.PENDING;
+    private EvaluationStatus status;
 
-    @Column(name = "error_message", columnDefinition = "TEXT")
+    @Column(name = "error_message")
     private String errorMessage;
 
-    @Column(name = "evaluation_results", columnDefinition = "JSON")
+    @Column(name = "evaluation_results")
     private String evaluationResults;
 
-    @Column(name = "prompt_used", columnDefinition = "TEXT")
+    @Column(name = "prompt_used")
     private String promptUsed;
 
-    @Column(name = "comments", columnDefinition = "TEXT")
+    @Column(name = "comments")
     private String comments;
 
-    @Column(name = "raw_evaluator_response", columnDefinition = "TEXT")
+    @Column(name = "raw_evaluator_response")
     private String rawEvaluatorResponse;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
     
@@ -57,11 +57,19 @@ public class Evaluation {
     @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
 
+    @Column(name = "creation_time")
+    private LocalDateTime creationTime;
+
+    @Column(name = "completion_time")
+    private LocalDateTime completionTime;
+
     // 评测状态枚举
     public enum EvaluationStatus {
-        SUCCESS,    // 评测成功
-        FAILED,     // 评测失败
-        PENDING     // 待评测
+        SUCCESS,        // 评测成功
+        FAILED,         // 评测失败
+        PENDING,        // 待评测
+        IN_PROGRESS,    // 评测进行中
+        COMPLETED       // 评测完成
     }
 
     // Getters and Setters
@@ -97,12 +105,12 @@ public class Evaluation {
         this.evaluationRun = evaluationRun;
     }
 
-    public BigDecimal getOverallScore() {
-        return overallScore;
+    public BigDecimal getScore() {
+        return score;
     }
 
-    public void setOverallScore(BigDecimal overallScore) {
-        this.overallScore = overallScore;
+    public void setScore(BigDecimal score) {
+        this.score = score;
     }
 
     public LocalDateTime getEvaluationTime() {
@@ -113,12 +121,12 @@ public class Evaluation {
         this.evaluationTime = evaluationTime;
     }
 
-    public EvaluationStatus getEvaluationStatus() {
-        return evaluationStatus;
+    public EvaluationStatus getStatus() {
+        return status;
     }
 
-    public void setEvaluationStatus(EvaluationStatus evaluationStatus) {
-        this.evaluationStatus = evaluationStatus;
+    public void setStatus(EvaluationStatus status) {
+        this.status = status;
     }
 
     public String getErrorMessage() {
@@ -175,6 +183,22 @@ public class Evaluation {
 
     public void setCreatedChangeLog(ChangeLog createdChangeLog) {
         this.createdChangeLog = createdChangeLog;
+    }
+    
+    public LocalDateTime getCreationTime() {
+        return creationTime;
+    }
+
+    public void setCreationTime(LocalDateTime creationTime) {
+        this.creationTime = creationTime;
+    }
+
+    public LocalDateTime getCompletionTime() {
+        return completionTime;
+    }
+
+    public void setCompletionTime(LocalDateTime completionTime) {
+        this.completionTime = completionTime;
     }
     
     /**

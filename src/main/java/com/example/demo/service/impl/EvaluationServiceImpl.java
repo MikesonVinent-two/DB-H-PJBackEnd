@@ -502,76 +502,1228 @@ public class EvaluationServiceImpl implements EvaluationService {
     
     @Override
     public List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType) {
-        logger.info("获取问题类型的评测标准，类型: {}", questionType);
+        return evaluationCriterionRepository.findByQuestionType(questionType);
+    }
+    
+    @Override
+    public BigDecimal calculateBleuScore(String candidateText, String referenceText) {
+        logger.info("计算BLEU分数，候选文本长度: {}，参考文本长度: {}", 
+                candidateText != null ? candidateText.length() : 0, 
+                referenceText != null ? referenceText.length() : 0);
         
         try {
-            // 从数据库中查询特定问题类型的评测标准
-            List<EvaluationCriterion> criteria = evaluationCriterionRepository.findActiveByQuestionTypeOrderByOrderIndex(questionType);
-            
-            // 如果数据库中没有找到，则提供默认标准
-            if (criteria.isEmpty()) {
-                criteria = createDefaultCriteriaForQuestionType(questionType);
-                // 保存默认标准到数据库
-                criteria = evaluationCriterionRepository.saveAll(criteria);
+            // 参数验证
+            if (candidateText == null || referenceText == null || candidateText.isEmpty() || referenceText.isEmpty()) {
+                logger.warn("计算BLEU分数失败：输入文本为空");
+                return BigDecimal.ZERO;
             }
             
-            return criteria;
+            // 分词处理
+            String[] candidateTokens = candidateText.split("\\s+");
+            String[] referenceTokens = referenceText.split("\\s+");
+            
+            // 如果任一文本分词后为空，返回0分
+            if (candidateTokens.length == 0 || referenceTokens.length == 0) {
+                logger.warn("计算BLEU分数失败：分词后文本为空");
+                return BigDecimal.ZERO;
+            }
+            
+            // 计算精确匹配数量
+            int matchCount = 0;
+            Map<String, Integer> refTokenCount = new HashMap<>();
+            
+            // 统计参考文本中的词频
+            for (String token : referenceTokens) {
+                refTokenCount.put(token, refTokenCount.getOrDefault(token, 0) + 1);
+            }
+            
+            // 计算匹配数量
+            Map<String, Integer> candidateTokenCount = new HashMap<>();
+            for (String token : candidateTokens) {
+                candidateTokenCount.put(token, candidateTokenCount.getOrDefault(token, 0) + 1);
+            }
+            
+            // 计算共同词汇的最小出现次数
+            for (Map.Entry<String, Integer> entry : candidateTokenCount.entrySet()) {
+                String token = entry.getKey();
+                int count = entry.getValue();
+                if (refTokenCount.containsKey(token)) {
+                    matchCount += Math.min(count, refTokenCount.get(token));
+                }
+            }
+            
+            // 计算精确率
+            double precision = (double) matchCount / candidateTokens.length;
+            
+            // 计算简化版BLEU分数（不包含惩罚因子）
+            double bleuScore = precision;
+            
+            // 四舍五入到2位小数
+            BigDecimal result = new BigDecimal(bleuScore).setScale(2, RoundingMode.HALF_UP);
+            
+            // 确保结果在0-1范围内
+            if (result.compareTo(BigDecimal.ZERO) < 0) {
+                result = BigDecimal.ZERO;
+            } else if (result.compareTo(BigDecimal.ONE) > 0) {
+                result = BigDecimal.ONE;
+            }
+            
+            logger.info("BLEU分数计算结果: {}", result);
+            return result;
             
         } catch (Exception e) {
-            logger.error("获取问题类型的评测标准失败", e);
-            // 返回默认标准，不保存到数据库
-            return createDefaultCriteriaForQuestionType(questionType);
+            logger.error("计算BLEU分数时发生错误", e);
+            return BigDecimal.ZERO;
         }
+    }
+    
+    @Override
+    public Map<String, Object> getEvaluationRunProgress(Long evaluationRunId) {
+        logger.info("获取评测运行进度，评测运行ID: {}", evaluationRunId);
+        
+        try {
+            // 查询评测运行记录
+            EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+            
+            // 获取相关的模型回答运行记录
+            ModelAnswerRun modelAnswerRun = evaluationRun.getModelAnswerRun();
+            if (modelAnswerRun == null) {
+                throw new IllegalStateException("评测运行未关联模型回答运行: " + evaluationRunId);
+            }
+            
+            // 获取总问题数量
+            int totalQuestions = modelAnswerRun.getTotalQuestions() != null ? modelAnswerRun.getTotalQuestions() : 0;
+            
+            // 获取已评测的回答数量
+            int evaluatedAnswers = evaluationRepository.countByEvaluationRunId(evaluationRunId);
+            
+            // 计算进度百分比
+            double progressPercentage = totalQuestions > 0 ? 
+                    ((double) evaluatedAnswers / totalQuestions) * 100 : 0;
+            
+            // 四舍五入到2位小数
+            BigDecimal progress = new BigDecimal(progressPercentage).setScale(2, RoundingMode.HALF_UP);
+            
+            // 构建进度信息
+            Map<String, Object> progressInfo = new HashMap<>();
+            progressInfo.put("evaluationRunId", evaluationRunId);
+            progressInfo.put("status", evaluationRun.getStatus().toString());
+            progressInfo.put("totalQuestions", totalQuestions);
+            progressInfo.put("evaluatedAnswers", evaluatedAnswers);
+            progressInfo.put("progressPercentage", progress);
+            progressInfo.put("startTime", evaluationRun.getStartTime());
+            progressInfo.put("endTime", evaluationRun.getEndTime());
+            progressInfo.put("lastUpdated", LocalDateTime.now());
+            
+            // 如果评测已完成，添加汇总结果
+            if (evaluationRun.getStatus() == RunStatus.COMPLETED) {
+                Map<String, Object> summaryResults = calculateEvaluationSummary(evaluationRunId);
+                progressInfo.put("summaryResults", summaryResults);
+            }
+            
+            return progressInfo;
+            
+        } catch (Exception e) {
+            logger.error("获取评测运行进度失败", e);
+            
+            // 返回错误信息
+            Map<String, Object> errorInfo = new HashMap<>();
+            errorInfo.put("evaluationRunId", evaluationRunId);
+            errorInfo.put("error", e.getMessage());
+            errorInfo.put("status", "ERROR");
+            return errorInfo;
+        }
+    }
+    
+    @Override
+    @Async
+    public CompletableFuture<Void> startEvaluationRun(Long evaluationRunId) {
+        logger.info("开始评测运行，评测运行ID: {}", evaluationRunId);
+        
+        return CompletableFuture.runAsync(() -> {
+            try {
+                // 查询评测运行记录
+                EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                        .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+                
+                // 检查状态，只有PENDING或PAUSED状态才能启动
+                if (evaluationRun.getStatus() != RunStatus.PENDING && evaluationRun.getStatus() != RunStatus.PAUSED) {
+                    logger.warn("评测运行状态不允许启动: {}", evaluationRun.getStatus());
+                    throw new IllegalStateException("评测运行状态不允许启动: " + evaluationRun.getStatus());
+                }
+                
+                // 更新状态为进行中
+                evaluationRun.setStatus(RunStatus.IN_PROGRESS);
+                if (evaluationRun.getStartTime() == null) {
+                    evaluationRun.setStartTime(LocalDateTime.now());
+                }
+                evaluationRunRepository.save(evaluationRun);
+                
+                // 获取相关的模型回答运行记录
+                ModelAnswerRun modelAnswerRun = evaluationRun.getModelAnswerRun();
+                if (modelAnswerRun == null) {
+                    throw new IllegalStateException("评测运行未关联模型回答运行: " + evaluationRunId);
+                }
+                
+                // 获取评测者
+                Evaluator evaluator = evaluationRun.getEvaluator();
+                if (evaluator == null) {
+                    throw new IllegalStateException("评测运行未关联评测者: " + evaluationRunId);
+                }
+                
+                // 获取用户ID
+                Long userId = evaluationRun.getCreatedBy();
+                
+                // 获取已生成的LLM回答
+                List<LlmAnswer> llmAnswers = llmAnswerRepository.findByModelAnswerRunId(modelAnswerRun.getId());
+                
+                // 过滤出未评测的回答
+                List<LlmAnswer> unevaluatedAnswers = llmAnswers.stream()
+                        .filter(answer -> !evaluationRepository.existsByLlmAnswerIdAndEvaluationRunId(
+                                answer.getId(), evaluationRunId))
+                        .collect(Collectors.toList());
+                
+                logger.info("开始评测运行，总回答数: {}，未评测回答数: {}", llmAnswers.size(), unevaluatedAnswers.size());
+                
+                // 批量处理未评测的回答
+                int batchSize = 10;
+                for (int i = 0; i < unevaluatedAnswers.size(); i += batchSize) {
+                    // 检查评测运行是否被暂停或取消
+                    EvaluationRun currentStatus = evaluationRunRepository.findById(evaluationRunId).orElse(null);
+                    if (currentStatus == null || currentStatus.getStatus() != RunStatus.IN_PROGRESS) {
+                        logger.info("评测运行已被暂停或取消，ID: {}, 状态: {}", 
+                                evaluationRunId, currentStatus != null ? currentStatus.getStatus() : "已删除");
+                        return;
+                    }
+                    
+                    // 获取当前批次的回答
+                    int endIndex = Math.min(i + batchSize, unevaluatedAnswers.size());
+                    List<LlmAnswer> batchAnswers = unevaluatedAnswers.subList(i, endIndex);
+                    
+                    // 批量评测
+                    evaluateAnswers(batchAnswers, evaluator.getId(), userId);
+                    
+                    // 更新进度
+                    int processedCount = i + batchAnswers.size();
+                    logger.info("评测运行进度: {}/{}", processedCount, unevaluatedAnswers.size());
+                    
+                    // 更新最后更新时间
+                    evaluationRun.setLastUpdated(LocalDateTime.now());
+                    evaluationRunRepository.save(evaluationRun);
+                }
+                
+                // 所有回答评测完成，更新状态为已完成
+                evaluationRun.setStatus(RunStatus.COMPLETED);
+                evaluationRun.setEndTime(LocalDateTime.now());
+                evaluationRun.setLastUpdated(LocalDateTime.now());
+                evaluationRunRepository.save(evaluationRun);
+                
+                logger.info("评测运行完成，ID: {}", evaluationRunId);
+                
+            } catch (Exception e) {
+                logger.error("评测运行过程中发生错误", e);
+                
+                // 更新状态为错误
+                try {
+                    EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId).orElse(null);
+                    if (evaluationRun != null) {
+                        evaluationRun.setStatus(RunStatus.FAILED);
+                        evaluationRun.setLastUpdated(LocalDateTime.now());
+                        evaluationRun.setErrorMessage(e.getMessage());
+                        evaluationRunRepository.save(evaluationRun);
+                    }
+                } catch (Exception ex) {
+                    logger.error("更新评测运行状态失败", ex);
+                }
+                
+                throw new RuntimeException("评测运行失败: " + e.getMessage(), e);
+            }
+        }, evaluationExecutor);
     }
     
     /**
-     * 创建问题类型的默认评测标准
+     * 计算评测运行的汇总结果
      */
-    private List<EvaluationCriterion> createDefaultCriteriaForQuestionType(QuestionType questionType) {
-        List<EvaluationCriterion> criteria = new ArrayList<>();
+    private Map<String, Object> calculateEvaluationSummary(Long evaluationRunId) {
+        Map<String, Object> summary = new HashMap<>();
         
-        if (questionType == QuestionType.SUBJECTIVE) {
-            // 主观题评测标准
-            criteria.add(createCriterion(null, "内容完整性", "评估回答是否涵盖了问题要求的所有关键点", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "逻辑性", "评估回答的论述是否逻辑清晰、连贯", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "专业性", "评估回答是否展示了对主题的专业理解和知识", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "创新性", "评估回答是否提供了独特的见解或创新的思路", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "表达能力", "评估回答的语言表达是否清晰、准确、恰当", "SCORE", "0-10"));
+        try {
+            // 获取所有评测结果
+            List<Evaluation> evaluations = evaluationRepository.findByEvaluationRunId(evaluationRunId);
             
-        } else if (questionType == QuestionType.SIMPLE_FACT) {
-            // 简单事实题评测标准
-            criteria.add(createCriterion(null, "准确性", "评估回答是否与标准答案在事实上一致", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "完整性", "评估回答是否包含了所有必要的关键信息", "SCORE", "0-10"));
-            criteria.add(createCriterion(null, "简洁性", "评估回答是否简明扼要，没有冗余信息", "SCORE", "0-10"));
+            if (evaluations.isEmpty()) {
+                return summary;
+            }
             
-        } else if (questionType == QuestionType.SINGLE_CHOICE || questionType == QuestionType.MULTIPLE_CHOICE) {
-            // 选择题评测标准
-            criteria.add(createCriterion(null, "正确性", "评估选择是否正确", "BOOLEAN", "true/false"));
-            criteria.add(createCriterion(null, "解释质量", "评估对选择的解释是否合理、准确", "SCORE", "0-10"));
+            // 计算平均分
+            BigDecimal totalScore = BigDecimal.ZERO;
+            for (Evaluation evaluation : evaluations) {
+                if (evaluation.getScore() != null) {
+                    totalScore = totalScore.add(evaluation.getScore());
+                }
+            }
+            
+            BigDecimal averageScore = totalScore.divide(new BigDecimal(evaluations.size()), 2, RoundingMode.HALF_UP);
+            
+            // 按问题类型分组计算
+            Map<QuestionType, List<Evaluation>> groupedByType = evaluations.stream()
+                    .filter(e -> e.getLlmAnswer() != null && 
+                            e.getLlmAnswer().getDatasetQuestionMapping() != null && 
+                            e.getLlmAnswer().getDatasetQuestionMapping().getStandardQuestion() != null)
+                    .collect(Collectors.groupingBy(e -> e.getLlmAnswer().getDatasetQuestionMapping().getStandardQuestion().getQuestionType()));
+            
+            Map<String, Object> typeScores = new HashMap<>();
+            for (Map.Entry<QuestionType, List<Evaluation>> entry : groupedByType.entrySet()) {
+                QuestionType type = entry.getKey();
+                List<Evaluation> typeEvaluations = entry.getValue();
+                
+                BigDecimal typeTotal = BigDecimal.ZERO;
+                for (Evaluation evaluation : typeEvaluations) {
+                    if (evaluation.getScore() != null) {
+                        typeTotal = typeTotal.add(evaluation.getScore());
+                    }
+                }
+                
+                BigDecimal typeAverage = typeTotal.divide(new BigDecimal(typeEvaluations.size()), 2, RoundingMode.HALF_UP);
+                typeScores.put(type.toString(), typeAverage);
+            }
+            
+            // 构建汇总结果
+            summary.put("evaluationCount", evaluations.size());
+            summary.put("averageScore", averageScore);
+            summary.put("scoresByQuestionType", typeScores);
+            
+            return summary;
+            
+        } catch (Exception e) {
+            logger.error("计算评测汇总结果失败", e);
+            summary.put("error", "计算评测汇总结果失败: " + e.getMessage());
+            return summary;
         }
-        
-        // 设置问题类型和顺序
-        for (int i = 0; i < criteria.size(); i++) {
-            EvaluationCriterion criterion = criteria.get(i);
-            criterion.setQuestionType(questionType);
-            criterion.setOrderIndex(i);
-        }
-        
-        return criteria;
     }
     
-    /**
-     * 创建评测标准对象
-     */
-    private EvaluationCriterion createCriterion(Long id, String name, String description, String dataType, String scoreRange) {
-        EvaluationCriterion criterion = new EvaluationCriterion();
-        criterion.setId(id);
-        criterion.setName(name);
-        criterion.setDescription(description);
-        criterion.setDataType(EvaluationCriterion.DataType.valueOf(dataType));
-        criterion.setScoreRange(scoreRange);
-        return criterion;
+    @Override
+    @Transactional
+    public Evaluation evaluateAnswer(LlmAnswer llmAnswer, Long evaluatorId, Long userId) {
+        logger.info("开始评测单个回答，回答ID: {}, 评测者ID: {}, 用户ID: {}", 
+                llmAnswer.getId(), evaluatorId, userId);
+        
+        try {
+            // 获取评测者信息
+            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
+            
+            // 获取问题信息
+            StandardQuestion question = llmAnswer.getDatasetQuestionMapping().getStandardQuestion();
+            
+            // 创建评测记录
+            Evaluation evaluation = new Evaluation();
+            evaluation.setLlmAnswer(llmAnswer);
+            evaluation.setEvaluator(evaluator);
+            evaluation.setCreatedByUser(user);
+            evaluation.setCreationTime(LocalDateTime.now());
+            evaluation.setStatus(EvaluationStatus.IN_PROGRESS);
+            
+            // 根据问题类型进行评测
+            Map<String, Object> evaluationResult;
+            switch (question.getQuestionType()) {
+                case SINGLE_CHOICE:
+                    StandardObjectiveAnswer objectiveAnswer = objectiveAnswerRepository
+                            .findByStandardQuestionId(question.getId())
+                            .orElseThrow(() -> new EntityNotFoundException("找不到标准选择题答案"));
+                    evaluationResult = evaluateSingleChoice(llmAnswer.getAnswerText(), 
+                            objectiveAnswer.getCorrectOptionIds(), objectiveAnswer.getOptions());
+                    break;
+                    
+                case MULTIPLE_CHOICE:
+                    StandardObjectiveAnswer multiAnswer = objectiveAnswerRepository
+                            .findByStandardQuestionId(question.getId())
+                            .orElseThrow(() -> new EntityNotFoundException("找不到标准多选题答案"));
+                    evaluationResult = evaluateMultipleChoice(llmAnswer.getAnswerText(), 
+                            multiAnswer.getCorrectOptionIds(), multiAnswer.getOptions());
+                    break;
+                    
+                case SIMPLE_FACT:
+                    StandardSimpleAnswer simpleAnswer = simpleAnswerRepository
+                            .findByStandardQuestionId(question.getId())
+                            .orElseThrow(() -> new EntityNotFoundException("找不到标准简答题答案"));
+                    evaluationResult = evaluateSimpleFact(llmAnswer.getAnswerText(), 
+                            simpleAnswer.getAnswerText(), simpleAnswer.getAlternativeAnswers());
+                    break;
+                    
+                case SUBJECTIVE:
+                    // 获取评测标准
+                    List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
+                    evaluationResult = evaluateSubjectiveWithAI(llmAnswer.getAnswerText(), 
+                            question.getQuestionText(), 
+                            question.getStandardSubjectiveAnswer().getAnswerText(), 
+                            criteria, evaluatorId);
+                    break;
+                    
+                default:
+                    throw new IllegalArgumentException("不支持的问题类型: " + question.getQuestionType());
+            }
+            
+            // 更新评测记录
+            evaluation.setScore(new BigDecimal(evaluationResult.get("score").toString()));
+            evaluation.setComments((String) evaluationResult.get("comments"));
+            evaluation.setEvaluationResults(objectMapper.writeValueAsString(evaluationResult));
+            evaluation.setStatus(EvaluationStatus.COMPLETED);
+            evaluation.setCompletionTime(LocalDateTime.now());
+            
+            // 保存评测记录
+            evaluation = evaluationRepository.save(evaluation);
+            
+            // 保存评测详情
+            if (evaluationResult.containsKey("criteria_scores")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> criteriaScores = (List<Map<String, Object>>) evaluationResult.get("criteria_scores");
+                
+                List<EvaluationDetail> details = new ArrayList<>();
+                for (Map<String, Object> score : criteriaScores) {
+                    EvaluationDetail detail = new EvaluationDetail();
+                    detail.setEvaluation(evaluation);
+                    detail.setCriterionName((String) score.get("criterion"));
+                    detail.setScore(new BigDecimal(score.get("score").toString()));
+                    detail.setComments((String) score.get("comments"));
+                    details.add(detail);
+                }
+                
+                evaluationDetailRepository.saveAll(details);
+            }
+            
+            logger.info("评测完成，评测ID: {}, 得分: {}", evaluation.getId(), evaluation.getScore());
+            return evaluation;
+            
+        } catch (Exception e) {
+            logger.error("评测回答失败", e);
+            throw new RuntimeException("评测回答失败: " + e.getMessage(), e);
+        }
     }
     
-    // ... 其他方法保持不变 ...
+    @Override
+    @Transactional
+    public List<Evaluation> evaluateAnswers(List<LlmAnswer> llmAnswers, Long evaluatorId, Long userId) {
+        logger.info("开始批量评测回答，回答数量: {}, 评测者ID: {}, 用户ID: {}", 
+                llmAnswers.size(), evaluatorId, userId);
+        
+        List<Evaluation> evaluations = new ArrayList<>();
+        
+        try {
+            for (LlmAnswer answer : llmAnswers) {
+                try {
+                    Evaluation evaluation = evaluateAnswer(answer, evaluatorId, userId);
+                    evaluations.add(evaluation);
+                } catch (Exception e) {
+                    logger.error("评测回答失败，回答ID: {}", answer.getId(), e);
+                    // 继续处理下一个回答
+                }
+            }
+            
+            logger.info("批量评测完成，成功评测数量: {}", evaluations.size());
+            return evaluations;
+            
+        } catch (Exception e) {
+            logger.error("批量评测回答失败", e);
+            throw new RuntimeException("批量评测回答失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public Map<String, Object> evaluateSingleChoice(String answerText, String correctOptionIds, String options) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 解析正确答案
+            String correctAnswer = correctOptionIds.trim();
+            
+            // 解析学生答案
+            String studentAnswer = answerText.trim();
+            
+            // 计算得分
+            boolean isCorrect = correctAnswer.equalsIgnoreCase(studentAnswer);
+            BigDecimal score = isCorrect ? new BigDecimal("100") : BigDecimal.ZERO;
+            
+            // 构建评测结果
+            result.put("score", score);
+            result.put("isCorrect", isCorrect);
+            result.put("correctAnswer", correctAnswer);
+            result.put("studentAnswer", studentAnswer);
+            result.put("comments", isCorrect ? "答案正确" : "答案错误，正确答案是: " + correctAnswer);
+            
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("评测单选题失败", e);
+            result.put("score", BigDecimal.ZERO);
+            result.put("error", "评测失败: " + e.getMessage());
+            return result;
+        }
+    }
+    
+    @Override
+    public Map<String, Object> evaluateMultipleChoice(String answerText, String correctIds, String options) {
+        logger.info("开始评测多选题回答，回答文本长度: {}", answerText != null ? answerText.length() : 0);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 参数验证
+            if (answerText == null || answerText.isEmpty() || correctIds == null || correctIds.isEmpty() || options == null || options.isEmpty()) {
+                logger.warn("评测多选题参数无效");
+                result.put("score", BigDecimal.ZERO);
+                result.put("comments", "无效的回答或标准答案");
+                return result;
+            }
+            
+            // 解析选项
+            Map<String, String> optionsMap = objectMapper.readValue(options, new TypeReference<Map<String, String>>() {});
+            
+            // 解析正确答案ID列表
+            Set<String> correctIdSet = new HashSet<>(Arrays.asList(correctIds.split(",")));
+            
+            // 提取学生的选择
+            Set<String> studentChoices = new HashSet<>();
+            
+            // 使用正则表达式匹配选项ID（通常是A、B、C、D等）
+            Pattern pattern = Pattern.compile("[A-Z]");
+            Matcher matcher = pattern.matcher(answerText.toUpperCase());
+            
+            while (matcher.find()) {
+                studentChoices.add(matcher.group());
+            }
+            
+            // 如果没有找到有效的选择，尝试从完整答案中提取
+            if (studentChoices.isEmpty()) {
+                // 遍历所有选项，查找答案中是否包含选项内容
+                for (Map.Entry<String, String> entry : optionsMap.entrySet()) {
+                    if (answerText.contains(entry.getValue())) {
+                        studentChoices.add(entry.getKey());
+                    }
+                }
+            }
+            
+            // 评分和评语
+            if (!studentChoices.isEmpty()) {
+                // 计算正确选择的数量
+                Set<String> correctChoices = new HashSet<>(studentChoices);
+                correctChoices.retainAll(correctIdSet);
+                
+                // 计算错误选择的数量
+                Set<String> wrongChoices = new HashSet<>(studentChoices);
+                wrongChoices.removeAll(correctIdSet);
+                
+                // 计算漏选的数量
+                Set<String> missedChoices = new HashSet<>(correctIdSet);
+                missedChoices.removeAll(studentChoices);
+                
+                // 计算得分（满分10分）
+                // 每个正确选择得到：10分 / 正确答案总数
+                // 每个错误选择或漏选扣除：10分 / (正确答案总数 * 2)
+                double pointsPerCorrect = 10.0 / correctIdSet.size();
+                double pointsPerWrong = pointsPerCorrect / 2;
+                
+                double score = correctChoices.size() * pointsPerCorrect - 
+                             (wrongChoices.size() + missedChoices.size()) * pointsPerWrong;
+                
+                // 确保分数在0-10范围内
+                score = Math.max(0, Math.min(10, score));
+                
+                result.put("score", new BigDecimal(score).setScale(2, RoundingMode.HALF_UP));
+                
+                // 生成评语
+                StringBuilder comments = new StringBuilder();
+                comments.append("共选择了").append(studentChoices.size()).append("个选项。\n");
+                
+                if (!correctChoices.isEmpty()) {
+                    comments.append("正确选择的选项：").append(String.join("、", correctChoices))
+                           .append("\n");
+                }
+                
+                if (!wrongChoices.isEmpty()) {
+                    comments.append("错误选择的选项：").append(String.join("、", wrongChoices))
+                           .append("\n");
+                }
+                
+                if (!missedChoices.isEmpty()) {
+                    comments.append("漏选的正确选项：").append(String.join("、", missedChoices))
+                           .append("\n");
+                }
+                
+                comments.append("\n正确答案应该是选项：").append(String.join("、", correctIdSet));
+                
+                result.put("comments", comments.toString());
+                
+            } else {
+                result.put("score", BigDecimal.ZERO);
+                result.put("comments", "未能从回答中识别出明确的选择。正确答案是选项：" + String.join("、", correctIdSet));
+            }
+            
+            // 添加评测详情
+            List<Map<String, Object>> criteriaScores = new ArrayList<>();
+            
+            // 正确性评分
+            Map<String, Object> correctnessScore = new HashMap<>();
+            correctnessScore.put("criterion", "正确性");
+            correctnessScore.put("score", result.get("score"));
+            correctnessScore.put("comments", result.get("comments"));
+            criteriaScores.add(correctnessScore);
+            
+            result.put("criteria_scores", criteriaScores);
+            
+        } catch (Exception e) {
+            logger.error("评测多选题失败", e);
+            result.put("score", BigDecimal.ZERO);
+            result.put("comments", "评测过程发生错误：" + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> evaluateSimpleFact(String answerText, String standardAnswer, String alternativeAnswers) {
+        logger.info("开始评测简单事实题回答，回答文本长度: {}", answerText != null ? answerText.length() : 0);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 参数验证
+            if (answerText == null || answerText.isEmpty() || standardAnswer == null || standardAnswer.isEmpty()) {
+                logger.warn("评测简单事实题参数无效");
+                result.put("score", BigDecimal.ZERO);
+                result.put("comments", "无效的回答或标准答案");
+                return result;
+            }
+            
+            // 解析备选答案
+            List<String> alternatives = new ArrayList<>();
+            if (alternativeAnswers != null && !alternativeAnswers.isEmpty()) {
+                alternatives = objectMapper.readValue(alternativeAnswers, new TypeReference<List<String>>() {});
+            }
+            
+            // 计算与标准答案的相似度
+            BigDecimal standardSimilarity = calculateTextSimilarity(answerText, standardAnswer);
+            BigDecimal maxSimilarity = standardSimilarity;
+            String bestMatchAnswer = standardAnswer;
+            
+            // 计算与备选答案的相似度
+            for (String alternative : alternatives) {
+                BigDecimal similarity = calculateTextSimilarity(answerText, alternative);
+                if (similarity.compareTo(maxSimilarity) > 0) {
+                    maxSimilarity = similarity;
+                    bestMatchAnswer = alternative;
+                }
+            }
+            
+            // 计算ROUGE分数
+            BigDecimal rougeScore = calculateRougeScore(answerText, bestMatchAnswer);
+            
+            // 计算BLEU分数
+            BigDecimal bleuScore = calculateBleuScore(answerText, bestMatchAnswer);
+            
+            // 综合评分（权重：相似度0.4，ROUGE 0.3，BLEU 0.3）
+            BigDecimal finalScore = maxSimilarity.multiply(new BigDecimal("0.4"))
+                    .add(rougeScore.multiply(new BigDecimal("0.3")))
+                    .add(bleuScore.multiply(new BigDecimal("0.3")));
+            
+            // 将分数转换为10分制
+            finalScore = finalScore.multiply(BigDecimal.TEN).setScale(2, RoundingMode.HALF_UP);
+            
+            // 确保分数在0-10范围内
+            if (finalScore.compareTo(BigDecimal.ZERO) < 0) {
+                finalScore = BigDecimal.ZERO;
+            } else if (finalScore.compareTo(BigDecimal.TEN) > 0) {
+                finalScore = BigDecimal.TEN;
+            }
+            
+            result.put("score", finalScore);
+            
+            // 生成评语
+            StringBuilder comments = new StringBuilder();
+            comments.append("回答评分：").append(finalScore).append("分\n\n");
+            comments.append("评分详情：\n");
+            comments.append("1. 文本相似度：").append(maxSimilarity.multiply(BigDecimal.TEN).setScale(2, RoundingMode.HALF_UP)).append("分\n");
+            comments.append("2. ROUGE分数：").append(rougeScore.multiply(BigDecimal.TEN).setScale(2, RoundingMode.HALF_UP)).append("分\n");
+            comments.append("3. BLEU分数：").append(bleuScore.multiply(BigDecimal.TEN).setScale(2, RoundingMode.HALF_UP)).append("分\n\n");
+            
+            if (finalScore.compareTo(new BigDecimal("8")) >= 0) {
+                comments.append("回答非常准确，与标准答案高度一致。");
+            } else if (finalScore.compareTo(new BigDecimal("6")) >= 0) {
+                comments.append("回答基本正确，但表述可以更准确。");
+            } else if (finalScore.compareTo(new BigDecimal("4")) >= 0) {
+                comments.append("回答部分正确，但存在一些偏差。建议参考标准答案：").append(bestMatchAnswer);
+            } else {
+                comments.append("回答与标准答案差异较大。标准答案是：").append(bestMatchAnswer);
+            }
+            
+            result.put("comments", comments.toString());
+            
+            // 添加评测详情
+            List<Map<String, Object>> criteriaScores = new ArrayList<>();
+            
+            // 相似度评分
+            Map<String, Object> similarityScore = new HashMap<>();
+            similarityScore.put("criterion", "文本相似度");
+            similarityScore.put("score", maxSimilarity.multiply(BigDecimal.TEN));
+            similarityScore.put("comments", "文本相似度评分");
+            criteriaScores.add(similarityScore);
+            
+            // ROUGE评分
+            Map<String, Object> rougeScoreMap = new HashMap<>();
+            rougeScoreMap.put("criterion", "ROUGE分数");
+            rougeScoreMap.put("score", rougeScore.multiply(BigDecimal.TEN));
+            rougeScoreMap.put("comments", "ROUGE评分");
+            criteriaScores.add(rougeScoreMap);
+            
+            // BLEU评分
+            Map<String, Object> bleuScoreMap = new HashMap<>();
+            bleuScoreMap.put("criterion", "BLEU分数");
+            bleuScoreMap.put("score", bleuScore.multiply(BigDecimal.TEN));
+            bleuScoreMap.put("comments", "BLEU评分");
+            criteriaScores.add(bleuScoreMap);
+            
+            result.put("criteria_scores", criteriaScores);
+            
+        } catch (Exception e) {
+            logger.error("评测简单事实题失败", e);
+            result.put("score", BigDecimal.ZERO);
+            result.put("comments", "评测过程发生错误：" + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public BigDecimal calculateTextSimilarity(String text1, String text2) {
+        logger.info("计算文本相似度，文本1长度: {}, 文本2长度: {}", 
+                text1 != null ? text1.length() : 0, 
+                text2 != null ? text2.length() : 0);
+        
+        try {
+            // 参数验证
+            if (text1 == null || text2 == null || text1.isEmpty() || text2.isEmpty()) {
+                logger.warn("计算文本相似度失败：输入文本为空");
+                return BigDecimal.ZERO;
+            }
+            
+            // 分词处理
+            String[] words1 = text1.toLowerCase().split("\\s+");
+            String[] words2 = text2.toLowerCase().split("\\s+");
+            
+            // 如果任一文本分词后为空，返回0分
+            if (words1.length == 0 || words2.length == 0) {
+                logger.warn("计算文本相似度失败：分词后文本为空");
+                return BigDecimal.ZERO;
+            }
+            
+            // 计算词频
+            Map<String, Integer> freq1 = new HashMap<>();
+            Map<String, Integer> freq2 = new HashMap<>();
+            
+            for (String word : words1) {
+                freq1.put(word, freq1.getOrDefault(word, 0) + 1);
+            }
+            
+            for (String word : words2) {
+                freq2.put(word, freq2.getOrDefault(word, 0) + 1);
+            }
+            
+            // 计算余弦相似度
+            double dotProduct = 0.0;
+            double norm1 = 0.0;
+            double norm2 = 0.0;
+            
+            // 计算点积和向量范数
+            for (Map.Entry<String, Integer> entry : freq1.entrySet()) {
+                String word = entry.getKey();
+                int count1 = entry.getValue();
+                int count2 = freq2.getOrDefault(word, 0);
+                
+                dotProduct += count1 * count2;
+                norm1 += count1 * count1;
+            }
+            
+            for (int count : freq2.values()) {
+                norm2 += count * count;
+            }
+            
+            // 计算相似度
+            double similarity = dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+            
+            // 转换为BigDecimal并四舍五入到2位小数
+            BigDecimal result = new BigDecimal(similarity).setScale(2, RoundingMode.HALF_UP);
+            
+            // 确保结果在0-1范围内
+            if (result.compareTo(BigDecimal.ZERO) < 0) {
+                result = BigDecimal.ZERO;
+            } else if (result.compareTo(BigDecimal.ONE) > 0) {
+                result = BigDecimal.ONE;
+            }
+            
+            logger.info("文本相似度计算结果: {}", result);
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("计算文本相似度时发生错误", e);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    @Override
+    public BigDecimal calculateRougeScore(String candidateText, String referenceText) {
+        logger.info("计算ROUGE分数，候选文本长度: {}, 参考文本长度: {}", 
+                candidateText != null ? candidateText.length() : 0, 
+                referenceText != null ? referenceText.length() : 0);
+        
+        try {
+            // 参数验证
+            if (candidateText == null || referenceText == null || candidateText.isEmpty() || referenceText.isEmpty()) {
+                logger.warn("计算ROUGE分数失败：输入文本为空");
+                return BigDecimal.ZERO;
+            }
+            
+            // 分词处理
+            String[] candidateWords = candidateText.toLowerCase().split("\\s+");
+            String[] referenceWords = referenceText.toLowerCase().split("\\s+");
+            
+            // 如果任一文本分词后为空，返回0分
+            if (candidateWords.length == 0 || referenceWords.length == 0) {
+                logger.warn("计算ROUGE分数失败：分词后文本为空");
+                return BigDecimal.ZERO;
+            }
+            
+            // 计算ROUGE-1分数（单词级别的重叠）
+            Set<String> candidateSet = new HashSet<>(Arrays.asList(candidateWords));
+            Set<String> referenceSet = new HashSet<>(Arrays.asList(referenceWords));
+            
+            // 计算重叠的单词数
+            Set<String> overlap = new HashSet<>(candidateSet);
+            overlap.retainAll(referenceSet);
+            
+            // 计算召回率和精确率
+            double recall = (double) overlap.size() / referenceSet.size();
+            double precision = (double) overlap.size() / candidateSet.size();
+            
+            // 计算F1分数
+            double f1Score = 0.0;
+            if (precision + recall > 0) {
+                f1Score = 2 * precision * recall / (precision + recall);
+            }
+            
+            // 转换为BigDecimal并四舍五入到2位小数
+            BigDecimal result = new BigDecimal(f1Score).setScale(2, RoundingMode.HALF_UP);
+            
+            // 确保结果在0-1范围内
+            if (result.compareTo(BigDecimal.ZERO) < 0) {
+                result = BigDecimal.ZERO;
+            } else if (result.compareTo(BigDecimal.ONE) > 0) {
+                result = BigDecimal.ONE;
+            }
+            
+            logger.info("ROUGE分数计算结果: {}", result);
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("计算ROUGE分数时发生错误", e);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    @Override
+    @Transactional
+    public Evaluation createHumanEvaluation(Long llmAnswerId, Long evaluatorId, Long userId) {
+        logger.info("创建人工评测记录，回答ID: {}, 评测者ID: {}, 用户ID: {}", 
+                llmAnswerId, evaluatorId, userId);
+        
+        try {
+            // 获取LLM回答
+            LlmAnswer llmAnswer = llmAnswerRepository.findById(llmAnswerId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId));
+            
+            // 获取评测者信息
+            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
+            
+            // 验证评测者类型是人类
+            if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.HUMAN) {
+                throw new IllegalArgumentException("评测者不是人类: " + evaluatorId);
+            }
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
+            
+            // 检查是否已存在该回答的人工评测
+            if (evaluationRepository.existsByLlmAnswerIdAndEvaluatorId(llmAnswerId, evaluatorId)) {
+                throw new IllegalStateException("该回答已存在人工评测记录");
+            }
+            
+            // 创建评测记录
+            Evaluation evaluation = new Evaluation();
+            evaluation.setLlmAnswer(llmAnswer);
+            evaluation.setEvaluator(evaluator);
+            evaluation.setCreatedByUser(user);
+            evaluation.setCreationTime(LocalDateTime.now());
+            evaluation.setStatus(EvaluationStatus.IN_PROGRESS);
+            
+            // 保存评测记录
+            evaluation = evaluationRepository.save(evaluation);
+            
+            logger.info("人工评测记录创建成功，评测ID: {}", evaluation.getId());
+            return evaluation;
+            
+        } catch (Exception e) {
+            logger.error("创建人工评测记录失败", e);
+            throw new RuntimeException("创建人工评测记录失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional
+    public Evaluation submitHumanEvaluation(Long evaluationId, BigDecimal overallScore, String comments, 
+                                          List<Map<String, Object>> detailScores, Long userId) {
+        logger.info("提交人工评测结果，评测ID: {}, 总分: {}, 用户ID: {}", 
+                evaluationId, overallScore, userId);
+        
+        try {
+            // 获取评测记录
+            Evaluation evaluation = evaluationRepository.findById(evaluationId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测记录: " + evaluationId));
+            
+            // 验证评测状态
+            if (evaluation.getStatus() != EvaluationStatus.IN_PROGRESS) {
+                throw new IllegalStateException("评测记录状态不允许提交: " + evaluation.getStatus());
+            }
+            
+            // 验证评测者类型是人类
+            if (evaluation.getEvaluator().getEvaluatorType() != Evaluator.EvaluatorType.HUMAN) {
+                throw new IllegalStateException("只能提交人工评测结果");
+            }
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
+            
+            // 验证用户权限（这里可以添加更多的权限检查逻辑）
+            if (!user.getId().equals(evaluation.getCreatedByUser().getId())) {
+                throw new IllegalStateException("无权提交此评测结果");
+            }
+            
+            // 更新评测记录
+            evaluation.setScore(overallScore);
+            evaluation.setComments(comments);
+            
+            // 构建评测结果JSON
+            Map<String, Object> evaluationResults = new HashMap<>();
+            evaluationResults.put("overall_score", overallScore);
+            evaluationResults.put("overall_comments", comments);
+            evaluationResults.put("criteria_scores", detailScores);
+            evaluation.setEvaluationResults(objectMapper.writeValueAsString(evaluationResults));
+            
+            evaluation.setStatus(EvaluationStatus.COMPLETED);
+            evaluation.setCompletionTime(LocalDateTime.now());
+            
+            // 保存评测记录
+            evaluation = evaluationRepository.save(evaluation);
+            
+            // 保存评测详情
+            List<EvaluationDetail> details = new ArrayList<>();
+            for (Map<String, Object> score : detailScores) {
+                EvaluationDetail detail = new EvaluationDetail();
+                detail.setEvaluation(evaluation);
+                detail.setCriterionName((String) score.get("criterion"));
+                detail.setScore(new BigDecimal(score.get("score").toString()));
+                detail.setComments((String) score.get("comments"));
+                details.add(detail);
+            }
+            
+            evaluationDetailRepository.saveAll(details);
+            
+            logger.info("人工评测结果提交成功，评测ID: {}", evaluation.getId());
+            return evaluation;
+            
+        } catch (Exception e) {
+            logger.error("提交人工评测结果失败", e);
+            throw new RuntimeException("提交人工评测结果失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional
+    public EvaluationRun createEvaluationRun(Long modelAnswerRunId, Long evaluatorId, String runName, 
+                                            String runDescription, String parameters, Long userId) {
+        logger.info("创建评测运行，模型回答运行ID: {}, 评测者ID: {}, 用户ID: {}", 
+                modelAnswerRunId, evaluatorId, userId);
+        
+        try {
+            // 获取模型回答运行记录
+            ModelAnswerRun modelAnswerRun = modelAnswerRunRepository.findById(modelAnswerRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的模型回答运行记录: " + modelAnswerRunId));
+            
+            // 获取评测者信息
+            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
+            
+            // 创建评测运行记录
+            EvaluationRun evaluationRun = new EvaluationRun();
+            evaluationRun.setModelAnswerRun(modelAnswerRun);
+            evaluationRun.setEvaluator(evaluator);
+            evaluationRun.setRunName(runName);
+            evaluationRun.setRunDescription(runDescription);
+            evaluationRun.setParameters(parameters);
+            evaluationRun.setStatus(RunStatus.PENDING);  // 初始状态为等待中
+            evaluationRun.setCreatedBy(userId);
+            evaluationRun.setCreationTime(LocalDateTime.now());
+            evaluationRun.setLastUpdated(LocalDateTime.now());
+            
+            // 保存评测运行记录
+            evaluationRun = evaluationRunRepository.save(evaluationRun);
+            
+            logger.info("评测运行创建成功，运行ID: {}", evaluationRun.getId());
+            return evaluationRun;
+            
+        } catch (Exception e) {
+            logger.error("创建评测运行失败", e);
+            throw new RuntimeException("创建评测运行失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional
+    public boolean pauseEvaluationRun(Long evaluationRunId) {
+        logger.info("暂停评测运行，运行ID: {}", evaluationRunId);
+        
+        try {
+            // 获取评测运行记录
+            EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+            
+            // 检查状态是否允许暂停
+            if (evaluationRun.getStatus() != RunStatus.IN_PROGRESS) {
+                logger.warn("评测运行状态不允许暂停: {}", evaluationRun.getStatus());
+                return false;
+            }
+            
+            // 更新状态为暂停
+            evaluationRun.setStatus(RunStatus.PAUSED);
+            evaluationRun.setLastUpdated(LocalDateTime.now());
+            evaluationRunRepository.save(evaluationRun);
+            
+            logger.info("评测运行已暂停，运行ID: {}", evaluationRunId);
+            return true;
+            
+        } catch (Exception e) {
+            logger.error("暂停评测运行失败", e);
+            throw new RuntimeException("暂停评测运行失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional
+    public CompletableFuture<Void> resumeEvaluationRun(Long evaluationRunId) {
+        logger.info("恢复评测运行，运行ID: {}", evaluationRunId);
+        
+        try {
+            // 获取评测运行记录
+            EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+            
+            // 检查状态是否允许恢复
+            if (evaluationRun.getStatus() != RunStatus.PAUSED) {
+                logger.warn("评测运行状态不允许恢复: {}", evaluationRun.getStatus());
+                throw new IllegalStateException("评测运行状态不允许恢复: " + evaluationRun.getStatus());
+            }
+            
+            // 更新状态为进行中
+            evaluationRun.setStatus(RunStatus.IN_PROGRESS);
+            evaluationRun.setLastUpdated(LocalDateTime.now());
+            evaluationRunRepository.save(evaluationRun);
+            
+            // 继续评测过程
+            return startEvaluationRun(evaluationRunId);
+            
+        } catch (Exception e) {
+            logger.error("恢复评测运行失败", e);
+            throw new RuntimeException("恢复评测运行失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public List<EvaluationRun> getEvaluationRuns(Long modelAnswerRunId, Long evaluatorId, String status, int page, int size) {
+        logger.info("获取评测运行列表，模型回答运行ID: {}, 评测者ID: {}, 状态: {}, 页码: {}, 每页大小: {}", 
+                modelAnswerRunId, evaluatorId, status, page, size);
+        
+        try {
+            // 创建分页对象
+            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "creationTime"));
+            
+            // 构建查询条件
+            List<EvaluationRun> runs;
+            if (modelAnswerRunId != null && evaluatorId != null && status != null) {
+                // 全条件查询
+                runs = evaluationRunRepository.findByModelAnswerRunIdAndEvaluatorIdAndStatus(
+                        modelAnswerRunId, evaluatorId, RunStatus.valueOf(status), pageable);
+            } else if (modelAnswerRunId != null && evaluatorId != null) {
+                // 按模型回答运行ID和评测者ID查询
+                runs = evaluationRunRepository.findByModelAnswerRunIdAndEvaluatorId(
+                        modelAnswerRunId, evaluatorId, pageable);
+            } else if (modelAnswerRunId != null) {
+                // 按模型回答运行ID查询
+                runs = evaluationRunRepository.findByModelAnswerRunId(modelAnswerRunId, pageable);
+            } else if (evaluatorId != null) {
+                // 按评测者ID查询
+                runs = evaluationRunRepository.findByEvaluatorId(evaluatorId, pageable);
+            } else {
+                // 无条件查询
+                runs = evaluationRunRepository.findAll(pageable).getContent();
+            }
+            
+            logger.info("获取到{}条评测运行记录", runs.size());
+            return runs;
+            
+        } catch (Exception e) {
+            logger.error("获取评测运行列表失败", e);
+            throw new RuntimeException("获取评测运行列表失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public EvaluationRun getEvaluationRun(Long evaluationRunId) {
+        logger.info("获取评测运行详情，运行ID: {}", evaluationRunId);
+        
+        try {
+            // 获取评测运行记录
+            EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+            
+            return evaluationRun;
+            
+        } catch (Exception e) {
+            logger.error("获取评测运行详情失败", e);
+            throw new RuntimeException("获取评测运行详情失败: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public Map<String, Object> getEvaluationRunResults(Long evaluationRunId) {
+        logger.info("获取评测运行结果，运行ID: {}", evaluationRunId);
+        
+        try {
+            // 获取评测运行记录
+            EvaluationRun evaluationRun = evaluationRunRepository.findById(evaluationRunId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测运行记录: " + evaluationRunId));
+            
+            // 获取所有评测结果
+            List<Evaluation> evaluations = evaluationRepository.findByEvaluationRunId(evaluationRunId);
+            
+            // 构建结果统计
+            Map<String, Object> results = new HashMap<>();
+            results.put("evaluationRunId", evaluationRunId);
+            results.put("runName", evaluationRun.getRunName());
+            results.put("status", evaluationRun.getStatus());
+            results.put("startTime", evaluationRun.getStartTime());
+            results.put("endTime", evaluationRun.getEndTime());
+            results.put("totalEvaluations", evaluations.size());
+            
+            // 计算总体统计信息
+            if (!evaluations.isEmpty()) {
+                // 计算平均分
+                BigDecimal totalScore = BigDecimal.ZERO;
+                int validScoreCount = 0;
+                
+                for (Evaluation evaluation : evaluations) {
+                    if (evaluation.getScore() != null) {
+                        totalScore = totalScore.add(evaluation.getScore());
+                        validScoreCount++;
+                    }
+                }
+                
+                if (validScoreCount > 0) {
+                    BigDecimal averageScore = totalScore.divide(new BigDecimal(validScoreCount), 2, RoundingMode.HALF_UP);
+                    results.put("averageScore", averageScore);
+                }
+                
+                // 按问题类型分组统计
+                Map<QuestionType, List<Evaluation>> groupedByType = evaluations.stream()
+                        .filter(e -> e.getLlmAnswer() != null && 
+                                   e.getLlmAnswer().getDatasetQuestionMapping() != null && 
+                                   e.getLlmAnswer().getDatasetQuestionMapping().getStandardQuestion() != null)
+                        .collect(Collectors.groupingBy(e -> e.getLlmAnswer().getDatasetQuestionMapping().getStandardQuestion().getQuestionType()));
+                
+                Map<String, Object> typeStats = new HashMap<>();
+                for (Map.Entry<QuestionType, List<Evaluation>> entry : groupedByType.entrySet()) {
+                    QuestionType type = entry.getKey();
+                    List<Evaluation> typeEvaluations = entry.getValue();
+                    
+                    Map<String, Object> typeStat = new HashMap<>();
+                    typeStat.put("count", typeEvaluations.size());
+                    
+                    // 计算该类型的平均分
+                    BigDecimal typeTotal = BigDecimal.ZERO;
+                    int typeValidCount = 0;
+                    for (Evaluation evaluation : typeEvaluations) {
+                        if (evaluation.getScore() != null) {
+                            typeTotal = typeTotal.add(evaluation.getScore());
+                            typeValidCount++;
+                        }
+                    }
+                    
+                    if (typeValidCount > 0) {
+                        BigDecimal typeAverage = typeTotal.divide(new BigDecimal(typeValidCount), 2, RoundingMode.HALF_UP);
+                        typeStat.put("averageScore", typeAverage);
+                    }
+                    
+                    typeStats.put(type.toString(), typeStat);
+                }
+                
+                results.put("questionTypeStats", typeStats);
+                
+                // 添加评测标准统计
+                Map<String, Map<String, Object>> criteriaStats = new HashMap<>();
+                for (Evaluation evaluation : evaluations) {
+                    List<EvaluationDetail> details = evaluationDetailRepository.findByEvaluationId(evaluation.getId());
+                    
+                    for (EvaluationDetail detail : details) {
+                        String criterion = detail.getCriterionName();
+                        Map<String, Object> criterionStat = criteriaStats.computeIfAbsent(criterion, k -> new HashMap<>());
+                        
+                        // 更新评分总和和计数
+                        BigDecimal currentTotal = (BigDecimal) criterionStat.getOrDefault("totalScore", BigDecimal.ZERO);
+                        int currentCount = (int) criterionStat.getOrDefault("count", 0);
+                        
+                        criterionStat.put("totalScore", currentTotal.add(detail.getScore()));
+                        criterionStat.put("count", currentCount + 1);
+                    }
+                }
+                
+                // 计算每个标准的平均分
+                for (Map<String, Object> criterionStat : criteriaStats.values()) {
+                    BigDecimal total = (BigDecimal) criterionStat.get("totalScore");
+                    int count = (int) criterionStat.get("count");
+                    
+                    if (count > 0) {
+                        BigDecimal average = total.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP);
+                        criterionStat.put("averageScore", average);
+                    }
+                }
+                
+                results.put("criteriaStats", criteriaStats);
+            }
+            
+            return results;
+            
+        } catch (Exception e) {
+            logger.error("获取评测运行结果失败", e);
+            throw new RuntimeException("获取评测运行结果失败: " + e.getMessage(), e);
+        }
+    }
 } 

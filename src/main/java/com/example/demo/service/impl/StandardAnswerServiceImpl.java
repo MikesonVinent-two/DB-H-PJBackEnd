@@ -165,12 +165,13 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
         
         // 查找现有答案
         StandardObjectiveAnswer existingAnswer = objectiveAnswerRepository
-            .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId());
+            .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+            .orElse(null);
         
         StandardObjectiveAnswer answer = existingAnswer != null ? existingAnswer : new StandardObjectiveAnswer();
         answer.setStandardQuestion(standardQuestion);
         answer.setOptions(answerDTO.getOptions());
-        answer.setCorrectIds(answerDTO.getCorrectIds());
+        answer.setCorrectOptionIds(answerDTO.getCorrectIds());
         answer.setDeterminedByUser(user);
         answer.setDeterminedTime(LocalDateTime.now());
         answer.setCreatedChangeLog(changeLog);
@@ -213,7 +214,8 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
         
         // 查找现有答案
         StandardSimpleAnswer existingAnswer = simpleAnswerRepository
-            .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId());
+            .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+            .orElse(null);
         
         StandardSimpleAnswer answer = existingAnswer != null ? existingAnswer : new StandardSimpleAnswer();
         answer.setStandardQuestion(standardQuestion);
@@ -324,10 +326,12 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
             switch (standardQuestion.getQuestionType()) {
                 case SINGLE_CHOICE:
                 case MULTIPLE_CHOICE:
-                    answer = objectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
+                    answer = objectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
                     break;
                 case SIMPLE_FACT:
-                    answer = simpleAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
+                    answer = simpleAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
                     break;
                 case SUBJECTIVE:
                     answer = subjectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
@@ -388,7 +392,8 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
                 case SINGLE_CHOICE:
                 case MULTIPLE_CHOICE:
                     StandardObjectiveAnswer objectiveAnswer = objectiveAnswerRepository
-                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
+                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
                     if (objectiveAnswer != null) {
                         objectiveAnswer.setDeletedAt(now);
                         objectiveAnswerRepository.save(objectiveAnswer);
@@ -397,7 +402,8 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
                     break;
                 case SIMPLE_FACT:
                     StandardSimpleAnswer simpleAnswer = simpleAnswerRepository
-                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
+                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
                     if (simpleAnswer != null) {
                         simpleAnswer.setDeletedAt(now);
                         simpleAnswerRepository.save(simpleAnswer);

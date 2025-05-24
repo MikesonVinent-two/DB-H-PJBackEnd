@@ -28,19 +28,19 @@ public class Evaluator {
     
     @Column(nullable = false)
     private String name;
-    
+
     @Column(name = "evaluator_type", nullable = false)
     @Enumerated(EnumType.STRING)
     private EvaluatorType evaluatorType;
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user; // 如果是人类评测员，关联到用户表
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "llm_model_id")
     private LlmModel llmModel; // 如果是AI评测员，关联到模型表
-    
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
     
@@ -68,17 +68,17 @@ public class Evaluator {
     
     @Column(name = "evaluation_prompt_template", columnDefinition = "TEXT")
     private String evaluationPromptTemplate;
-    
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
     
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
-    
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

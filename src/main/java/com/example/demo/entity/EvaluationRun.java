@@ -67,6 +67,18 @@ public class EvaluationRun {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "start_time")
+    private LocalDateTime startTime;
+
+    @Column(name = "end_time")
+    private LocalDateTime endTime;
+
+    @Column(name = "last_updated")
+    private LocalDateTime lastUpdated;
+
+    @Column(name = "creation_time")
+    private LocalDateTime creationTime;
+
     // 运行状态枚举
     public enum RunStatus {
         PENDING,      // 等待中
@@ -220,5 +232,48 @@ public class EvaluationRun {
 
     public void setCompletedAt(LocalDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
+    public LocalDateTime getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
+
+    public LocalDateTime getLastUpdated() {
+        return lastUpdated;
+    }
+
+    public void setLastUpdated(LocalDateTime lastUpdated) {
+        this.lastUpdated = lastUpdated;
+    }
+
+    public LocalDateTime getCreationTime() {
+        return creationTime;
+    }
+
+    public void setCreationTime(LocalDateTime creationTime) {
+        this.creationTime = creationTime;
+    }
+
+    public Long getCreatedBy() {
+        return createdByUser != null ? createdByUser.getId() : null;
+    }
+
+    public void setCreatedBy(Long userId) {
+        if (this.createdByUser == null) {
+            this.createdByUser = new User();
+        }
+        this.createdByUser.setId(userId);
     }
 } 

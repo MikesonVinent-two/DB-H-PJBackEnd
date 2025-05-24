@@ -21,6 +21,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Convert;
+import jakarta.persistence.OneToOne;
 
 @Entity
 @Table(name = "standard_questions")
@@ -69,6 +70,15 @@ public class StandardQuestion {
 
     @OneToMany(mappedBy = "standardQuestion", cascade = CascadeType.ALL)
     private List<DatasetQuestionMapping> datasetMappings = new ArrayList<>();
+
+    @OneToOne(mappedBy = "standardQuestion")
+    private StandardObjectiveAnswer standardObjectiveAnswer;
+
+    @OneToOne(mappedBy = "standardQuestion")
+    private StandardSimpleAnswer standardSimpleAnswer;
+
+    @OneToOne(mappedBy = "standardQuestion")
+    private StandardSubjectiveAnswer standardSubjectiveAnswer;
 
     // 添加标签关联
     public void addTag(StandardQuestionTag tag) {
@@ -194,5 +204,29 @@ public class StandardQuestion {
     
     public void setDatasetMappings(List<DatasetQuestionMapping> datasetMappings) {
         this.datasetMappings = datasetMappings;
+    }
+
+    public StandardObjectiveAnswer getStandardObjectiveAnswer() {
+        return standardObjectiveAnswer;
+    }
+
+    public void setStandardObjectiveAnswer(StandardObjectiveAnswer standardObjectiveAnswer) {
+        this.standardObjectiveAnswer = standardObjectiveAnswer;
+    }
+
+    public StandardSimpleAnswer getStandardSimpleAnswer() {
+        return standardSimpleAnswer;
+    }
+
+    public void setStandardSimpleAnswer(StandardSimpleAnswer standardSimpleAnswer) {
+        this.standardSimpleAnswer = standardSimpleAnswer;
+    }
+
+    public StandardSubjectiveAnswer getStandardSubjectiveAnswer() {
+        return standardSubjectiveAnswer;
+    }
+
+    public void setStandardSubjectiveAnswer(StandardSubjectiveAnswer standardSubjectiveAnswer) {
+        this.standardSubjectiveAnswer = standardSubjectiveAnswer;
     }
 } 

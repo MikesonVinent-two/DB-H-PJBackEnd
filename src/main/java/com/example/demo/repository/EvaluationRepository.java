@@ -64,4 +64,8 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
      */
     @Query("SELECT e FROM Evaluation e WHERE e.llmAnswer.modelAnswerRun.answerGenerationBatch.id = :batchId")
     List<Evaluation> findByAnswerGenerationBatchId(@Param("batchId") Long batchId);
+
+    int countByEvaluationRunId(Long evaluationRunId);
+    boolean existsByLlmAnswerIdAndEvaluatorId(Long llmAnswerId, Long evaluatorId);
+    boolean existsByLlmAnswerIdAndEvaluationRunId(Long llmAnswerId, Long evaluationRunId);
 } 

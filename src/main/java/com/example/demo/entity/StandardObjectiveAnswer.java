@@ -29,7 +29,7 @@ public class StandardObjectiveAnswer {
     private String options;
 
     @Column(name = "correct_ids", nullable = false, columnDefinition = "json")
-    private String correctIds;
+    private String correctOptionIds;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "determined_by_user_id", nullable = false)
@@ -70,12 +70,12 @@ public class StandardObjectiveAnswer {
         this.options = options;
     }
 
-    public String getCorrectIds() {
-        return correctIds;
+    public String getCorrectOptionIds() {
+        return correctOptionIds;
     }
 
-    public void setCorrectIds(String correctIds) {
-        this.correctIds = correctIds;
+    public void setCorrectOptionIds(String correctOptionIds) {
+        this.correctOptionIds = correctOptionIds;
     }
 
     public User getDeterminedByUser() {

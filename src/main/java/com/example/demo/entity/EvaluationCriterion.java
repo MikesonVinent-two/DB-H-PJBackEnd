@@ -28,13 +28,13 @@ public class EvaluationCriterion {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @Column(nullable = false)
     private String name;
-    
+
     @Column(columnDefinition = "TEXT")
     private String description;
-    
+
     @Column(name = "question_type")
     @Enumerated(EnumType.STRING)
     private QuestionType questionType;
@@ -42,10 +42,10 @@ public class EvaluationCriterion {
     @Column(name = "data_type")
     @Enumerated(EnumType.STRING)
     private DataType dataType;
-    
+
     @Column(name = "score_range")
     private String scoreRange;
-    
+
     @Column(name = "weight")
     private BigDecimal weight;
     
@@ -58,14 +58,14 @@ public class EvaluationCriterion {
     @Column(name = "options", columnDefinition = "json")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> options;
-    
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-    
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
-    
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

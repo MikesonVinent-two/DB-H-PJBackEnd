@@ -88,6 +88,9 @@ public class ModelAnswerRun {
     @Column(name = "failed_questions_ids", columnDefinition = "json")
     private Long[] failedQuestionsIds;
     
+    @Column(name = "total_questions_count")
+    private Integer totalQuestions;
+    
     public enum RunStatus {
         PENDING,                  // 等待中
         GENERATING_ANSWERS,       // 生成答案中
@@ -283,5 +286,13 @@ public class ModelAnswerRun {
 
     public void setFailedQuestionsIds(Long[] failedQuestionsIds) {
         this.failedQuestionsIds = failedQuestionsIds;
+    }
+
+    public Integer getTotalQuestions() {
+        return totalQuestions;
+    }
+
+    public void setTotalQuestions(Integer totalQuestions) {
+        this.totalQuestions = totalQuestions;
     }
 } 
