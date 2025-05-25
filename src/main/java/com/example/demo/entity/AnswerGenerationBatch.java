@@ -80,6 +80,9 @@ public class AnswerGenerationBatch {
     @Column(name = "answer_repeat_count", nullable = false)
     private Integer answerRepeatCount = 1;
     
+    @Column(name = "error_message")
+    private String errorMessage;
+    
     public enum BatchStatus {
         PENDING,        // 等待中
         IN_PROGRESS,    // 进行中
@@ -248,5 +251,13 @@ public class AnswerGenerationBatch {
 
     public void setAnswerRepeatCount(Integer answerRepeatCount) {
         this.answerRepeatCount = answerRepeatCount;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 } 

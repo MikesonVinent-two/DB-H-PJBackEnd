@@ -15,9 +15,14 @@ import com.example.demo.entity.ModelAnswerRun;
 import com.example.demo.entity.EvaluationDetail;
 import com.example.demo.entity.EvaluationCriterion;
 import com.example.demo.entity.LlmModel;
+import com.example.demo.entity.Tag;
+import com.example.demo.entity.EvaluationTagPrompt;
+import com.example.demo.entity.EvaluationPromptAssemblyConfig;
+import com.example.demo.entity.EvaluationSubjectivePrompt;
 import com.example.demo.repository.EvaluationRepository;
 import com.example.demo.repository.EvaluatorRepository;
 import com.example.demo.repository.StandardObjectiveAnswerRepository;
+import com.example.demo.repository.StandardQuestionRepository;
 import com.example.demo.repository.StandardSimpleAnswerRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.LlmAnswerRepository;
@@ -25,6 +30,9 @@ import com.example.demo.repository.ModelAnswerRunRepository;
 import com.example.demo.repository.EvaluationRunRepository;
 import com.example.demo.repository.EvaluationDetailRepository;
 import com.example.demo.repository.EvaluationCriterionRepository;
+import com.example.demo.repository.EvaluationTagPromptRepository;
+import com.example.demo.repository.EvaluationPromptAssemblyConfigRepository;
+import com.example.demo.repository.EvaluationSubjectivePromptRepository;
 import com.example.demo.service.EvaluationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -80,6 +88,10 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final EvaluationRunRepository evaluationRunRepository;
     private final EvaluationDetailRepository evaluationDetailRepository;
     private final EvaluationCriterionRepository evaluationCriterionRepository;
+    private final EvaluationTagPromptRepository evaluationTagPromptRepository;
+    private final EvaluationPromptAssemblyConfigRepository evaluationPromptAssemblyConfigRepository;
+    private final EvaluationSubjectivePromptRepository evaluationSubjectivePromptRepository;
+    private final StandardQuestionRepository standardQuestionRepository;
     private final ObjectMapper objectMapper;
     
     // 线程池用于异步执行评测任务
@@ -109,6 +121,10 @@ public class EvaluationServiceImpl implements EvaluationService {
             EvaluationRunRepository evaluationRunRepository,
             EvaluationDetailRepository evaluationDetailRepository,
             EvaluationCriterionRepository evaluationCriterionRepository,
+            EvaluationTagPromptRepository evaluationTagPromptRepository,
+            EvaluationPromptAssemblyConfigRepository evaluationPromptAssemblyConfigRepository,
+            EvaluationSubjectivePromptRepository evaluationSubjectivePromptRepository,
+            StandardQuestionRepository standardQuestionRepository,
             RestTemplate restTemplate) {
         this.evaluationRepository = evaluationRepository;
         this.evaluatorRepository = evaluatorRepository;
@@ -120,11 +136,159 @@ public class EvaluationServiceImpl implements EvaluationService {
         this.evaluationRunRepository = evaluationRunRepository;
         this.evaluationDetailRepository = evaluationDetailRepository;
         this.evaluationCriterionRepository = evaluationCriterionRepository;
+        this.evaluationTagPromptRepository = evaluationTagPromptRepository;
+        this.evaluationPromptAssemblyConfigRepository = evaluationPromptAssemblyConfigRepository;
+        this.evaluationSubjectivePromptRepository = evaluationSubjectivePromptRepository;
+        this.standardQuestionRepository = standardQuestionRepository;
         this.restTemplate = restTemplate;
         this.objectMapper = new ObjectMapper();
     }
     
     // ... 其他方法保持不变 ...
+    
+    /**
+     * 组装评估提示词
+     * 
+     * @param question 标准问题
+     * @param answerText 学生回答文本
+     * @param referenceAnswer 参考答案
+     * @param criteria 评测标准
+     * @return 组装后的提示词
+     */
+    private String assembleEvaluationPrompt(StandardQuestion question, String answerText, 
+                                         String referenceAnswer, List<EvaluationCriterion> criteria) {
+        StringBuilder promptBuilder = new StringBuilder();
+        
+        // 获取默认的评测提示词组装配置（取第一个激活的配置）
+        List<EvaluationPromptAssemblyConfig> configs = evaluationPromptAssemblyConfigRepository.findByIsActiveTrue();
+        EvaluationPromptAssemblyConfig config = configs.isEmpty() ? null : configs.get(0);
+        
+        if (config != null) {
+            // 添加基础系统提示
+            if (config.getBaseSystemPrompt() != null) {
+                promptBuilder.append(config.getBaseSystemPrompt());
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加标签提示（如果问题有标签）
+            if (question.getTags() != null && !question.getTags().isEmpty() && 
+                config.getTagPromptsSectionHeader() != null) {
+                
+                // 先收集有效的标签提示词，如果没有任何有效提示词则跳过整个标签部分
+                List<Tag> tags = question.getTags();
+                boolean hasAnyTagPrompt = false;
+                
+                StringBuilder tagPromptsBuilder = new StringBuilder();
+                
+                for (Tag tag : tags) {
+                    try {
+                        // 获取该标签的激活状态提示词
+                        List<EvaluationTagPrompt> tagPrompts = evaluationTagPromptRepository
+                            .findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
+                        
+                        if (!tagPrompts.isEmpty()) {
+                            // 使用优先级最高的提示词（列表已按优先级排序）
+                            EvaluationTagPrompt prompt = tagPrompts.get(0);
+                            tagPromptsBuilder.append("【").append(tag.getTagName()).append("】: ");
+                            tagPromptsBuilder.append(prompt.getPromptTemplate());
+                            tagPromptsBuilder.append(config.getTagPromptSeparator());
+                            hasAnyTagPrompt = true;
+                        }
+                        // 如果标签没有提示词，则跳过该标签，不添加到prompt中
+                    } catch (Exception e) {
+                        logger.warn("获取评测标签提示词失败，标签ID: {}", tag.getId(), e);
+                    }
+                }
+                
+                // 只有当至少有一个标签有提示词时，才添加标签部分
+                if (hasAnyTagPrompt) {
+                    promptBuilder.append(config.getTagPromptsSectionHeader());
+                    promptBuilder.append("\n");
+                    promptBuilder.append(tagPromptsBuilder);
+                    promptBuilder.append(config.getSectionSeparator());
+                }
+            }
+            
+            // 添加主观题评测要求（如果问题类型是主观题）
+            if (question.getQuestionType() == QuestionType.SUBJECTIVE && 
+                config.getSubjectiveSectionHeader() != null) {
+                promptBuilder.append(config.getSubjectiveSectionHeader());
+                promptBuilder.append("\n");
+                
+                try {
+                    // 获取主观题评测提示词
+                    List<EvaluationSubjectivePrompt> subjectivePrompts = evaluationSubjectivePromptRepository
+                        .findByIsActiveTrueAndDeletedAtIsNull();
+                    
+                    if (!subjectivePrompts.isEmpty()) {
+                        // 使用第一个激活的提示词
+                        EvaluationSubjectivePrompt prompt = subjectivePrompts.get(0);
+                        promptBuilder.append(prompt.getPromptTemplate());
+                        
+                        // 添加评分指导（如果有）
+                        if (prompt.getScoringInstruction() != null && !prompt.getScoringInstruction().isEmpty()) {
+                            promptBuilder.append("\n\n评分指导:\n");
+                            promptBuilder.append(prompt.getScoringInstruction());
+                        }
+                        
+                        // 添加输出格式要求（如果有）
+                        if (prompt.getOutputFormatInstruction() != null && !prompt.getOutputFormatInstruction().isEmpty()) {
+                            promptBuilder.append("\n\n输出格式要求:\n");
+                            promptBuilder.append(prompt.getOutputFormatInstruction());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("获取主观题评测提示词失败", e);
+                }
+                
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加最终指示
+            if (config.getFinalInstruction() != null) {
+                promptBuilder.append(config.getFinalInstruction());
+                promptBuilder.append(config.getSectionSeparator());
+            }
+        } else {
+            // 如果没有配置，使用默认系统提示
+            promptBuilder.append("你是一位专业的答案评测专家。请对以下主观题的回答进行评测。\n\n");
+        }
+        
+        // 添加问题和答案内容
+        promptBuilder.append("问题：").append(question.getQuestionText()).append("\n\n");
+        promptBuilder.append("学生回答：").append(answerText).append("\n\n");
+        promptBuilder.append("参考答案：").append(referenceAnswer).append("\n\n");
+        
+        // 添加评测标准
+        promptBuilder.append("评测标准：\n");
+        for (EvaluationCriterion criterion : criteria) {
+            promptBuilder.append("- ").append(criterion.getName()).append("：")
+                  .append(criterion.getDescription()).append("\n");
+        }
+        
+        // 添加默认的输出格式要求（如果没有配置或主观题提示词）
+        if (config == null || 
+            (question.getQuestionType() == QuestionType.SUBJECTIVE && 
+             evaluationSubjectivePromptRepository.findByIsActiveTrueAndDeletedAtIsNull().isEmpty())) {
+            promptBuilder.append("\n请对回答进行全面评测，并给出以下格式的评测结果：\n");
+            promptBuilder.append("1. 总体评分（0-10分）\n");
+            promptBuilder.append("2. 各评测标准的得分和评语\n");
+            promptBuilder.append("3. 总体评语，包括优点和不足\n");
+            promptBuilder.append("4. 改进建议\n\n");
+            promptBuilder.append("请以JSON格式输出，格式如下：\n");
+            promptBuilder.append("{\n");
+            promptBuilder.append("  \"overall_score\": 分数,\n");
+            promptBuilder.append("  \"criteria_scores\": [\n");
+            promptBuilder.append("    {\"criterion\": \"标准名称\", \"score\": 分数, \"comments\": \"评语\"},\n");
+            promptBuilder.append("    ...\n");
+            promptBuilder.append("  ],\n");
+            promptBuilder.append("  \"overall_comments\": \"总体评语\",\n");
+            promptBuilder.append("  \"improvement_suggestions\": \"改进建议\"\n");
+            promptBuilder.append("}");
+        }
+        
+        return promptBuilder.toString();
+    }
     
     @Override
     public Map<String, Object> evaluateSubjectiveWithAI(String answerText, String questionText, 
@@ -149,38 +313,36 @@ public class EvaluationServiceImpl implements EvaluationService {
                 throw new IllegalArgumentException("评测者未关联AI模型: " + evaluatorId);
             }
             
-            // 构建评测提示词
-            StringBuilder prompt = new StringBuilder();
-            prompt.append("你是一位专业的答案评测专家。请对以下主观题的回答进行评测。\n\n");
-            prompt.append("问题：").append(questionText).append("\n\n");
-            prompt.append("学生回答：").append(answerText).append("\n\n");
-            prompt.append("参考答案：").append(referenceAnswer).append("\n\n");
-            
-            // 添加评测标准
-            prompt.append("评测标准：\n");
-            for (EvaluationCriterion criterion : criteria) {
-                prompt.append("- ").append(criterion.getName()).append("：")
-                      .append(criterion.getDescription()).append("\n");
+            // 查找问题（如果可能）
+            StandardQuestion question = null;
+            try {
+                // 尝试通过问题文本查找对应的标准问题
+                // 这里简化处理，实际上可能需要更复杂的匹配逻辑
+                // 或者修改方法签名，直接传入问题ID或问题对象
+                List<StandardQuestion> questions = standardQuestionRepository.findByQuestionTextContaining(questionText);
+                if (!questions.isEmpty()) {
+                    question = questions.get(0);
+                }
+            } catch (Exception e) {
+                logger.warn("无法查找对应的标准问题，将使用默认提示词", e);
             }
             
-            prompt.append("\n请对回答进行全面评测，并给出以下格式的评测结果：\n");
-            prompt.append("1. 总体评分（0-10分）\n");
-            prompt.append("2. 各评测标准的得分和评语\n");
-            prompt.append("3. 总体评语，包括优点和不足\n");
-            prompt.append("4. 改进建议\n\n");
-            prompt.append("请以JSON格式输出，格式如下：\n");
-            prompt.append("{\n");
-            prompt.append("  \"overall_score\": 分数,\n");
-            prompt.append("  \"criteria_scores\": [\n");
-            prompt.append("    {\"criterion\": \"标准名称\", \"score\": 分数, \"comments\": \"评语\"},\n");
-            prompt.append("    ...\n");
-            prompt.append("  ],\n");
-            prompt.append("  \"overall_comments\": \"总体评语\",\n");
-            prompt.append("  \"improvement_suggestions\": \"改进建议\"\n");
-            prompt.append("}");
+            // 组装评测提示词
+            String prompt;
+            if (question != null) {
+                // 使用标准问题组装提示词
+                prompt = assembleEvaluationPrompt(question, answerText, referenceAnswer, criteria);
+            } else {
+                // 创建一个临时问题对象
+                question = new StandardQuestion();
+                question.setQuestionText(questionText);
+                question.setQuestionType(QuestionType.SUBJECTIVE);
+                // 没有标签
+                prompt = assembleEvaluationPrompt(question, answerText, referenceAnswer, criteria);
+            }
             
             // 调用AI服务进行评测
-            String aiResponse = callAIService(prompt.toString(), evaluator.getLlmModel().getId());
+            String aiResponse = callAIService(prompt, evaluator.getLlmModel().getId());
             
             // 解析AI评测结果
             Map<String, Object> aiResult = objectMapper.readValue(aiResponse, new TypeReference<Map<String, Object>>() {});

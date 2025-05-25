@@ -25,4 +25,15 @@ public interface StandardQuestionRepository extends JpaRepository<StandardQuesti
     // 根据数据集版本ID查找标准问题
     @Query("SELECT sq FROM StandardQuestion sq JOIN DatasetQuestionMapping dqm ON sq.id = dqm.standardQuestion.id WHERE dqm.datasetVersion.id = :datasetVersionId")
     List<StandardQuestion> findByDatasetVersionId(@Param("datasetVersionId") Long datasetVersionId);
+    
+    // 预加载标签的数据集版本问题查询
+    @Query("SELECT DISTINCT sq FROM StandardQuestion sq JOIN FETCH sq.questionTags qt JOIN FETCH qt.tag JOIN DatasetQuestionMapping dqm ON sq.id = dqm.standardQuestion.id WHERE dqm.datasetVersion.id = :datasetVersionId")
+    List<StandardQuestion> findByDatasetVersionIdWithTags(@Param("datasetVersionId") Long datasetVersionId);
+    
+    // 预加载数据集映射的查询
+    @Query("SELECT DISTINCT sq FROM StandardQuestion sq JOIN FETCH sq.datasetMappings dm WHERE sq.id IN :questionIds")
+    List<StandardQuestion> findByIdsWithDatasetMappings(@Param("questionIds") List<Long> questionIds);
+    
+    // 根据问题文本内容查找标准问题
+    List<StandardQuestion> findByQuestionTextContaining(String questionText);
 } 

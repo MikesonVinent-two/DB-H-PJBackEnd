@@ -522,6 +522,7 @@ CREATE TABLE `answer_generation_batches` (
     `pause_time` DATETIME NULL COMMENT '暂停时间',
     `pause_reason` TEXT NULL COMMENT '暂停原因',
     `answer_repeat_count` INT NOT NULL DEFAULT 1 COMMENT '每个问题获取回答的次数',
+    `error_message` TEXT NULL COMMENT '错误信息',
     FOREIGN KEY (`dataset_version_id`) REFERENCES `dataset_versions`(`id`) ON DELETE RESTRICT,
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`answer_assembly_config_id`) REFERENCES `answer_prompt_assembly_configs`(`id`) ON DELETE SET NULL,

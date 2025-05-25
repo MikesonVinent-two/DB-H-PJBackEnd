@@ -84,9 +84,9 @@ public class AnswerGenerationTask {
     /**
      * 启动批次的回答生成过程
      */
-    @Async
     public void startBatchAnswerGeneration(Long batchId) {
-        logger.info("开始异步处理批次: {}", batchId);
+        logger.info("开始处理批次: {}", batchId);
+        long startTime = System.currentTimeMillis();
         
         try {
             // 获取批次信息
@@ -101,13 +101,35 @@ public class AnswerGenerationTask {
                 return;
             }
             
-            // 获取数据集版本中的所有问题
+            // 获取数据集版本中的所有问题，预加载标签
             List<StandardQuestion> questions = questionRepository
-                    .findByDatasetVersionId(batch.getDatasetVersion().getId());
+                    .findByDatasetVersionIdWithTags(batch.getDatasetVersion().getId());
             if (questions.isEmpty()) {
                 logger.error("数据集版本没有问题: {}", batch.getDatasetVersion().getId());
                 updateBatchStatus(batch, BatchStatus.FAILED, "数据集版本没有问题");
                 return;
+            }
+            
+            // 提取问题ID列表，用于预加载数据集映射
+            List<Long> questionIds = questions.stream().map(StandardQuestion::getId).collect(java.util.stream.Collectors.toList());
+            
+            // 预加载数据集映射（不会覆盖已加载的标签）
+            if (!questionIds.isEmpty()) {
+                List<StandardQuestion> questionsWithMappings = questionRepository.findByIdsWithDatasetMappings(questionIds);
+                
+                // 创建ID到预加载问题的映射，用于替换原始列表中的问题
+                Map<Long, StandardQuestion> questionMap = new HashMap<>();
+                for (StandardQuestion q : questionsWithMappings) {
+                    questionMap.put(q.getId(), q);
+                }
+                
+                // 使用预加载的问题替换原始列表中的问题
+                for (int i = 0; i < questions.size(); i++) {
+                    Long id = questions.get(i).getId();
+                    if (questionMap.containsKey(id)) {
+                        questions.set(i, questionMap.get(id));
+                    }
+                }
             }
             
             // 更新批次的总问题数
@@ -118,12 +140,15 @@ public class AnswerGenerationTask {
                 startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount());
             }
             
-            // 定期检查所有运行是否完成，完成后更新批次状态
+            // 批次处理完成后，检查所有运行状态并更新批次状态
             boolean allCompleted = checkAndUpdateBatchCompletion(batch);
             
             if (allCompleted) {
                 logger.info("批次所有运行已完成: {}", batchId);
             }
+            
+            long endTime = System.currentTimeMillis();
+            logger.info("批次{}处理完成，总耗时: {}毫秒", batchId, (endTime - startTime));
             
         } catch (Exception e) {
             logger.error("批次处理失败: {}", batchId, e);
@@ -142,10 +167,11 @@ public class AnswerGenerationTask {
     /**
      * 启动单个运行的回答生成过程
      */
-    @Async
+    @Transactional
     public void startRunAnswerGeneration(ModelAnswerRun run, List<StandardQuestion> questions, int repeatCount) {
         Long runId = run.getId();
         logger.info("开始处理运行: {}, 模型: {}", runId, run.getLlmModel().getName());
+        long startTime = System.currentTimeMillis();
         
         try {
             // 准备处理的问题和重复次数
@@ -191,6 +217,9 @@ public class AnswerGenerationTask {
             
             // 发送运行完成通知
             sendRunCompletionNotification(run);
+            
+            long endTime = System.currentTimeMillis();
+            logger.info("运行{}处理完成，总耗时: {}毫秒", runId, (endTime - startTime));
             
         } catch (Exception e) {
             logger.error("运行处理失败: {}", runId, e);
@@ -263,13 +292,21 @@ public class AnswerGenerationTask {
             // 添加标签提示（如果问题有标签）
             if (question.getTags() != null && !question.getTags().isEmpty() && 
                 config.getTagPromptsSectionHeader() != null) {
-                promptBuilder.append(config.getTagPromptsSectionHeader());
-                promptBuilder.append("\n");
                 
-                // 根据标签获取相应的提示
+                // 先收集有效的标签提示词，如果没有任何有效提示词则跳过整个标签部分
                 List<Tag> tags = question.getTags();
+                boolean hasAnyTagPrompt = false;
+                
+                StringBuilder tagPromptsBuilder = new StringBuilder();
+                
                 for (Tag tag : tags) {
                     try {
+                        // 跳过没有初始化的标签
+                        if (tag == null || tag.getTagName() == null) {
+                            logger.warn("标签未初始化或标签名为空");
+                            continue;
+                        }
+                        
                         // 获取该标签的激活状态提示词
                         List<AnswerTagPrompt> tagPrompts = answerTagPromptRepository
                             .findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
@@ -277,16 +314,26 @@ public class AnswerGenerationTask {
                         if (!tagPrompts.isEmpty()) {
                             // 使用优先级最高的提示词（列表已按优先级排序）
                             AnswerTagPrompt prompt = tagPrompts.get(0);
-                            promptBuilder.append("【").append(tag.getTagName()).append("】: ");
-                            promptBuilder.append(prompt.getPromptTemplate());
-                            promptBuilder.append(config.getTagPromptSeparator());
+                            tagPromptsBuilder.append("【").append(tag.getTagName()).append("】: ");
+                            tagPromptsBuilder.append(prompt.getPromptTemplate());
+                            tagPromptsBuilder.append(config.getTagPromptSeparator());
+                            hasAnyTagPrompt = true;
                         }
+                        // 如果标签没有提示词，则跳过该标签，不添加到prompt中
                     } catch (Exception e) {
-                        logger.warn("获取标签提示词失败，标签ID: {}", tag.getId(), e);
+                        // 捕获并记录错误，但不中断处理
+                        logger.warn("获取标签提示词失败，标签ID: {}，继续处理其他标签", 
+                                    tag != null ? tag.getId() : "未知", e);
                     }
                 }
                 
-                promptBuilder.append(config.getSectionSeparator());
+                // 只有当至少有一个标签有提示词时，才添加标签部分
+                if (hasAnyTagPrompt) {
+                    promptBuilder.append(config.getTagPromptsSectionHeader());
+                    promptBuilder.append("\n");
+                    promptBuilder.append(tagPromptsBuilder);
+                    promptBuilder.append(config.getSectionSeparator());
+                }
             }
             
             // 添加问题类型要求
@@ -382,23 +429,36 @@ public class AnswerGenerationTask {
     public void saveModelAnswer(ModelAnswerRun run, StandardQuestion question, String answerText, int repeatIndex) {
         LlmAnswer answer = new LlmAnswer();
         answer.setModelAnswerRun(run);
-        // 需要从StandardQuestion获取对应的DatasetQuestionMapping
-        DatasetQuestionMapping mapping = question.getDatasetMappings()
-            .stream()
-            .filter(m -> m.getDatasetVersion().equals(run.getAnswerGenerationBatch().getDatasetVersion()))
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("找不到问题对应的数据集映射: " + question.getId()));
         
-        answer.setDatasetQuestionMapping(mapping);
-        answer.setAnswerText(answerText);
-        answer.setRepeatIndex(repeatIndex);
-        answer.setGenerationTime(LocalDateTime.now());
-        answer.setGenerationStatus(LlmAnswer.GenerationStatus.SUCCESS);
-        
-        // 可以添加其他字段
-        answer.setPromptUsed(assemblePrompt(run, question));
-        
-        answerRepository.save(answer);
+        try {
+            // 需要从StandardQuestion获取对应的DatasetQuestionMapping
+            // 直接通过ID查询，避免使用懒加载的集合
+            Long datasetVersionId = run.getAnswerGenerationBatch().getDatasetVersion().getId();
+            
+            // 使用EntityManager直接查询，确保在当前事务中
+            DatasetQuestionMapping mapping = entityManager.createQuery(
+                "SELECT dqm FROM DatasetQuestionMapping dqm " +
+                "WHERE dqm.standardQuestion.id = :questionId " +
+                "AND dqm.datasetVersion.id = :versionId", 
+                DatasetQuestionMapping.class)
+                .setParameter("questionId", question.getId())
+                .setParameter("versionId", datasetVersionId)
+                .getSingleResult();
+            
+            answer.setDatasetQuestionMapping(mapping);
+            answer.setAnswerText(answerText);
+            answer.setRepeatIndex(repeatIndex);
+            answer.setGenerationTime(LocalDateTime.now());
+            answer.setGenerationStatus(LlmAnswer.GenerationStatus.SUCCESS);
+            
+            // 可以添加其他字段
+            answer.setPromptUsed(assemblePrompt(run, question));
+            
+            answerRepository.save(answer);
+        } catch (Exception e) {
+            logger.error("保存模型回答失败: questionId={}, runId={}", question.getId(), run.getId(), e);
+            throw e;
+        }
     }
     
     /**

@@ -43,6 +43,44 @@ public class LlmApiServiceImpl implements LlmApiService {
         logger.debug("调用LLM API生成回答, URL: {}, API类型: {}", apiUrl, apiType);
         
         try {
+            // 根据API类型补全API路径
+            if (apiUrl != null && !apiUrl.isEmpty()) {
+                if (apiType != null) {
+                    switch (apiType.toLowerCase()) {
+                        case "openai":
+                        case "openai_compatible":
+                            // 检查并补全OpenAI API路径
+                            if (!apiUrl.endsWith("/v1/chat/completions")) {
+                                if (!apiUrl.endsWith("/v1")) {
+                                    apiUrl = apiUrl.endsWith("/") 
+                                        ? apiUrl + "v1/chat/completions" 
+                                        : apiUrl + "/v1/chat/completions";
+                                } else {
+                                    apiUrl = apiUrl + "/chat/completions";
+                                }
+                            }
+                            break;
+                        case "anthropic":
+                            // 检查并补全Anthropic API路径
+                            if (!apiUrl.endsWith("/v1/complete")) {
+                                apiUrl = apiUrl.endsWith("/") 
+                                    ? apiUrl + "v1/complete" 
+                                    : apiUrl + "/v1/complete";
+                            }
+                            break;
+                        case "google":
+                            // 检查并补全Google API路径
+                            if (!apiUrl.contains("/v1/models") && !apiUrl.contains("/generateContent")) {
+                                apiUrl = apiUrl.endsWith("/") 
+                                    ? apiUrl + "v1/models/gemini-pro:generateContent" 
+                                    : apiUrl + "/v1/models/gemini-pro:generateContent";
+                            }
+                            break;
+                    }
+                    logger.debug("完整API URL: {}", apiUrl);
+                }
+            }
+            
             // 准备HTTP请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -134,11 +172,13 @@ public class LlmApiServiceImpl implements LlmApiService {
                             requestBody.put("model", defaultParams.get("model").toString());
                         }
                         
-                        ObjectNode messagesNode = objectMapper.createArrayNode().addObject();
-                        messagesNode.put("role", "user");
-                        messagesNode.put("content", prompt);
-                        
-                        requestBody.set("messages", messagesNode);
+                        // 修复messages数组格式
+                        var messagesArray = objectMapper.createArrayNode();
+                        var messageObject = objectMapper.createObjectNode();
+                        messageObject.put("role", "user");
+                        messageObject.put("content", prompt);
+                        messagesArray.add(messageObject);
+                        requestBody.set("messages", messagesArray);
                         break;
                         
                     case "anthropic":
@@ -170,10 +210,32 @@ public class LlmApiServiceImpl implements LlmApiService {
             // 添加其他参数
             for (Map.Entry<String, Object> entry : defaultParams.entrySet()) {
                 if (!entry.getKey().equals("model") && !entry.getKey().equals("messages") && !entry.getKey().equals("prompt")) {
-                    if (entry.getValue() instanceof Number) {
-                        requestBody.put(entry.getKey(), ((Number) entry.getValue()).doubleValue());
-                    } else if (entry.getValue() != null) {
-                        requestBody.put(entry.getKey(), entry.getValue().toString());
+                    String key = entry.getKey();
+                    Object value = entry.getValue();
+                    
+                    // 对于特定参数使用整数类型
+                    switch (key) {
+                        case "max_tokens":
+                        case "n":
+                        case "top_k":
+                            if (value instanceof Number) {
+                                requestBody.put(key, ((Number) value).intValue());
+                            }
+                            break;
+                        case "presence_penalty":
+                        case "frequency_penalty":
+                        case "temperature":
+                        case "top_p":
+                            if (value instanceof Number) {
+                                requestBody.put(key, ((Number) value).doubleValue());
+                            }
+                            break;
+                        default:
+                            if (value instanceof Number) {
+                                requestBody.put(key, ((Number) value).doubleValue());
+                            } else if (value != null) {
+                                requestBody.put(key, value.toString());
+                            }
                     }
                 }
             }

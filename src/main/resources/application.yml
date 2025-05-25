@@ -24,11 +24,11 @@ spring:
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
-        format_sql: true
+        format_sql: false
     database-platform: org.hibernate.dialect.MySQLDialect
     open-in-view: true
   messages:
@@ -79,7 +79,9 @@ logging:
     com.example.demo.exception: DEBUG
     org.springframework.web: INFO
     org.springframework.security: DEBUG
-    org.hibernate: INFO
+    org.hibernate: ERROR
+    org.hibernate.SQL: ERROR
+    org.hibernate.type: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
