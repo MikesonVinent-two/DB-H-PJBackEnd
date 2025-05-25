@@ -16,7 +16,7 @@ import com.example.demo.service.AnswerGenerationService.AnswerGenerationBatchCre
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/answer-generation")
+@RequestMapping("/answer-generation")
 @CrossOrigin(origins = "*")
 public class AnswerGenerationController {
     

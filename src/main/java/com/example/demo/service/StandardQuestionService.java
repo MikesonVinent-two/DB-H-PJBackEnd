@@ -1,8 +1,13 @@
 package com.example.demo.service;
 
 import java.util.List;
+import java.util.Map;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.example.demo.dto.BatchTagOperationsDTO;
 import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.StandardQuestionDTO;
+import com.example.demo.dto.TagOperationDTO;
 
 public interface StandardQuestionService {
     /**
@@ -35,4 +40,25 @@ public interface StandardQuestionService {
      * @return 问题的版本树结构
      */
     List<QuestionHistoryDTO> getVersionTree(Long questionId);
+    
+    /**
+     * 获取所有标准问题（分页）
+     * @param pageable 分页参数
+     * @return 标准问题分页列表
+     */
+    Page<StandardQuestionDTO> findAllStandardQuestions(Pageable pageable);
+    
+    /**
+     * 操作单个标准问题的标签
+     * @param operationDTO 标签操作请求
+     * @return 更新后的标准问题DTO
+     */
+    StandardQuestionDTO updateQuestionTags(TagOperationDTO operationDTO);
+    
+    /**
+     * 批量操作多个标准问题的标签
+     * @param batchOperationsDTO 批量标签操作请求
+     * @return 操作结果，key为问题ID，value为操作成功与否
+     */
+    Map<Long, Boolean> batchUpdateQuestionTags(BatchTagOperationsDTO batchOperationsDTO);
 } 

@@ -20,6 +20,12 @@ public enum EntityType {
     EVALUATOR("evaluator"),
     STANDARD_QUESTION_TAGS("standard_question_tags"),
     DATASET_QUESTION_MAPPING("dataset_question_mapping"),
+    ANSWER_TAG_PROMPT("answer_tag_prompt"),
+    ANSWER_QUESTION_TYPE_PROMPT("answer_question_type_prompt"),
+    EVALUATION_TAG_PROMPT("evaluation_tag_prompt"),
+    EVALUATION_SUBJECTIVE_PROMPT("evaluation_subjective_prompt"),
+    ANSWER_PROMPT_ASSEMBLY_CONFIG("answer_prompt_assembly_config"),
+    EVALUATION_PROMPT_ASSEMBLY_CONFIG("evaluation_prompt_assembly_config"),
     AI_PROMPT_TAGS("ai_prompt_tags");
 
     private final String value;

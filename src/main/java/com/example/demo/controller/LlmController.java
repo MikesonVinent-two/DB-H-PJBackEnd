@@ -20,7 +20,7 @@ import com.example.demo.service.LlmService;
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/llm")
+@RequestMapping("/llm")
 @CrossOrigin(origins = "*")
 public class LlmController {
 

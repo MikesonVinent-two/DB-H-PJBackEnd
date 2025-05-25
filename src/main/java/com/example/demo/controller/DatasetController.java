@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/datasets")
+@RequestMapping("/datasets")
 public class DatasetController {
 
     @Autowired

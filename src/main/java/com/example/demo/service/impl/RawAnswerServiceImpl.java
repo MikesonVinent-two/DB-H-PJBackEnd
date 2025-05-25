@@ -11,6 +11,7 @@ import com.example.demo.entity.RawQuestion;
 import com.example.demo.repository.RawAnswerRepository;
 import com.example.demo.repository.RawQuestionRepository;
 import com.example.demo.service.RawAnswerService;
+import com.example.demo.util.MetadataUtils;
 
 @Service
 public class RawAnswerServiceImpl implements RawAnswerService {
@@ -45,7 +46,7 @@ public class RawAnswerServiceImpl implements RawAnswerService {
         rawAnswer.setPublishTime(rawAnswerDTO.getPublishTime());
         rawAnswer.setUpvotes(rawAnswerDTO.getUpvotes());
         rawAnswer.setIsAccepted(rawAnswerDTO.getIsAccepted());
-        rawAnswer.setOtherMetadata(rawAnswerDTO.getOtherMetadata());
+        rawAnswer.setOtherMetadata(MetadataUtils.normalizeMetadata(rawAnswerDTO.getOtherMetadata()));
         
         // 保存并返回
         try {

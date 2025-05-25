@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/prompts")
+@RequestMapping("/prompts")
 public class PromptController {
 
     private static final Logger logger = LoggerFactory.getLogger(PromptController.class);

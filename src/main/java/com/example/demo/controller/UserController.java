@@ -28,7 +28,7 @@ import com.example.demo.service.UserService;
 import com.example.demo.dto.UserProfileDTO;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/users")
 @CrossOrigin(origins = "*")
 public class UserController {
 

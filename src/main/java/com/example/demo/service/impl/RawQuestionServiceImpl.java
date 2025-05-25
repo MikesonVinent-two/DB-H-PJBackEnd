@@ -19,6 +19,7 @@ import com.example.demo.entity.RawQuestion;
 import com.example.demo.repository.RawAnswerRepository;
 import com.example.demo.repository.RawQuestionRepository;
 import com.example.demo.service.RawQuestionService;
+import com.example.demo.util.MetadataUtils;
 
 @Service
 public class RawQuestionServiceImpl implements RawQuestionService {
@@ -50,7 +51,7 @@ public class RawQuestionServiceImpl implements RawQuestionService {
         rawQuestion.setSourceSite(rawQuestionDTO.getSourceSite());
         rawQuestion.setTitle(rawQuestionDTO.getTitle());
         rawQuestion.setContent(rawQuestionDTO.getContent());
-        rawQuestion.setOtherMetadata(rawQuestionDTO.getOtherMetadata());
+        rawQuestion.setOtherMetadata(MetadataUtils.normalizeMetadata(rawQuestionDTO.getOtherMetadata()));
         
         // 保存并返回
         try {
@@ -76,7 +77,7 @@ public class RawQuestionServiceImpl implements RawQuestionService {
         rawQuestion.setTitle(dto.getQuestion().getTitle());
         rawQuestion.setContent(dto.getQuestion().getContent());
         rawQuestion.setCrawlTime(dto.getQuestion().getCrawlTime());
-        rawQuestion.setOtherMetadata(dto.getQuestion().getOtherMetadata());
+        rawQuestion.setOtherMetadata(MetadataUtils.normalizeMetadata(dto.getQuestion().getOtherMetadata()));
         
         // 保存问题
         RawQuestion savedQuestion;
@@ -102,7 +103,7 @@ public class RawQuestionServiceImpl implements RawQuestionService {
                     answer.setPublishTime(answerDTO.getPublishTime());
                     answer.setUpvotes(answerDTO.getUpvotes());
                     answer.setIsAccepted(answerDTO.getIsAccepted());
-                    answer.setOtherMetadata(answerDTO.getOtherMetadata());
+                    answer.setOtherMetadata(MetadataUtils.normalizeMetadata(answerDTO.getOtherMetadata()));
                     
                     // 保存回答
                     RawAnswer savedAnswer = rawAnswerRepository.save(answer);

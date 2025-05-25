@@ -17,6 +17,7 @@ import org.springframework.util.StringUtils;
 
 import com.example.demo.dto.RawAnswerDTO;
 import com.example.demo.dto.RawQuestionDTO;
+import com.example.demo.util.MetadataUtils;
 import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.entity.RawAnswer;
 import com.example.demo.entity.RawQuestion;
@@ -106,7 +107,7 @@ public class RawDataServiceImpl implements RawDataService {
         question.setTitle(dto.getTitle());
         question.setContent(dto.getContent());
         question.setCrawlTime(dto.getCrawlTime() != null ? dto.getCrawlTime() : LocalDateTime.now());
-        question.setOtherMetadata(dto.getOtherMetadata());
+        question.setOtherMetadata(MetadataUtils.normalizeMetadata(dto.getOtherMetadata()));
         
         // 处理标签
         if (dto.getTags() != null && !dto.getTags().isEmpty()) {
@@ -157,7 +158,7 @@ public class RawDataServiceImpl implements RawDataService {
         answer.setUpvotes(answerDTO.getUpvotes() != null ? 
             answerDTO.getUpvotes() : 0);
         answer.setIsAccepted(answerDTO.getIsAccepted());
-        answer.setOtherMetadata(answerDTO.getOtherMetadata());
+        answer.setOtherMetadata(MetadataUtils.normalizeMetadata(answerDTO.getOtherMetadata()));
         
         return answerRepository.save(answer);
     }
@@ -196,7 +197,7 @@ public class RawDataServiceImpl implements RawDataService {
         // 如果DTO中的crawlTime为null，则使用当前时间
         question.setCrawlTime(dto.getQuestion().getCrawlTime() != null ? 
             dto.getQuestion().getCrawlTime() : LocalDateTime.now());
-        question.setOtherMetadata(dto.getQuestion().getOtherMetadata());
+        question.setOtherMetadata(MetadataUtils.normalizeMetadata(dto.getQuestion().getOtherMetadata()));
         
         // 处理标签
         if (dto.getQuestion().getTags() != null && !dto.getQuestion().getTags().isEmpty()) {
@@ -233,7 +234,7 @@ public class RawDataServiceImpl implements RawDataService {
                 answer.setPublishTime(answerDto.getPublishTime());
                 answer.setUpvotes(answerDto.getUpvotes());
                 answer.setIsAccepted(answerDto.getIsAccepted());
-                answer.setOtherMetadata(answerDto.getOtherMetadata());
+                answer.setOtherMetadata(MetadataUtils.normalizeMetadata(answerDto.getOtherMetadata()));
                 
                 answerRepository.save(answer);
             }

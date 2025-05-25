@@ -9,6 +9,7 @@ public enum ChangeType {
     CREATE_STANDARD_QUESTION("创建标准问题"),
     UPDATE_STANDARD_QUESTION("更新标准问题"),
     DELETE_STANDARD_QUESTION("删除标准问题"),
+    UPDATE_STANDARD_QUESTION_TAGS("更新标准问题标签"),
     
     CREATE_OBJECTIVE_ANSWER("创建客观题答案"),
     UPDATE_OBJECTIVE_ANSWER("更新客观题答案"),
@@ -24,7 +25,9 @@ public enum ChangeType {
     
     CREATE_CHECKLIST_ITEM("创建评分检查项"),
     UPDATE_CHECKLIST_ITEM("更新评分检查项"),
-    DELETE_CHECKLIST_ITEM("删除评分检查项");
+    DELETE_CHECKLIST_ITEM("删除评分检查项"),
+    
+    CREATE_PROMPT_ASSEMBLY_CONFIG("创建提示词组装配置");
 
     private final String value;
 

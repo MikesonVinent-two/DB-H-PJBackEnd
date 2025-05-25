@@ -9,6 +9,7 @@ import com.example.demo.entity.DifficultyLevel;
 import com.example.demo.entity.EntityType;
 import com.example.demo.entity.ChangeType;
 import com.example.demo.exception.EnumDeserializationException;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -16,6 +17,7 @@ import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.datatype.hibernate6.Hibernate6Module;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 import java.io.IOException;
 
@@ -35,6 +37,22 @@ public class JacksonConfig {
         hibernate6Module.configure(Hibernate6Module.Feature.FORCE_LAZY_LOADING, false);
         hibernate6Module.configure(Hibernate6Module.Feature.SERIALIZE_IDENTIFIER_FOR_LAZY_NOT_LOADED_OBJECTS, true);
         objectMapper.registerModule(hibernate6Module);
+        
+        // 启用对单引号的支持
+        objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+        // 忽略未知属性
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        // 允许使用未引用的字段名
+        objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+        // 允许使用C/C++风格的注释
+        objectMapper.configure(JsonReadFeature.ALLOW_JAVA_COMMENTS.mappedFeature(), true);
+        objectMapper.configure(JsonReadFeature.ALLOW_YAML_COMMENTS.mappedFeature(), true);
+        // 允许使用转义字符
+        objectMapper.configure(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature(), true);
+        // 允许数字含有前导零
+        objectMapper.configure(JsonReadFeature.ALLOW_LEADING_ZEROS_FOR_NUMBERS.mappedFeature(), true);
+        // 忽略空值
+        objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
         
         // 创建自定义模块处理特殊枚举
         SimpleModule module = new SimpleModule();

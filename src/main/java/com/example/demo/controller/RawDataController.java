@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/raw-data")
+@RequestMapping("/raw-data")
 @CrossOrigin(origins = "*")
 public class RawDataController {
     
@@ -49,12 +49,32 @@ public class RawDataController {
         return ResponseEntity.ok(savedQuestion);
     }
     
+    /**
+     * 创建原始回答
+     * 
+     * 支持两种格式的otherMetadata:
+     * 1. JSON字符串: {"otherMetadata": "{\"source\":\"网站A\",\"category\":\"医疗\"}"}
+     * 2. JSON对象: {"otherMetadata": {"source":"网站A","category":"医疗","tags":["内科","外科"]}}
+     *
+     * @param answerDTO 回答DTO
+     * @return 保存的回答
+     */
     @PostMapping("/answers")
     public ResponseEntity<RawAnswer> createAnswer(@Valid @RequestBody RawAnswerDTO answerDTO) {
         RawAnswer savedAnswer = rawDataService.createAnswer(answerDTO);
         return ResponseEntity.ok(savedAnswer);
     }
     
+    /**
+     * 创建带有回答的原始问题
+     * 
+     * 支持两种格式的otherMetadata:
+     * 1. JSON字符串: {"otherMetadata": "{\"source\":\"网站A\",\"category\":\"医疗\"}"}
+     * 2. JSON对象: {"otherMetadata": {"source":"网站A","category":"医疗","tags":["内科","外科"]}}
+     *
+     * @param dto 问题和回答DTO
+     * @return 保存的问题
+     */
     @PostMapping("/questions-with-answers")
     public ResponseEntity<RawQuestion> createQuestionWithAnswers(@Valid @RequestBody RawQuestionWithAnswersDTO dto) {
         RawQuestion savedQuestion = rawDataService.createQuestionWithAnswers(dto);

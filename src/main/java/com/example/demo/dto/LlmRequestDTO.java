@@ -8,8 +8,11 @@ import jakarta.validation.constraints.Size;
 
 public class LlmRequestDTO {
     
-    @NotBlank(message = "API URL不能为空")
+    @NotBlank(message = "API调用方式不能为空")
     private String api;
+    
+    @NotBlank(message = "API URL不能为空")
+    private String apiUrl;
     
     @NotBlank(message = "API密钥不能为空")
     private String apiKey;
@@ -40,6 +43,14 @@ public class LlmRequestDTO {
 
     public void setApi(String api) {
         this.api = api;
+    }
+    
+    public String getApiUrl() {
+        return apiUrl;
+    }
+
+    public void setApiUrl(String apiUrl) {
+        this.apiUrl = apiUrl;
     }
 
     public String getApiKey() {

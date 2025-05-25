@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
-@RequestMapping("/api/evaluations")
+@RequestMapping("/evaluations")
 @CrossOrigin(origins = "*")
 public class EvaluationController {
     

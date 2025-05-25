@@ -20,7 +20,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 
 @RestController
-@RequestMapping("/api/expert-candidate-answers")
+@RequestMapping("/expert-candidate-answers")
 @CrossOrigin(origins = "*")
 public class ExpertCandidateAnswerController {
     

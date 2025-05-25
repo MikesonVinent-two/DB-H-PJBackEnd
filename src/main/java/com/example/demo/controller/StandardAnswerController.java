@@ -16,7 +16,7 @@ import com.example.demo.dto.StandardAnswerDTO;
 import com.example.demo.service.StandardAnswerService;
 
 @RestController
-@RequestMapping("/api/standard/standard-answers")
+@RequestMapping("/standard/standard-answers")
 public class StandardAnswerController {
     
     private static final Logger logger = LoggerFactory.getLogger(StandardAnswerController.class);

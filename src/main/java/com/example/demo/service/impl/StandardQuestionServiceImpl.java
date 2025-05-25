@@ -10,13 +10,18 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.example.demo.dto.BatchTagOperationsDTO;
+import com.example.demo.dto.BatchTagOperationsDTO.TagOperation;
 import com.example.demo.dto.ChangeDetailDTO;
 import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.StandardQuestionDTO;
+import com.example.demo.dto.TagOperationDTO;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.StandardQuestionService;
@@ -368,6 +373,7 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
 
     private StandardQuestionDTO convertToDTO(StandardQuestion question) {
         StandardQuestionDTO dto = new StandardQuestionDTO();
+        dto.setId(question.getId());
         dto.setQuestionText(question.getQuestionText());
         dto.setQuestionType(question.getQuestionType());
         dto.setDifficulty(question.getDifficulty());
@@ -516,5 +522,239 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         }
         
         return dto;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StandardQuestionDTO> findAllStandardQuestions(Pageable pageable) {
+        logger.debug("开始查询所有标准问题 - 页码: {}, 每页大小: {}", 
+            pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            // 获取分页的标准问题数据
+            Page<StandardQuestion> standardQuestions = standardQuestionRepository.findAll(pageable);
+            
+            logger.info("成功查询标准问题 - 总数: {}, 当前页: {}, 每页大小: {}", 
+                standardQuestions.getTotalElements(),
+                standardQuestions.getNumber(),
+                standardQuestions.getSize());
+            
+            // 将实体转换为DTO并返回
+            return standardQuestions.map(this::convertToDTO);
+        } catch (Exception e) {
+            logger.error("查询标准问题失败", e);
+            throw new RuntimeException("查询标准问题失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public StandardQuestionDTO updateQuestionTags(TagOperationDTO operationDTO) {
+        logger.debug("开始更新标准问题标签 - 问题ID: {}, 操作类型: {}", 
+            operationDTO.getQuestionId(), operationDTO.getOperationType());
+        
+        if (operationDTO.getQuestionId() == null || operationDTO.getUserId() == null) {
+            throw new IllegalArgumentException("问题ID和用户ID不能为空");
+        }
+        
+        try {
+            // 获取标准问题
+            StandardQuestion question = standardQuestionRepository.findById(operationDTO.getQuestionId())
+                .orElseThrow(() -> {
+                    logger.error("更新标签失败 - 找不到问题ID: {}", operationDTO.getQuestionId());
+                    return new IllegalArgumentException("找不到指定的标准问题");
+                });
+            
+            // 获取用户
+            User user = userRepository.findById(operationDTO.getUserId())
+                .orElseThrow(() -> {
+                    logger.error("更新标签失败 - 找不到用户ID: {}", operationDTO.getUserId());
+                    return new IllegalArgumentException("找不到指定的用户");
+                });
+            
+            // 创建变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.UPDATE_STANDARD_QUESTION_TAGS);
+            changeLog.setChangedByUser(user);
+            changeLog.setCommitMessage(operationDTO.getCommitMessage());
+            changeLog.setAssociatedStandardQuestion(question);
+            changeLogRepository.save(changeLog);
+            
+            // 获取当前标签
+            Set<String> currentTags = question.getQuestionTags().stream()
+                .map(tag -> tag.getTag().getTagName())
+                .collect(Collectors.toSet());
+            
+            // 新标签集合
+            Set<String> newTags = new HashSet<>();
+            
+            // 根据操作类型处理标签
+            switch (operationDTO.getOperationType()) {
+                case ADD:
+                    // 添加标签
+                    if (operationDTO.getTags() != null) {
+                        newTags.addAll(currentTags);  // 保留现有标签
+                        newTags.addAll(operationDTO.getTags());  // 添加新标签
+                    }
+                    break;
+                    
+                case REMOVE:
+                    // 移除标签
+                    if (operationDTO.getTags() != null) {
+                        newTags.addAll(currentTags);  // 复制现有标签
+                        newTags.removeAll(operationDTO.getTags());  // 移除指定标签
+                    }
+                    break;
+                    
+                case REPLACE:
+                    // 替换所有标签
+                    if (operationDTO.getTags() != null) {
+                        newTags.addAll(operationDTO.getTags());  // 使用新标签集合
+                    }
+                    break;
+                    
+                default:
+                    throw new IllegalArgumentException("不支持的操作类型: " + operationDTO.getOperationType());
+            }
+            
+            // 清除现有标签关联
+            List<StandardQuestionTag> existingTags = new ArrayList<>(question.getQuestionTags());
+            for (StandardQuestionTag tagLink : existingTags) {
+                question.removeTag(tagLink);
+                standardQuestionTagRepository.delete(tagLink);
+                
+                // 记录变更日志详情
+                ChangeLogDetail removeDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION_TAGS,
+                    question.getId(),
+                    "tag_id",
+                    tagLink.getTag().getId(),
+                    null
+                );
+                changeLogDetailRepository.save(removeDetail);
+            }
+            
+            // 添加新标签
+            for (String tagName : newTags) {
+                if (!StringUtils.hasText(tagName)) {
+                    continue;
+                }
+                
+                // 查找或创建标签
+                Tag tag = tagRepository.findByTagName(tagName.trim())
+                        .orElseGet(() -> {
+                            Tag newTag = new Tag(tagName.trim());
+                            newTag.setCreatedByUser(user);
+                            newTag.setCreatedChangeLog(changeLog);
+                            return tagRepository.save(newTag);
+                        });
+                
+                // 创建关联
+                StandardQuestionTag questionTag = new StandardQuestionTag(question, tag, user);
+                questionTag.setCreatedChangeLog(changeLog);
+                standardQuestionTagRepository.save(questionTag);
+                question.addTag(questionTag);
+                
+                // 记录变更日志详情
+                ChangeLogDetail addDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION_TAGS,
+                    question.getId(),
+                    "tag_id",
+                    null,
+                    tag.getId()
+                );
+                changeLogDetailRepository.save(addDetail);
+            }
+            
+            // 保存问题
+            question = standardQuestionRepository.save(question);
+            
+            logger.info("成功更新标准问题标签 - 问题ID: {}, 标签数量: {}", 
+                question.getId(), newTags.size());
+            
+            return convertToDTO(question);
+            
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("更新标准问题标签时发生错误", e);
+            throw new RuntimeException("更新标准问题标签时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public Map<Long, Boolean> batchUpdateQuestionTags(BatchTagOperationsDTO batchOperationsDTO) {
+        logger.debug("开始批量更新标准问题标签 - 操作数量: {}", 
+            batchOperationsDTO.getOperations() != null ? batchOperationsDTO.getOperations().size() : 0);
+        
+        if (batchOperationsDTO.getUserId() == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        
+        if (batchOperationsDTO.getOperations() == null || batchOperationsDTO.getOperations().isEmpty()) {
+            throw new IllegalArgumentException("操作列表不能为空");
+        }
+        
+        // 操作结果
+        Map<Long, Boolean> results = new HashMap<>();
+        
+        try {
+            // 获取用户
+            User user = userRepository.findById(batchOperationsDTO.getUserId())
+                .orElseThrow(() -> {
+                    logger.error("批量更新标签失败 - 找不到用户ID: {}", batchOperationsDTO.getUserId());
+                    return new IllegalArgumentException("找不到指定的用户");
+                });
+            
+            // 逐个处理操作
+            for (TagOperation operation : batchOperationsDTO.getOperations()) {
+                try {
+                    // 构建单个操作DTO
+                    TagOperationDTO singleOperation = new TagOperationDTO();
+                    singleOperation.setQuestionId(operation.getQuestionId());
+                    singleOperation.setUserId(batchOperationsDTO.getUserId());
+                    singleOperation.setOperationType(convertOperationType(operation.getOperationType()));
+                    singleOperation.setTags(operation.getTags());
+                    singleOperation.setCommitMessage(batchOperationsDTO.getCommitMessage());
+                    
+                    // 执行单个操作
+                    updateQuestionTags(singleOperation);
+                    results.put(operation.getQuestionId(), true);
+                } catch (Exception e) {
+                    logger.error("批量更新标签时处理问题ID: {} 失败", operation.getQuestionId(), e);
+                    results.put(operation.getQuestionId(), false);
+                }
+            }
+            
+            logger.info("批量更新标准问题标签完成 - 总数: {}, 成功: {}", 
+                results.size(), results.values().stream().filter(v -> v).count());
+            
+            return results;
+            
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("批量更新标准问题标签时发生错误", e);
+            throw new RuntimeException("批量更新标准问题标签时发生错误: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 转换操作类型
+     */
+    private TagOperationDTO.OperationType convertOperationType(BatchTagOperationsDTO.TagOperation.OperationType type) {
+        switch (type) {
+            case ADD:
+                return TagOperationDTO.OperationType.ADD;
+            case REMOVE:
+                return TagOperationDTO.OperationType.REMOVE;
+            case REPLACE:
+                return TagOperationDTO.OperationType.REPLACE;
+            default:
+                throw new IllegalArgumentException("不支持的操作类型: " + type);
+        }
     }
 } 

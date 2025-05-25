@@ -25,7 +25,7 @@ import com.example.demo.service.TagService;
 import jakarta.persistence.EntityNotFoundException;
 
 @RestController
-@RequestMapping("/api/tags")
+@RequestMapping("/tags")
 public class TagController {
 
     private static final Logger logger = LoggerFactory.getLogger(TagController.class);

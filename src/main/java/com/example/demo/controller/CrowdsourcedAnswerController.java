@@ -18,7 +18,7 @@ import com.example.demo.dto.CrowdsourcedAnswerDTO;
 import com.example.demo.service.CrowdsourcedAnswerService;
 
 @RestController
-@RequestMapping("/api/crowdsourced-answers")
+@RequestMapping("/crowdsourced-answers")
 @CrossOrigin(origins = "*")
 public class CrowdsourcedAnswerController {
     

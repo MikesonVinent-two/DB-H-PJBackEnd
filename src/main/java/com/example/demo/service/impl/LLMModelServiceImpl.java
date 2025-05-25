@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class LLMModelServiceImpl implements LLMModelService {
@@ -140,5 +141,26 @@ public class LLMModelServiceImpl implements LLMModelService {
         dto.setDescription(model.getDescription());
         dto.setApiType(model.getApiType()); // 添加API类型
         return dto;
+    }
+
+    @Override
+    public List<LLMModelDTO> getAllModels() {
+        logger.debug("获取所有已注册的LLM模型");
+        
+        try {
+            // 获取所有未删除的模型
+            List<LlmModel> models = llmModelRepository.findByDeletedAtIsNull();
+            
+            // 转换为DTO列表并返回
+            List<LLMModelDTO> modelDTOs = models.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+            
+            logger.info("成功获取所有已注册的LLM模型，共 {} 个", modelDTOs.size());
+            return modelDTOs;
+        } catch (Exception e) {
+            logger.error("获取已注册的LLM模型时发生错误", e);
+            return new ArrayList<>();
+        }
     }
 } 

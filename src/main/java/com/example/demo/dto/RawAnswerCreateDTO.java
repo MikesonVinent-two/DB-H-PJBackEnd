@@ -2,6 +2,7 @@ package com.example.demo.dto;
 
 import java.time.LocalDateTime;
 
+import com.example.demo.util.MetadataUtils;
 import jakarta.validation.constraints.NotBlank;
 
 public class RawAnswerCreateDTO {
@@ -17,7 +18,8 @@ public class RawAnswerCreateDTO {
     
     private Boolean isAccepted;
     
-    private String otherMetadata;
+    // 改为Object类型，以支持JSON对象和字符串
+    private Object otherMetadata;
     
     // 构造函数
     public RawAnswerCreateDTO() {
@@ -64,11 +66,30 @@ public class RawAnswerCreateDTO {
         this.isAccepted = isAccepted;
     }
     
-    public String getOtherMetadata() {
+    /**
+     * 获取元数据
+     * @return 元数据对象
+     */
+    public Object getOtherMetadata() {
         return otherMetadata;
     }
     
-    public void setOtherMetadata(String otherMetadata) {
+    /**
+     * 获取元数据的字符串表示
+     * @return 元数据的字符串表示
+     */
+    public String getOtherMetadataAsString() {
+        if (otherMetadata == null) {
+            return null;
+        }
+        return MetadataUtils.normalizeMetadata(otherMetadata);
+    }
+    
+    /**
+     * 设置元数据
+     * @param otherMetadata 元数据对象
+     */
+    public void setOtherMetadata(Object otherMetadata) {
         this.otherMetadata = otherMetadata;
     }
 } 

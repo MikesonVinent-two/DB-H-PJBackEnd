@@ -79,7 +79,24 @@ DROP TABLE IF EXISTS `change_log_details`;
 CREATE TABLE `change_log_details` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `change_log_id` BIGINT NOT NULL COMMENT '关联到所属的变更日志主条目',
-    `entity_type` ENUM('STANDARD_QUESTION', 'STD_OBJECTIVE_ANSWER', 'STD_SIMPLE_ANSWER', 'STD_SUBJECTIVE_ANSWER', 'TAG', 'DATASET_VERSION', 'LLM_MODEL', 'EVALUATOR', 'STANDARD_QUESTION_TAGS', 'DATASET_QUESTION_MAPPING', 'ANSWER_TAG_PROMPT', 'ANSWER_QUESTION_TYPE_PROMPT', 'EVALUATION_TAG_PROMPT', 'EVALUATION_SUBJECTIVE_PROMPT') NOT NULL COMMENT '发生变更的实体类型',
+    `entity_type` ENUM(
+    'STANDARD_QUESTION', 
+    'STD_OBJECTIVE_ANSWER', 
+    'STD_SIMPLE_ANSWER', 
+    'STD_SUBJECTIVE_ANSWER', 
+    'TAG', 
+    'DATASET_VERSION', 
+    'LLM_MODEL', 
+    'EVALUATOR', 
+    'STANDARD_QUESTION_TAGS', 
+    'DATASET_QUESTION_MAPPING', 
+    'ANSWER_TAG_PROMPT', 
+    'ANSWER_QUESTION_TYPE_PROMPT', 
+    'EVALUATION_TAG_PROMPT', 
+    'EVALUATION_SUBJECTIVE_PROMPT',
+    'ANSWER_PROMPT_ASSEMBLY_CONFIG',
+    'EVALUATION_PROMPT_ASSEMBLY_CONFIG'
+) NOT NULL COMMENT '发生变更的实体类型',
     `entity_id` BIGINT NOT NULL COMMENT '发生变更的具体实体记录的ID',
     `attribute_name` VARCHAR(255) NOT NULL COMMENT '发生变更的字段名称',
     `old_value` JSON NULL COMMENT '字段变更前的值',
@@ -745,27 +762,17 @@ INSERT INTO `standard_questions` (`question_text`, `question_type`, `difficulty`
 ('高血压的主要症状有哪些？', 'SUBJECTIVE', 'MEDIUM', 1),
 ('糖尿病患者的日常饮食应该注意什么？', 'SUBJECTIVE', 'MEDIUM', 1),
 ('以下哪些是冠心病的典型症状？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-('正常人的空腹血糖值范围是多少？', 'SINGLE_CHOICE', 'EASY', 1),
-('心绞痛的典型症状和处理方法是什么？', 'SUBJECTIVE', 'MEDIUM', 1),
-('如何预防和控制糖尿病的并发症？', 'SUBJECTIVE', 'HARD', 1),
-('以下哪些是高血压的危险因素？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-('二型糖尿病的主要发病机制是？', 'SINGLE_CHOICE', 'HARD', 1),
-('心肌梗塞的急救措施包括哪些？', 'SUBJECTIVE', 'HARD', 1);
+('正常人的空腹血糖值范围是多少？', 'SINGLE_CHOICE', 'EASY', 1);
 
 -- 插入标准客观题答案
 INSERT INTO `standard_objective_answers` (`standard_question_id`, `options`, `correct_ids`, `determined_by_user_id`) VALUES
 (3, '[{"id":"A","text":"胸痛"},{"id":"B","text":"气短"},{"id":"C","text":"出汗"},{"id":"D","text":"恶心"}]', '["A","B","C"]', 2),
-(4, '[{"id":"A","text":"3.9-6.1 mmol/L"},{"id":"B","text":"7.0-8.0 mmol/L"},{"id":"C","text":"2.0-3.5 mmol/L"},{"id":"D","text":"8.0-10.0 mmol/L"}]', '["A"]', 2),
-(7, '[{"id":"A","text":"肥胖"},{"id":"B","text":"吸烟"},{"id":"C","text":"压力大"},{"id":"D","text":"缺乏运动"},{"id":"E","text":"高盐饮食"}]', '["A","B","C","D","E"]', 2),
-(8, '[{"id":"A","text":"胰岛素抵抗和分泌不足"},{"id":"B","text":"单纯的胰岛素分泌不足"},{"id":"C","text":"胰腺炎症"},{"id":"D","text":"自身免疫反应"}]', '["A"]', 2);
+(4, '[{"id":"A","text":"3.9-6.1 mmol/L"},{"id":"B","text":"7.0-8.0 mmol/L"},{"id":"C","text":"2.0-3.5 mmol/L"},{"id":"D","text":"8.0-10.0 mmol/L"}]', '["A"]', 2);
 
 -- 插入标准主观题答案
 INSERT INTO `standard_subjective_answers` (`standard_question_id`, `answer_text`, `scoring_guidance`, `determined_by_user_id`) VALUES
 (1, '高血压的主要症状包括：\n1. 头痛，特别是后脑部\n2. 头晕和眩晕\n3. 耳鸣\n4. 心悸\n5. 疲劳\n6. 视物模糊\n7. 失眠\n\n需要注意的是，早期高血压可能没有明显症状，因此定期测量血压很重要。', '评分要点：\n1. 症状的完整性（3分）\n2. 症状的准确性（4分）\n3. 补充说明的合理性（3分）', 2),
-(2, '糖尿病患者的日常饮食注意事项：\n1. 控制总热量摄入\n2. 定时定量进餐\n3. 主食以复杂碳水化合物为主\n4. 增加膳食纤维的摄入\n5. 限制单糖和双糖的摄入\n6. 适量摄入优质蛋白\n7. 限制饱和脂肪酸的摄入\n8. 补充适量维生素和矿物质', '评分要点：\n1. 饮食原则的完整性（4分）\n2. 具体建议的实用性（3分）\n3. 说明的合理性（3分）', 2),
-(5, '心绞痛的典型症状和处理方法：\n\n典型症状：\n1. 胸骨后压榨性疼痛\n2. 可向左肩、左臂放射\n3. 常在劳累或情绪激动时发作\n4. 休息或含服硝酸甘油可缓解\n5. 持续时间通常3-5分钟\n\n处理方法：\n1. 立即停止活动，保持安静\n2. 含服硝酸甘油\n3. 如症状持续，考虑就医\n4. 记录发作情况\n5. 控制危险因素\n\n长期管理：\n1. 规律服药\n2. 合理运动\n3. 控制饮食\n4. 戒烟限酒\n5. 定期复查', '评分要点：\n1. 症状描述的准确性和完整性（4分）\n2. 急性发作处理方法的正确性（3分）\n3. 长期管理建议的合理性（3分）', 2),
-(6, '糖尿病并发症的预防和控制：\n\n1. 血糖控制\n- 定期监测血糖\n- 严格遵医嘱用药\n- 保持血糖稳定\n\n2. 血压管理\n- 控制在130/80mmHg以下\n- 定期测量血压\n- 必要时使用降压药\n\n3. 血脂管理\n- 控制总胆固醇和甘油三酯\n- 合理饮食\n- 必要时服用调脂药\n\n4. 生活方式干预\n- 合理饮食\n- 规律运动\n- 戒烟限酒\n\n5. 定期筛查\n- 眼底检查\n- 肾功能检查\n- 足部检查\n- 心电图检查\n\n6. 并发症早期识别\n- 了解早期症状\n- 及时就医\n- 积极治疗', '评分要点：\n1. 预防措施的完整性（4分）\n2. 控制方法的具体性（3分）\n3. 建议的实用性（3分）', 2),
-(9, '心肌梗塞的急救措施：\n\n立即措施：\n1. 立即停止活动，平卧休息\n2. 舌下含服硝酸甘油\n3. 服用阿司匹林300mg咀嚼\n4. 保持呼吸道通畅\n5. 监测生命体征\n\n呼救措施：\n1. 立即拨打急救电话\n2. 准确描述症状和地址\n3. 等待救护车到达\n\n注意事项：\n1. 保持镇静\n2. 松开紧身衣物\n3. 保暖\n4. 禁止剧烈活动\n\n医院前准备：\n1. 携带近期用药记录\n2. 准备个人基本信息\n3. 联系家属', '评分要点：\n1. 急救措施的及时性和准确性（4分）\n2. 操作步骤的完整性（3分）\n3. 注意事项的合理性（3分）', 2);
+(2, '糖尿病患者的日常饮食注意事项：\n1. 控制总热量摄入\n2. 定时定量进餐\n3. 主食以复杂碳水化合物为主\n4. 增加膳食纤维的摄入\n5. 限制单糖和双糖的摄入\n6. 适量摄入优质蛋白\n7. 限制饱和脂肪酸的摄入\n8. 补充适量维生素和矿物质', '评分要点：\n1. 饮食原则的完整性（4分）\n2. 具体建议的实用性（3分）\n3. 说明的合理性（3分）', 2);
 
 -- 插入评测标准
 INSERT INTO `evaluation_criteria` (`name`, `description`, `data_type`, `score_range`, `applicable_question_types`, `created_by_user_id`) VALUES
@@ -790,18 +797,7 @@ INSERT INTO `standard_question_tags` (`standard_question_id`, `tag_id`, `created
 (3, 3, 1),  -- 冠心病问题关联"心脏病"标签
 (3, 6, 1),  -- 冠心病问题关联"诊断"标签
 (4, 5, 1),  -- 血糖问题关联"糖尿病"标签
-(4, 6, 1),  -- 血糖问题关联"诊断"标签
-(5, 3, 1),  -- 心绞痛问题关联"心脏病"标签
-(5, 6, 1),  -- 心绞痛问题关联"诊断"标签
-(5, 7, 1),  -- 心绞痛问题关联"治疗"标签
-(6, 5, 1),  -- 糖尿病并发症关联"糖尿病"标签
-(6, 8, 1),  -- 糖尿病并发症关联"预防"标签
-(7, 4, 1),  -- 高血压危险因素关联"高血压"标签
-(7, 8, 1),  -- 高血压危险因素关联"预防"标签
-(8, 5, 1),  -- 糖尿病发病机制关联"糖尿病"标签
-(8, 6, 1),  -- 糖尿病发病机制关联"诊断"标签
-(9, 3, 1),  -- 心肌梗塞关联"心脏病"标签
-(9, 7, 1);  -- 心肌梗塞关联"治疗"标签
+(4, 6, 1);  -- 血糖问题关联"诊断"标签
 
 -- =============================================
 -- 插入示例Prompt数据
@@ -837,74 +833,3 @@ INSERT INTO `answer_prompt_assembly_configs` (`name`, `description`, `base_syste
 
 INSERT INTO `evaluation_prompt_assembly_configs` (`name`, `description`, `base_system_prompt`, `tag_prompts_section_header`, `subjective_section_header`, `final_instruction`, `created_by_user_id`) VALUES
 ('标准医学评测配置', '用于医学问题评测的标准prompt组装配置', '你是一个专业的医学评测专家，请基于专业知识对回答进行客观、公正的评估。', '## 专业评测标准', '## 评分要求', '请严格按照评分标准进行评估，给出详细的评分依据和建议。', 1);
-
--- 添加更多标准问题数据
-INSERT INTO `standard_questions` (`question_text`, `question_type`, `difficulty`, `created_by_user_id`) VALUES
-('心绞痛的典型症状和处理方法是什么？', 'SUBJECTIVE', 'MEDIUM', 1),
-('如何预防和控制糖尿病的并发症？', 'SUBJECTIVE', 'HARD', 1),
-('以下哪些是高血压的危险因素？', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-('二型糖尿病的主要发病机制是？', 'SINGLE_CHOICE', 'HARD', 1),
-('心肌梗塞的急救措施包括哪些？', 'SUBJECTIVE', 'HARD', 1);
-
--- 添加对应的标准客观题答案
-INSERT INTO `standard_objective_answers` (`standard_question_id`, `options`, `correct_ids`, `determined_by_user_id`) VALUES
-(7, '[{"id":"A","text":"肥胖"},{"id":"B","text":"吸烟"},{"id":"C","text":"压力大"},{"id":"D","text":"缺乏运动"},{"id":"E","text":"高盐饮食"}]', '["A","B","C","D","E"]', 2),
-(8, '[{"id":"A","text":"胰岛素抵抗和分泌不足"},{"id":"B","text":"单纯的胰岛素分泌不足"},{"id":"C","text":"胰腺炎症"},{"id":"D","text":"自身免疫反应"}]', '["A"]', 2);
-
--- 添加对应的标准主观题答案
-INSERT INTO `standard_subjective_answers` (`standard_question_id`, `answer_text`, `scoring_guidance`, `determined_by_user_id`) VALUES
-(5, '心绞痛的典型症状和处理方法：\n\n典型症状：\n1. 胸骨后压榨性疼痛\n2. 可向左肩、左臂放射\n3. 常在劳累或情绪激动时发作\n4. 休息或含服硝酸甘油可缓解\n5. 持续时间通常3-5分钟\n\n处理方法：\n1. 立即停止活动，保持安静\n2. 含服硝酸甘油\n3. 如症状持续，考虑就医\n4. 记录发作情况\n5. 控制危险因素\n\n长期管理：\n1. 规律服药\n2. 合理运动\n3. 控制饮食\n4. 戒烟限酒\n5. 定期复查', '评分要点：\n1. 症状描述的准确性和完整性（4分）\n2. 急性发作处理方法的正确性（3分）\n3. 长期管理建议的合理性（3分）', 2),
-(6, '糖尿病并发症的预防和控制：\n\n1. 血糖控制\n- 定期监测血糖\n- 严格遵医嘱用药\n- 保持血糖稳定\n\n2. 血压管理\n- 控制在130/80mmHg以下\n- 定期测量血压\n- 必要时使用降压药\n\n3. 血脂管理\n- 控制总胆固醇和甘油三酯\n- 合理饮食\n- 必要时服用调脂药\n\n4. 生活方式干预\n- 合理饮食\n- 规律运动\n- 戒烟限酒\n\n5. 定期筛查\n- 眼底检查\n- 肾功能检查\n- 足部检查\n- 心电图检查\n\n6. 并发症早期识别\n- 了解早期症状\n- 及时就医\n- 积极治疗', '评分要点：\n1. 预防措施的完整性（4分）\n2. 控制方法的具体性（3分）\n3. 建议的实用性（3分）', 2),
-(9, '心肌梗塞的急救措施：\n\n立即措施：\n1. 立即停止活动，平卧休息\n2. 舌下含服硝酸甘油\n3. 服用阿司匹林300mg咀嚼\n4. 保持呼吸道通畅\n5. 监测生命体征\n\n呼救措施：\n1. 立即拨打急救电话\n2. 准确描述症状和地址\n3. 等待救护车到达\n\n注意事项：\n1. 保持镇静\n2. 松开紧身衣物\n3. 保暖\n4. 禁止剧烈活动\n\n医院前准备：\n1. 携带近期用药记录\n2. 准备个人基本信息\n3. 联系家属', '评分要点：\n1. 急救措施的及时性和准确性（4分）\n2. 操作步骤的完整性（3分）\n3. 注意事项的合理性（3分）', 2);
-
--- 添加问题标签关联
-INSERT INTO `standard_question_tags` (`standard_question_id`, `tag_id`, `created_by_user_id`) VALUES
-(5, 3, 1),  -- 心绞痛问题关联"心脏病"标签
-(5, 6, 1),  -- 心绞痛问题关联"诊断"标签
-(5, 7, 1),  -- 心绞痛问题关联"治疗"标签
-(6, 5, 1),  -- 糖尿病并发症关联"糖尿病"标签
-(6, 8, 1),  -- 糖尿病并发症关联"预防"标签
-(7, 4, 1),  -- 高血压危险因素关联"高血压"标签
-(7, 8, 1),  -- 高血压危险因素关联"预防"标签
-(8, 5, 1),  -- 糖尿病发病机制关联"糖尿病"标签
-(8, 6, 1),  -- 糖尿病发病机制关联"诊断"标签
-(9, 3, 1),  -- 心肌梗塞关联"心脏病"标签
-(9, 7, 1);  -- 心肌梗塞关联"治疗"标签
-
--- 添加LLM模型数据
-INSERT INTO `llm_models` (`name`, `provider`, `version`, `description`, `api_type`, `model_parameters`, `created_by_user_id`) VALUES
-('GPT-4', 'OpenAI', '4.0', 'OpenAI的GPT-4模型', 'OpenAI', '{"temperature": 0.7, "max_tokens": 2000}', 1),
-('Claude-2', 'Anthropic', '2.0', 'Anthropic的Claude-2模型', 'Anthropic', '{"temperature": 0.7, "max_tokens": 2000}', 1),
-('文心一言', '百度', '2.0', '百度的文心一言模型', 'REST', '{"temperature": 0.8, "max_tokens": 1500}', 1);
-
--- 添加数据集版本
-INSERT INTO `dataset_versions` (`version_number`, `name`, `description`, `created_by_user_id`) VALUES
-('v1.0.0', '医学问答基础数据集', '包含基础医学问题的标准数据集', 1),
-('v1.1.0', '心血管疾病专题数据集', '专注于心血管疾病相关问题的数据集', 1),
-('v1.2.0', '代谢疾病专题数据集', '专注于糖尿病等代谢疾病相关问题的数据集', 1);
-
--- 添加数据集问题映射
-INSERT INTO `dataset_question_mapping` (`dataset_version_id`, `standard_question_id`, `order_in_dataset`, `created_by_user_id`) VALUES
-(1, 1, 1, 1),
-(1, 2, 2, 1),
-(1, 3, 3, 1),
-(1, 4, 4, 1),
-(2, 5, 1, 1),
-(2, 3, 2, 1),
-(2, 9, 3, 1),
-(3, 2, 1, 1),
-(3, 4, 2, 1),
-(3, 6, 3, 1),
-(3, 8, 4, 1);
-
--- 添加回答生成批次
-INSERT INTO `answer_generation_batches` (`name`, `description`, `dataset_version_id`, `status`, `answer_assembly_config_id`, `evaluation_assembly_config_id`, `created_by_user_id`, `answer_repeat_count`) VALUES
-('心血管疾病评测批次-20240301', '使用v1.1.0数据集评测各模型对心血管疾病问题的回答能力', 2, 'COMPLETED', 1, 1, 1, 1),
-('代谢疾病评测批次-20240301', '使用v1.2.0数据集评测各模型对代谢疾病问题的回答能力', 3, 'IN_PROGRESS', 1, 1, 1, 1);
-
--- 添加模型回答运行记录
-INSERT INTO `model_answer_runs` (`answer_generation_batch_id`, `llm_model_id`, `run_name`, `status`, `created_by_user_id`, `completed_questions_count`, `total_questions_count`, `progress_percentage`) VALUES
-(1, 1, 'GPT-4心血管疾病评测', 'COMPLETED', 1, 3, 3, 100.00),
-(1, 2, 'Claude-2心血管疾病评测', 'COMPLETED', 1, 3, 3, 100.00),
-(2, 1, 'GPT-4代谢疾病评测', 'IN_PROGRESS', 1, 2, 4, 50.00),
-(2, 2, 'Claude-2代谢疾病评测', 'IN_PROGRESS', 1, 2, 4, 50.00);
