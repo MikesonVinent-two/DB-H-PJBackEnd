@@ -43,10 +43,39 @@ public class AnswerGenerationController {
     }
     
     @PostMapping("/batches/{batchId}/start")
-    public ResponseEntity<String> startBatch(@PathVariable Long batchId) {
+    public ResponseEntity<Map<String, Object>> startBatch(@PathVariable Long batchId) {
         logger.debug("启动回答生成批次: {}", batchId);
-        answerGenerationService.startBatch(batchId);
-        return ResponseEntity.ok("批次启动成功");
+        
+        // 创建一个后台线程启动批次，不阻塞当前请求
+        new Thread(() -> {
+            try {
+                logger.info("启动独立线程处理批次{}", batchId);
+                answerGenerationService.startBatch(batchId);
+                logger.info("批次{}启动线程执行完成", batchId);
+            } catch (Exception e) {
+                logger.error("批次{}启动失败: {}", batchId, e.getMessage(), e);
+                
+                // 发送错误通知
+                Map<String, Object> errorData = new HashMap<>();
+                errorData.put("batchId", batchId);
+                errorData.put("error", "批次启动失败: " + e.getMessage());
+                errorData.put("timestamp", System.currentTimeMillis());
+                
+                try {
+                    answerGenerationService.sendErrorNotification(batchId, errorData);
+                } catch (Exception ex) {
+                    logger.error("发送错误通知失败", ex);
+                }
+            }
+        }).start();
+        
+        // 立即返回响应，不等待批次启动完成
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("batchId", batchId);
+        response.put("message", "批次启动请求已接收，正在后台处理");
+        
+        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/batches/{batchId}/pause")
@@ -204,5 +233,64 @@ public class AnswerGenerationController {
         logger.debug("获取特定模型的所有运行: {}", modelId);
         List<ModelAnswerRunDTO> runs = answerGenerationService.getRunsByModelId(modelId);
         return ResponseEntity.ok(runs);
+    }
+    
+    @GetMapping("/system/test-connectivity")
+    public ResponseEntity<Map<String, Object>> testSystemConnectivity() {
+        logger.debug("测试系统连通性");
+        
+        try {
+            Map<String, Object> result = answerGenerationService.testSystemConnectivity();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("系统连通性测试失败: {}", e.getMessage(), e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "系统连通性测试失败: " + e.getMessage());
+            errorResponse.put("timestamp", System.currentTimeMillis());
+            
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    @GetMapping("/models/{modelId}/test-connectivity")
+    public ResponseEntity<Map<String, Object>> testModelConnectivity(@PathVariable Long modelId) {
+        logger.debug("测试模型{}连通性", modelId);
+        
+        try {
+            Map<String, Object> result = answerGenerationService.testModelConnectivity(modelId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("模型{}连通性测试失败: {}", modelId, e.getMessage(), e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("modelId", modelId);
+            errorResponse.put("error", "模型连通性测试失败: " + e.getMessage());
+            errorResponse.put("timestamp", System.currentTimeMillis());
+            
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    @GetMapping("/batches/{batchId}/test-connectivity")
+    public ResponseEntity<Map<String, Object>> testBatchModelsConnectivity(@PathVariable Long batchId) {
+        logger.debug("测试批次{}关联的所有模型连通性", batchId);
+        
+        try {
+            Map<String, Object> result = answerGenerationService.testBatchModelsConnectivity(batchId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("批次{}模型连通性测试失败: {}", batchId, e.getMessage(), e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("batchId", batchId);
+            errorResponse.put("error", "批次模型连通性测试失败: " + e.getMessage());
+            errorResponse.put("timestamp", System.currentTimeMillis());
+            
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
 } 

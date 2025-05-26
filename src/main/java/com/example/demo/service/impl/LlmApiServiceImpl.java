@@ -328,7 +328,7 @@ public class LlmApiServiceImpl implements LlmApiService {
     }
     
     /**
-     * 测试模型连通性（修复版本）
+     * 测试模型连通性（改进版本）
      * @param apiUrl API地址
      * @param apiKey API密钥
      * @param apiType API类型
@@ -337,79 +337,320 @@ public class LlmApiServiceImpl implements LlmApiService {
     public boolean testModelConnectivity(String apiUrl, String apiKey, String apiType) {
         logger.info("测试模型连通性: URL={}, 类型={}", apiUrl, apiType);
         
+        // 确保API URL不为空
+        if (apiUrl == null || apiUrl.trim().isEmpty()) {
+            logger.error("API URL为空，无法测试连通性");
+            return false;
+        }
+        
+        // 规范化apiType，确保后续处理一致性
+        String normalizedApiType = apiType;
+        if (normalizedApiType == null) {
+            normalizedApiType = "GENERIC";
+        } else {
+            normalizedApiType = normalizedApiType.toUpperCase();
+        }
+        
         try {
+            // 尝试简单的连接测试 - 首先验证服务器是否可达
+            boolean simpleConnectivityTest = testSimpleConnectivity(apiUrl);
+            if (!simpleConnectivityTest) {
+                logger.error("无法连接到服务器: {}", apiUrl);
+                return false;
+            }
+            
             // 准备请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             
+            // 根据API类型设置不同的认证头
             if (apiKey != null && !apiKey.isEmpty()) {
-                headers.set("Authorization", "Bearer " + apiKey);
-                logger.debug("添加授权头: Bearer {}", apiKey.substring(0, Math.min(5, apiKey.length())) + "...");
+                switch (normalizedApiType) {
+                    case "AZURE_OPENAI":
+                        logger.debug("使用Azure OpenAI认证方式");
+                        headers.set("api-key", apiKey);
+                        break;
+                    case "ANTHROPIC":
+                        logger.debug("使用Anthropic认证方式");
+                        headers.set("x-api-key", apiKey);
+                        break;
+                    case "ZHIPU":
+                    case "GLM":
+                        logger.debug("使用智谱/GLM认证方式");
+                        headers.set("Authorization", apiKey); // 智谱API可能直接使用token
+                        break;
+                    default:
+                        logger.debug("使用标准Bearer认证方式");
+                        headers.set("Authorization", "Bearer " + apiKey);
+                        break;
+                }
+                
+                if (!normalizedApiType.equals("ZHIPU") && !normalizedApiType.equals("GLM")) {
+                    logger.debug("添加认证头: {} [部分隐藏]", 
+                        apiKey.substring(0, Math.min(5, apiKey.length())) + "...");
+                }
             }
             
-            // 准备简单请求体
+            // 准备最小化请求体，适应不同API类型
             ObjectNode requestBody = objectMapper.createObjectNode();
+            String endpointUrl = apiUrl;
             
             // 根据不同API类型准备测试请求
-            if ("OPENAI".equalsIgnoreCase(apiType) || "AZURE_OPENAI".equalsIgnoreCase(apiType)) {
-                // OpenAI格式请求体
-                logger.debug("准备OpenAI格式测试请求");
-                ArrayNode messagesArray = requestBody.putArray("messages");
-                ObjectNode message = objectMapper.createObjectNode();
-                message.put("role", "user");
-                message.put("content", "测试连接");
-                messagesArray.add(message);
-                requestBody.put("model", "gpt-3.5-turbo");
-                requestBody.put("max_tokens", 10);
-            } else if ("ANTHROPIC".equalsIgnoreCase(apiType)) {
-                // Anthropic格式请求体
-                logger.debug("准备Anthropic格式测试请求");
-                requestBody.put("prompt", "Human: 测试连接\nAssistant:");
-                requestBody.put("model", "claude-instant-1");
-                requestBody.put("max_tokens_to_sample", 10);
-            } else {
-                // 通用格式
-                logger.debug("准备通用格式测试请求: {}", apiType);
-                requestBody.put("message", "测试连接");
+            switch (normalizedApiType) {
+                case "OPENAI":
+                    // OpenAI格式请求体
+                    logger.debug("准备OpenAI格式测试请求");
+                    ArrayNode messagesArray = requestBody.putArray("messages");
+                    ObjectNode message = objectMapper.createObjectNode();
+                    message.put("role", "user");
+                    message.put("content", "Hello");
+                    messagesArray.add(message);
+                    requestBody.put("model", "gpt-3.5-turbo");
+                    requestBody.put("max_tokens", 5);
+                    
+                    // 检查并修复API端点
+                    if (!apiUrl.contains("/chat/completions")) {
+                        if (apiUrl.contains("/v1")) {
+                            endpointUrl = apiUrl.endsWith("/v1") ? 
+                                apiUrl + "/chat/completions" : 
+                                apiUrl + (apiUrl.endsWith("/") ? "v1/chat/completions" : "/v1/chat/completions");
+                        } else {
+                            endpointUrl = apiUrl.endsWith("/") ? 
+                                apiUrl + "v1/chat/completions" : 
+                                apiUrl + "/v1/chat/completions";
+                        }
+                    }
+                    break;
+                    
+                case "OPENAI_COMPATIBLE":
+                    // OpenAI兼容格式请求体
+                    logger.debug("准备OpenAI兼容格式测试请求");
+                    
+                    // 针对特定域名设置特殊处理
+                    if (apiUrl.contains("littlewheat.com")) {
+                        logger.info("检测到littlewheat.com API，使用特定格式");
+                        
+                        // 使用API探测功能自动发现正确的端点
+                        endpointUrl = probeApiEndpoint(apiUrl, apiKey);
+                        logger.info("探测结果端点URL: {}", endpointUrl);
+                        
+                        // 使用标准OpenAI格式请求体
+                        messagesArray = requestBody.putArray("messages");
+                        message = objectMapper.createObjectNode();
+                        message.put("role", "user");
+                        message.put("content", "Hello");
+                        messagesArray.add(message);
+                        requestBody.put("model", "gpt-3.5-turbo");
+                        requestBody.put("max_tokens", 5);
+                    } else {
+                        // 通用OpenAI兼容服务处理
+                        messagesArray = requestBody.putArray("messages");
+                        message = objectMapper.createObjectNode();
+                        message.put("role", "user");
+                        message.put("content", "Hello");
+                        messagesArray.add(message);
+                        requestBody.put("model", "gpt-3.5-turbo");
+                        requestBody.put("max_tokens", 5);
+                        
+                        // 检查并修复API端点 - 兼容服务通常直接使用/v1/chat/completions
+                        if (!apiUrl.contains("/chat/completions")) {
+                            if (apiUrl.contains("/v1")) {
+                                endpointUrl = apiUrl.endsWith("/v1") ? 
+                                    apiUrl + "/chat/completions" : 
+                                    apiUrl + (apiUrl.endsWith("/") ? "v1/chat/completions" : "/v1/chat/completions");
+                            } else {
+                                endpointUrl = apiUrl.endsWith("/") ? 
+                                    apiUrl + "v1/chat/completions" : 
+                                    apiUrl + "/v1/chat/completions";
+                            }
+                        }
+                    }
+                    break;
+                    
+                case "AZURE_OPENAI":
+                    // Azure OpenAI格式请求体
+                    logger.debug("准备Azure OpenAI格式测试请求");
+                    messagesArray = requestBody.putArray("messages");
+                    message = objectMapper.createObjectNode();
+                    message.put("role", "user");
+                    message.put("content", "Hello");
+                    messagesArray.add(message);
+                    requestBody.put("max_tokens", 5);
+                    
+                    // Azure OpenAI通常需要特定的部署名称在URL中
+                    if (!apiUrl.contains("/deployments/")) {
+                        logger.warn("Azure OpenAI URL可能不完整，可能需要包含部署名称");
+                    }
+                    break;
+                    
+                case "ANTHROPIC":
+                    // Anthropic Claude格式请求体
+                    logger.debug("准备Anthropic格式测试请求");
+                    requestBody.put("prompt", "Human: Hello\nAssistant:");
+                    requestBody.put("model", "claude-instant-1");
+                    requestBody.put("max_tokens_to_sample", 5);
+                    
+                    // 检查并修复API端点
+                    if (!apiUrl.contains("/complete")) {
+                        if (apiUrl.contains("/v1")) {
+                            endpointUrl = apiUrl.endsWith("/v1") ? 
+                                apiUrl + "/complete" : 
+                                apiUrl + (apiUrl.endsWith("/") ? "v1/complete" : "/v1/complete");
+                        } else {
+                            endpointUrl = apiUrl.endsWith("/") ? 
+                                apiUrl + "v1/complete" : 
+                                apiUrl + "/v1/complete";
+                        }
+                    }
+                    break;
+                    
+                case "GOOGLE":
+                case "GEMINI":
+                    // Google/Gemini格式请求体
+                    logger.debug("准备Google/Gemini格式测试请求");
+                    ArrayNode partsArray = objectMapper.createArrayNode();
+                    ObjectNode part = objectMapper.createObjectNode();
+                    part.put("text", "Hello");
+                    partsArray.add(part);
+                    
+                    ObjectNode contentObject = objectMapper.createObjectNode();
+                    contentObject.set("parts", partsArray);
+                    
+                    ArrayNode contentsArray = objectMapper.createArrayNode();
+                    contentsArray.add(contentObject);
+                    requestBody.set("contents", contentsArray);
+                    
+                    // 检查并修复API端点
+                    if (!apiUrl.contains("/generateContent")) {
+                        if (apiUrl.contains("/v1")) {
+                            if (apiUrl.contains("/models")) {
+                                // 已经包含模型信息的URL
+                                if (!apiUrl.endsWith(":generateContent")) {
+                                    endpointUrl = apiUrl + ":generateContent";
+                                }
+                            } else {
+                                // 没有包含模型信息的URL
+                                endpointUrl = apiUrl.endsWith("/v1") || apiUrl.endsWith("/v1/") ? 
+                                    apiUrl + "models/gemini-pro:generateContent" : 
+                                    apiUrl + "/models/gemini-pro:generateContent";
+                            }
+                        } else {
+                            endpointUrl = apiUrl.endsWith("/") ? 
+                                apiUrl + "v1/models/gemini-pro:generateContent" : 
+                                apiUrl + "/v1/models/gemini-pro:generateContent";
+                        }
+                    }
+                    break;
+                    
+                case "ZHIPU":
+                case "GLM":
+                    // 智谱格式请求体
+                    logger.debug("准备智谱/GLM格式测试请求");
+                    // ChatGLM支持多种接口，尝试使用通用的聊天接口
+                    requestBody.put("prompt", "Hello");
+                    requestBody.put("temperature", 0.7);
+                    requestBody.put("top_p", 0.7);
+                    requestBody.put("max_tokens", 5);
+                    
+                    // 智谱API接口检查
+                    if (!apiUrl.contains("/chat") && !apiUrl.contains("/generate")) {
+                        endpointUrl = apiUrl.endsWith("/") ? 
+                            apiUrl + "chat" : 
+                            apiUrl + "/chat";
+                    }
+                    break;
+                    
+                default:
+                    // 通用格式，发送最少的请求体
+                    logger.debug("准备通用格式测试请求: {}", normalizedApiType);
+                    requestBody.put("prompt", "Hello");
+                    requestBody.put("max_tokens", 5);
+                    break;
             }
             
             // 创建HTTP实体
             HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
             
+            // 记录详细的请求信息，帮助调试
+            logger.info("发送测试POST请求到 {}", endpointUrl);
+            logger.debug("请求头: {}", headers);
+            logger.debug("请求体: {}", requestBody.toString());
+                
             try {
                 // 发送POST请求
-                logger.debug("发送测试POST请求: {}", requestBody);
-                
                 ResponseEntity<String> response = restTemplate.postForEntity(
-                        apiUrl, requestEntity, String.class);
+                        endpointUrl, requestEntity, String.class);
                 
-                boolean success = response.getStatusCode().is2xxSuccessful();
-                logger.info("模型连通性测试结果: {}, 状态码: {}, 响应长度: {}", 
-                        success ? "成功" : "失败", 
-                        response.getStatusCodeValue(),
-                        response.getBody() != null ? response.getBody().length() : 0);
+                int statusCode = response.getStatusCodeValue();
+                String responseBody = response.getBody();
                 
-                return success;
-            } catch (Exception e) {
-                logger.warn("POST请求测试失败，尝试GET请求: {}", e.getMessage());
+                // 放宽成功条件: 2xx成功，401/403表示认证问题但API可达
+                boolean apiReachable = response.getStatusCode().is2xxSuccessful() || 
+                                      statusCode == 401 || statusCode == 403;
+                boolean apiUsable = response.getStatusCode().is2xxSuccessful();
                 
-                try {
-                    // 尝试GET请求
-                    ResponseEntity<String> getResponse = restTemplate.getForEntity(
-                            apiUrl, String.class);
-                    
-                    boolean success = getResponse.getStatusCode().is2xxSuccessful();
-                    logger.info("模型GET请求测试结果: {}, 状态码: {}", 
-                            success ? "成功" : "失败", getResponse.getStatusCodeValue());
-                    
-                    return success;
-                } catch (Exception getEx) {
-                    logger.error("模型连通性测试失败（GET请求）: {}", getEx.getMessage());
+                logger.info("模型API连通性测试结果 - 端点可达: {}, API可用: {}, 状态码: {}", 
+                        apiReachable, apiUsable, statusCode);
+                
+                if (apiReachable) {
+                    if (!apiUsable) {
+                        logger.warn("API端点可达但认证失败，状态码: {}，这通常表示API密钥有问题", statusCode);
+                    }
+                    // 考虑端点可达就算成功，认证问题由用户检查API密钥解决
+                    return true;
+                } else {
+                    logger.error("API端点请求失败，状态码: {}", statusCode);
                     return false;
                 }
+            } catch (Exception e) {
+                logger.error("发送API请求失败: {}", e.getMessage());
+                return false;
             }
         } catch (Exception e) {
-            logger.error("模型连通性测试失败: {}", e.getMessage());
+            logger.error("模型连通性测试过程中出现异常: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 简单连接测试 - 检查服务器是否可达
+     * @param apiUrl API地址
+     * @return 是否连接成功
+     */
+    private boolean testSimpleConnectivity(String apiUrl) {
+        try {
+            // 提取主机部分
+            String baseUrl = apiUrl;
+            if (baseUrl.contains("://")) {
+                baseUrl = baseUrl.substring(baseUrl.indexOf("://") + 3);
+            }
+            if (baseUrl.contains("/")) {
+                baseUrl = baseUrl.substring(0, baseUrl.indexOf("/"));
+            }
+            
+            // 如果URL包含端口，则提取域名部分
+            String host = baseUrl;
+            int port = 443; // 默认HTTPS端口
+            if (baseUrl.contains(":")) {
+                host = baseUrl.substring(0, baseUrl.indexOf(":"));
+                try {
+                    port = Integer.parseInt(baseUrl.substring(baseUrl.indexOf(":") + 1));
+                } catch (NumberFormatException e) {
+                    // 忽略解析错误，使用默认端口
+                }
+            }
+            
+            logger.debug("尝试连接到主机: {}:{}", host, port);
+            
+            // 尝试简单的Socket连接
+            try (java.net.Socket socket = new java.net.Socket()) {
+                // 设置3秒连接超时
+                socket.connect(new java.net.InetSocketAddress(host, port), 3000);
+                logger.debug("成功连接到主机 {}:{}", host, port);
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("连接服务器失败: {}", e.getMessage());
             return false;
         }
     }
@@ -442,5 +683,80 @@ public class LlmApiServiceImpl implements LlmApiService {
             prompt,
             parameters
         );
+    }
+
+    /**
+     * 探测正确的API端点路径
+     * @param baseUrl 基础API URL
+     * @param apiKey API密钥
+     * @return 找到的有效端点路径，如果没找到返回原始URL
+     */
+    private String probeApiEndpoint(String baseUrl, String apiKey) {
+        logger.info("开始探测API端点: {}", baseUrl);
+        
+        // 常见的API路径组合
+        String[] commonPaths = {
+            "/v1/chat/completions",
+            "/chat/completions", 
+            "/v1/completions",
+            "/completions",
+            "/v1/generate",
+            "/generate",
+            "/api/chat",
+            "/api/generate"
+        };
+        
+        // 准备请求头
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        
+        if (apiKey != null && !apiKey.isEmpty()) {
+            headers.set("Authorization", "Bearer " + apiKey);
+        }
+        
+        // 尝试所有常见路径
+        for (String path : commonPaths) {
+            String testUrl = baseUrl;
+            
+            // 确保URL拼接正确
+            if (baseUrl.endsWith("/")) {
+                testUrl = baseUrl + path.substring(1);
+            } else {
+                testUrl = baseUrl + path;
+            }
+            
+            try {
+                logger.debug("探测API端点: {}", testUrl);
+                
+                // 创建最小请求体
+                ObjectNode requestBody = objectMapper.createObjectNode();
+                ArrayNode messagesNode = requestBody.putArray("messages");
+                ObjectNode messageObject = objectMapper.createObjectNode();
+                messageObject.put("role", "user");
+                messageObject.put("content", "test");
+                messagesNode.add(messageObject);
+                requestBody.put("max_tokens", 1);
+                requestBody.put("model", "gpt-3.5-turbo");
+                
+                // 创建HTTP实体
+                HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
+                
+                // 发送请求
+                ResponseEntity<String> response = restTemplate.postForEntity(testUrl, requestEntity, String.class);
+                
+                // 检查响应
+                if (response.getStatusCode().is2xxSuccessful() || response.getStatusCodeValue() == 401) {
+                    logger.info("找到可能的API端点: {}, 状态码: {}", testUrl, response.getStatusCodeValue());
+                    return testUrl;
+                }
+            } catch (Exception e) {
+                // 忽略错误，继续尝试下一个路径
+                logger.debug("探测路径 {} 失败: {}", testUrl, e.getMessage());
+            }
+        }
+        
+        // 如果没有找到有效端点，返回原始URL
+        logger.warn("未找到有效的API端点，使用原始URL: {}", baseUrl);
+        return baseUrl;
     }
 } 

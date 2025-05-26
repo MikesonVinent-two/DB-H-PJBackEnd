@@ -981,6 +981,308 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         }
     }
     
+    @Override
+    public Map<String, Object> testSystemConnectivity() {
+        logger.info("测试系统所有模型连通性");
+        long startTime = System.currentTimeMillis();
+        
+        // 获取所有已配置的模型
+        List<LlmModel> allModels = llmModelRepository.findAll();
+        if (allModels.isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("error", "系统中未配置任何模型");
+            result.put("timestamp", System.currentTimeMillis());
+            return result;
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> modelResults = new ArrayList<>();
+        int passedCount = 0;
+        int failedCount = 0;
+        
+        // 创建线程池并行测试所有模型
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(allModels.size(), 5));
+        List<CompletableFuture<Map<String, Object>>> futures = new ArrayList<>();
+        
+        // 提交所有测试任务
+        for (LlmModel model : allModels) {
+            CompletableFuture<Map<String, Object>> future = CompletableFuture.supplyAsync(() -> {
+                Map<String, Object> modelResult = new HashMap<>();
+                modelResult.put("modelId", model.getId());
+                modelResult.put("modelName", model.getName());
+                modelResult.put("provider", model.getProvider());
+                modelResult.put("apiEndpoint", model.getApiUrl());
+                
+                long modelStartTime = System.currentTimeMillis();
+                try {
+                    // 测试模型连通性
+                    boolean connected = llmApiService.testModelConnectivity(
+                        model.getApiUrl(),
+                        model.getApiKey(),
+                        model.getApiType()
+                    );
+                    
+                    long responseTime = System.currentTimeMillis() - modelStartTime;
+                    modelResult.put("connected", connected);
+                    modelResult.put("responseTime", responseTime);
+                    
+                    if (!connected) {
+                        modelResult.put("error", "API测试失败");
+                    }
+                    
+                    return modelResult;
+                } catch (Exception e) {
+                    long responseTime = System.currentTimeMillis() - modelStartTime;
+                    modelResult.put("connected", false);
+                    modelResult.put("responseTime", responseTime);
+                    modelResult.put("error", e.getMessage());
+                    return modelResult;
+                }
+            }, executor);
+            
+            futures.add(future);
+        }
+        
+        // 收集所有测试结果
+        for (int i = 0; i < allModels.size(); i++) {
+            try {
+                // 设置合理的超时时间
+                int timeoutSeconds = getModelTimeoutSeconds(allModels.get(i));
+                Map<String, Object> modelResult = futures.get(i).get(timeoutSeconds, TimeUnit.SECONDS);
+                modelResults.add(modelResult);
+                
+                if ((Boolean)modelResult.get("connected")) {
+                    passedCount++;
+                } else {
+                    failedCount++;
+                }
+            } catch (Exception e) {
+                Map<String, Object> modelResult = new HashMap<>();
+                modelResult.put("modelId", allModels.get(i).getId());
+                modelResult.put("modelName", allModels.get(i).getName());
+                modelResult.put("provider", allModels.get(i).getProvider());
+                modelResult.put("connected", false);
+                modelResult.put("error", "测试超时或异常: " + e.getMessage());
+                modelResults.add(modelResult);
+                failedCount++;
+            }
+        }
+        
+        // 关闭线程池
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(120, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        
+        // 组装最终结果
+        long testDuration = System.currentTimeMillis() - startTime;
+        result.put("success", true);
+        result.put("timestamp", System.currentTimeMillis());
+        result.put("totalModels", allModels.size());
+        result.put("passedModels", passedCount);
+        result.put("failedModels", failedCount);
+        result.put("testDuration", testDuration);
+        result.put("modelResults", modelResults);
+        
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> testModelConnectivity(Long modelId) {
+        logger.info("测试模型{}连通性", modelId);
+        long startTime = System.currentTimeMillis();
+        
+        // 获取指定模型
+        LlmModel model = llmModelRepository.findById(modelId)
+                .orElseThrow(() -> new EntityNotFoundException("找不到指定的模型(ID: " + modelId + ")"));
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("modelId", model.getId());
+        result.put("modelName", model.getName());
+        result.put("provider", model.getProvider());
+        result.put("apiEndpoint", model.getApiUrl());
+        result.put("timestamp", System.currentTimeMillis());
+        
+        try {
+            // 测试模型连通性
+            boolean connected = llmApiService.testModelConnectivity(
+                model.getApiUrl(),
+                model.getApiKey(),
+                model.getApiType()
+            );
+            
+            long responseTime = System.currentTimeMillis() - startTime;
+            result.put("connected", connected);
+            result.put("responseTime", responseTime);
+            result.put("success", connected);
+            
+            if (!connected) {
+                result.put("error", "API测试失败");
+            }
+        } catch (Exception e) {
+            long responseTime = System.currentTimeMillis() - startTime;
+            result.put("connected", false);
+            result.put("responseTime", responseTime);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> testBatchModelsConnectivity(Long batchId) {
+        logger.info("测试批次{}关联的所有模型连通性", batchId);
+        long startTime = System.currentTimeMillis();
+        
+        // 获取批次
+        AnswerGenerationBatch batch = batchRepository.findById(batchId)
+                .orElseThrow(() -> new EntityNotFoundException("找不到指定的批次(ID: " + batchId + ")"));
+        
+        // 获取批次关联的所有运行
+        List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batchId);
+        if (runs.isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("batchId", batchId);
+            result.put("batchName", batch.getName());
+            result.put("error", "批次未关联任何运行");
+            result.put("timestamp", System.currentTimeMillis());
+            return result;
+        }
+        
+        // 提取运行中使用的所有模型（去重）
+        Map<Long, LlmModel> modelsMap = new HashMap<>();
+        for (ModelAnswerRun run : runs) {
+            LlmModel model = run.getLlmModel();
+            if (!modelsMap.containsKey(model.getId())) {
+                modelsMap.put(model.getId(), model);
+            }
+        }
+        
+        List<LlmModel> models = new ArrayList<>(modelsMap.values());
+        
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> modelResults = new ArrayList<>();
+        int passedCount = 0;
+        int failedCount = 0;
+        
+        // 创建线程池并行测试所有模型
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(models.size(), 5));
+        List<CompletableFuture<Map<String, Object>>> futures = new ArrayList<>();
+        
+        // 提交所有测试任务
+        for (LlmModel model : models) {
+            CompletableFuture<Map<String, Object>> future = CompletableFuture.supplyAsync(() -> {
+                Map<String, Object> modelResult = new HashMap<>();
+                modelResult.put("modelId", model.getId());
+                modelResult.put("modelName", model.getName());
+                modelResult.put("provider", model.getProvider());
+                modelResult.put("apiEndpoint", model.getApiUrl());
+                
+                long modelStartTime = System.currentTimeMillis();
+                try {
+                    // 测试模型连通性
+                    boolean connected = llmApiService.testModelConnectivity(
+                        model.getApiUrl(),
+                        model.getApiKey(),
+                        model.getApiType()
+                    );
+                    
+                    long responseTime = System.currentTimeMillis() - modelStartTime;
+                    modelResult.put("connected", connected);
+                    modelResult.put("responseTime", responseTime);
+                    
+                    if (!connected) {
+                        modelResult.put("error", "API测试失败");
+                    }
+                    
+                    // 查找使用该模型的运行
+                    List<ModelAnswerRun> modelRuns = runs.stream()
+                        .filter(run -> run.getLlmModel().getId().equals(model.getId()))
+                        .collect(Collectors.toList());
+                    
+                    List<Map<String, Object>> runInfos = new ArrayList<>();
+                    for (ModelAnswerRun run : modelRuns) {
+                        Map<String, Object> runInfo = new HashMap<>();
+                        runInfo.put("runId", run.getId());
+                        runInfo.put("runName", run.getRunName());
+                        runInfo.put("status", run.getStatus());
+                        runInfos.add(runInfo);
+                    }
+                    modelResult.put("runs", runInfos);
+                    
+                    return modelResult;
+                } catch (Exception e) {
+                    long responseTime = System.currentTimeMillis() - modelStartTime;
+                    modelResult.put("connected", false);
+                    modelResult.put("responseTime", responseTime);
+                    modelResult.put("error", e.getMessage());
+                    return modelResult;
+                }
+            }, executor);
+            
+            futures.add(future);
+        }
+        
+        // 收集所有测试结果
+        for (int i = 0; i < models.size(); i++) {
+            try {
+                // 设置合理的超时时间
+                int timeoutSeconds = getModelTimeoutSeconds(models.get(i));
+                Map<String, Object> modelResult = futures.get(i).get(timeoutSeconds, TimeUnit.SECONDS);
+                modelResults.add(modelResult);
+                
+                if ((Boolean)modelResult.get("connected")) {
+                    passedCount++;
+                } else {
+                    failedCount++;
+                }
+            } catch (Exception e) {
+                Map<String, Object> modelResult = new HashMap<>();
+                modelResult.put("modelId", models.get(i).getId());
+                modelResult.put("modelName", models.get(i).getName());
+                modelResult.put("provider", models.get(i).getProvider());
+                modelResult.put("connected", false);
+                modelResult.put("error", "测试超时或异常: " + e.getMessage());
+                modelResults.add(modelResult);
+                failedCount++;
+            }
+        }
+        
+        // 关闭线程池
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(120, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        
+        // 组装最终结果
+        long testDuration = System.currentTimeMillis() - startTime;
+        result.put("success", true);
+        result.put("batchId", batchId);
+        result.put("batchName", batch.getName());
+        result.put("batchStatus", batch.getStatus());
+        result.put("timestamp", System.currentTimeMillis());
+        result.put("totalModels", models.size());
+        result.put("passedModels", passedCount);
+        result.put("failedModels", failedCount);
+        result.put("testDuration", testDuration);
+        result.put("modelResults", modelResults);
+        
+        return result;
+    }
+    
     // 辅助方法
     private AnswerGenerationBatchDTO convertToDTO(AnswerGenerationBatch batch) {
         if (batch == null) {

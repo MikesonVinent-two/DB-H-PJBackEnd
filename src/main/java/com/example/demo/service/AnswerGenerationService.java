@@ -101,6 +101,29 @@ public interface AnswerGenerationService {
     List<ModelAnswerRunDTO> getRunsByModelId(Long modelId);
     
     /**
+     * 测试系统连通性，检查所有已配置模型的连通状态
+     * 
+     * @return 包含测试结果的Map，key为模型ID或名称，value为连通性测试结果
+     */
+    Map<String, Object> testSystemConnectivity();
+    
+    /**
+     * 测试特定模型的连通性
+     * 
+     * @param modelId 模型ID
+     * @return 包含测试结果的Map
+     */
+    Map<String, Object> testModelConnectivity(Long modelId);
+    
+    /**
+     * 测试特定批次关联的所有模型连通性
+     * 
+     * @param batchId 批次ID
+     * @return 包含所有模型测试结果的Map
+     */
+    Map<String, Object> testBatchModelsConnectivity(Long batchId);
+    
+    /**
      * 批次创建请求内部类
      */
     public static class AnswerGenerationBatchCreateRequest {
