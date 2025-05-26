@@ -6,6 +6,8 @@ import org.springframework.data.repository.query.Param;
 import com.example.demo.entity.StandardQuestion;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -36,4 +38,8 @@ public interface StandardQuestionRepository extends JpaRepository<StandardQuesti
     
     // 根据问题文本内容查找标准问题
     List<StandardQuestion> findByQuestionTextContaining(String questionText);
+    
+    // 查找所有最新版本的标准问题（没有子问题的问题，即版本树的叶子节点）
+    @Query("SELECT sq FROM StandardQuestion sq WHERE NOT EXISTS (SELECT 1 FROM StandardQuestion child WHERE child.parentStandardQuestion.id = sq.id)")
+    Page<StandardQuestion> findLatestVersions(Pageable pageable);
 } 

@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -33,15 +34,43 @@ public class BatchStateManager {
     private static final String BATCH_LOCK_PREFIX = "batch:lock:";
     
     // 定义允许的状态转换
-    private static final Map<BatchStatus, Set<BatchStatus>> ALLOWED_TRANSITIONS = new HashMap<>();
+    private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = new HashMap<>();
     
     static {
-        ALLOWED_TRANSITIONS.put(BatchStatus.PENDING, EnumSet.of(BatchStatus.IN_PROGRESS, BatchStatus.PAUSED, BatchStatus.FAILED));
-        ALLOWED_TRANSITIONS.put(BatchStatus.IN_PROGRESS, EnumSet.of(BatchStatus.PAUSED, BatchStatus.COMPLETED, BatchStatus.FAILED));
-        ALLOWED_TRANSITIONS.put(BatchStatus.PAUSED, EnumSet.of(BatchStatus.RESUMING, BatchStatus.FAILED));
-        ALLOWED_TRANSITIONS.put(BatchStatus.RESUMING, EnumSet.of(BatchStatus.IN_PROGRESS, BatchStatus.PAUSED, BatchStatus.FAILED));
-        ALLOWED_TRANSITIONS.put(BatchStatus.COMPLETED, EnumSet.of(BatchStatus.FAILED));
-        ALLOWED_TRANSITIONS.put(BatchStatus.FAILED, EnumSet.noneOf(BatchStatus.class));
+        // 初始化PENDING状态的可转换状态
+        Set<String> pendingTransitions = new HashSet<>();
+        pendingTransitions.add("GENERATING_ANSWERS");
+        pendingTransitions.add("PAUSED");
+        pendingTransitions.add("FAILED");
+        ALLOWED_TRANSITIONS.put("PENDING", pendingTransitions);
+        
+        // 初始化GENERATING_ANSWERS状态的可转换状态
+        Set<String> generatingTransitions = new HashSet<>();
+        generatingTransitions.add("PAUSED");
+        generatingTransitions.add("COMPLETED");
+        generatingTransitions.add("FAILED");
+        ALLOWED_TRANSITIONS.put("GENERATING_ANSWERS", generatingTransitions);
+        
+        // 初始化PAUSED状态的可转换状态
+        Set<String> pausedTransitions = new HashSet<>();
+        pausedTransitions.add("RESUMING");
+        pausedTransitions.add("FAILED");
+        ALLOWED_TRANSITIONS.put("PAUSED", pausedTransitions);
+        
+        // 初始化RESUMING状态的可转换状态
+        Set<String> resumingTransitions = new HashSet<>();
+        resumingTransitions.add("GENERATING_ANSWERS");
+        resumingTransitions.add("PAUSED");
+        resumingTransitions.add("FAILED");
+        ALLOWED_TRANSITIONS.put("RESUMING", resumingTransitions);
+        
+        // 初始化COMPLETED状态的可转换状态
+        Set<String> completedTransitions = new HashSet<>();
+        completedTransitions.add("FAILED");
+        ALLOWED_TRANSITIONS.put("COMPLETED", completedTransitions);
+        
+        // 初始化FAILED状态的可转换状态
+        ALLOWED_TRANSITIONS.put("FAILED", new HashSet<>());
     }
 
     @Autowired
@@ -90,9 +119,9 @@ public class BatchStateManager {
                     logger.info("批次{}当前数据库状态: {}", batchId, currentDbStatus);
                     
                     // 2. 验证状态转换是否合法
-                    BatchStatus fromStatus = BatchStatus.valueOf(currentDbStatus);
-                    if (!ALLOWED_TRANSITIONS.get(fromStatus).contains(BatchStatus.PAUSED)) {
-                        logger.warn("批次{}当前状态{}不允许转换为PAUSED", batchId, fromStatus);
+                    if (!ALLOWED_TRANSITIONS.containsKey(currentDbStatus) || 
+                        !ALLOWED_TRANSITIONS.get(currentDbStatus).contains("PAUSED")) {
+                        logger.warn("批次{}当前状态{}不允许转换为PAUSED", batchId, currentDbStatus);
                         return false;
                     }
                     
@@ -101,18 +130,18 @@ public class BatchStateManager {
                     logger.info("批次{}已设置中断标志", batchId);
                     
                     // 4. 更新Redis状态
-                    setBatchState(batchId, BatchStatus.PAUSED.name());
+                    setBatchState(batchId, "PAUSED");
                     logger.info("批次{}Redis状态已更新为PAUSED", batchId);
                     
                     // 5. 更新数据库状态
                     int updated = jdbcTemplate.update(
                         "UPDATE answer_generation_batches SET status = ?, pause_time = ?, pause_reason = ?, last_activity_time = ? WHERE id = ?",
-                        BatchStatus.PAUSED.name(), LocalDateTime.now(), reason, LocalDateTime.now(), batchId);
+                        "PAUSED", LocalDateTime.now(), reason, LocalDateTime.now(), batchId);
                     
                     // 6. 更新运行状态
                     int runUpdated = jdbcTemplate.update(
                         "UPDATE model_answer_runs SET status = ?, pause_time = ?, pause_reason = ?, last_activity_time = ? " +
-                        "WHERE answer_generation_batch_id = ? AND (status = 'GENERATING_ANSWERS' OR status = 'RESUMING' OR status = 'EVALUATING' OR status = 'PENDING')",
+                        "WHERE answer_generation_batch_id = ? AND (status = 'GENERATING_ANSWERS' OR status = 'RESUMING' OR status = 'PENDING')",
                         "PAUSED", LocalDateTime.now(), reason, LocalDateTime.now(), batchId);
                     
                     logger.info("批次{}数据库状态更新结果: 批次={}, 运行={}", batchId, updated, runUpdated);
@@ -149,16 +178,6 @@ public class BatchStateManager {
      * @return 是否成功恢复
      */
     public boolean resumeBatch(Long batchId) {
-        return resumeBatch(batchId, null);
-    }
-
-    /**
-     * 恢复批次，并在状态更新后执行回调函数
-     * @param batchId 批次ID
-     * @param onComplete 状态更新完成后的回调函数
-     * @return 是否成功恢复
-     */
-    public boolean resumeBatch(Long batchId, Runnable onComplete) {
         RLock lock = getBatchLock(batchId);
         try {
             // 获取锁，最多等待5秒，锁定30秒
@@ -191,32 +210,28 @@ public class BatchStateManager {
                         return false;
                     }
                     
-                    // 3. 清除中断标志
+                    // 3. 执行简化的状态更新流程：先清除中断标志，再更新状态
+                    // 3.1 清除中断标志 (Redis)
                     setInterruptFlag(batchId, false);
                     logger.info("批次{}已清除中断标志", batchId);
                     
-                    // 3.1 清除任务内存中的中断标志
-                    if (answerGenerationTask != null) {
-                        answerGenerationTask.clearInterruptionFlag(batchId);
-                        logger.info("批次{}的任务内存中断标志已清除", batchId);
-                    }
-                    
-                    // 4. 更新Redis状态
-                    setBatchState(batchId, BatchStatus.RESUMING.name());
+                    // 3.2 更新Redis状态
+                    setBatchState(batchId, "RESUMING");
                     logger.info("批次{}Redis状态已更新为RESUMING", batchId);
                     
-                    // 4.1 更新任务内存状态
+                    // 3.3 如果有任务实例，清除任务内存中的中断标志
                     if (answerGenerationTask != null) {
-                        answerGenerationTask.updateBatchMemoryState(batchId, BatchStatus.RESUMING.name());
+                        answerGenerationTask.clearInterruptionFlag(batchId);
+                        answerGenerationTask.updateBatchMemoryState(batchId, "RESUMING");
                         logger.info("批次{}的任务内存状态已更新为RESUMING", batchId);
                     }
                     
-                    // 5. 更新数据库状态
+                    // 4. 更新数据库状态
                     int updated = jdbcTemplate.update(
                         "UPDATE answer_generation_batches SET status = ?, last_activity_time = ? WHERE id = ?",
-                        BatchStatus.RESUMING.name(), LocalDateTime.now(), batchId);
+                        "RESUMING", LocalDateTime.now(), batchId);
                     
-                    // 6. 更新运行状态
+                    // 5. 更新运行状态
                     int runUpdated = jdbcTemplate.update(
                         "UPDATE model_answer_runs SET status = ?, last_activity_time = ? " +
                         "WHERE answer_generation_batch_id = ? AND status = 'PAUSED'",
@@ -224,35 +239,15 @@ public class BatchStateManager {
                     
                     logger.info("批次{}数据库状态更新结果: 批次={}, 运行={}", batchId, updated, runUpdated);
                     
-                    // 7. 验证状态更新
-                    String finalStatus = jdbcTemplate.queryForObject(
-                        "SELECT status FROM answer_generation_batches WHERE id = ?", 
-                        String.class, batchId);
+                    // 6. 返回状态更新是否成功
+                    boolean success = updated > 0;
                     
-                    logger.info("批次{}最终状态: {}", batchId, finalStatus);
-                    
-                    // 检查最终状态是否有异常，如果有则修正
-                    if (finalStatus != null && finalStatus.contains("bootRun")) {
-                        String correctedStatus = finalStatus.replace("bootRun", "");
-                        logger.warn("批次{}最终状态异常: {}，修正为: {}", batchId, finalStatus, correctedStatus);
-                        
-                        jdbcTemplate.update(
-                            "UPDATE answer_generation_batches SET status = ? WHERE id = ?",
-                            correctedStatus, batchId);
-                        
-                        finalStatus = correctedStatus;
-                    }
-                    
-                    boolean success = "RESUMING".equals(finalStatus);
-                    
-                    // 8. 如果更新成功并且提供了回调函数，执行回调
-                    if (success && onComplete != null) {
-                        // 在锁释放前执行回调，确保状态更新和任务启动的原子性
-                        try {
-                            onComplete.run();
-                            logger.info("批次{}已触发恢复回调函数", batchId);
-                        } catch (Exception e) {
-                            logger.error("批次{}执行恢复回调函数时出错", batchId, e);
+                    // 7. 二次确认Redis状态
+                    if (success) {
+                        String redisState = getBatchState(batchId);
+                        if (!"RESUMING".equals(redisState)) {
+                            logger.warn("批次{}数据库状态更新为RESUMING后，Redis状态仍为{}，再次更新Redis状态", batchId, redisState);
+                            setBatchState(batchId, "RESUMING");
                         }
                     }
                     
@@ -356,7 +351,7 @@ public class BatchStateManager {
                         // 如果数据库状态是PAUSED，确保设置中断标志
                         if ("PAUSED".equals(dbStatus)) {
                             setInterruptFlag(batchId, true);
-                        } else if ("RESUMING".equals(dbStatus) || "IN_PROGRESS".equals(dbStatus)) {
+                        } else if ("RESUMING".equals(dbStatus) || "GENERATING_ANSWERS".equals(dbStatus)) {
                             setInterruptFlag(batchId, false);
                         }
                     }

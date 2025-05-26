@@ -43,7 +43,6 @@ import com.example.demo.service.WebSocketService;
 import com.example.demo.task.AnswerGenerationTask;
 import com.example.demo.service.LlmApiService;
 import com.example.demo.manager.BatchStateManager;
-import com.example.demo.task.BatchTaskScheduler;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.EntityManager;
@@ -60,6 +59,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.UUID;
 
 @Service
 public class AnswerGenerationServiceImpl implements AnswerGenerationService {
@@ -81,7 +81,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
     private final JdbcTemplate jdbcTemplate;
     private final PlatformTransactionManager transactionManager;
     private final BatchStateManager batchStateManager;
-    private final BatchTaskScheduler batchTaskScheduler;
+    private final ExecutorService taskExecutor;
     
     @Autowired
     public AnswerGenerationServiceImpl(
@@ -99,8 +99,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             EntityManager entityManager,
             JdbcTemplate jdbcTemplate,
             PlatformTransactionManager transactionManager,
-            BatchStateManager batchStateManager,
-            BatchTaskScheduler batchTaskScheduler) {
+            BatchStateManager batchStateManager) {
         this.batchRepository = batchRepository;
         this.runRepository = runRepository;
         this.datasetVersionRepository = datasetVersionRepository;
@@ -116,7 +115,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         this.jdbcTemplate = jdbcTemplate;
         this.transactionManager = transactionManager;
         this.batchStateManager = batchStateManager;
-        this.batchTaskScheduler = batchTaskScheduler;
+        this.taskExecutor = Executors.newFixedThreadPool(5);
     }
     
     // 实现接口方法
@@ -289,26 +288,15 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             batch = batchRepository.findById(batchId)
                     .orElseThrow(() -> new EntityNotFoundException("找不到指定的批次(ID: " + batchId + ")"));
             
-            // 检查批次状态
-            if (batch.getStatus() != BatchStatus.PENDING && batch.getStatus() != BatchStatus.PAUSED && batch.getStatus() != BatchStatus.RESUMING) {
-                String errorMsg = String.format("批次(ID: %d)当前状态为%s，无法启动", batchId, batch.getStatus());
-                logger.error(errorMsg);
-                
-                // 通过WebSocket发送错误通知
-                webSocketService.sendErrorMessage(batchId, errorMsg, batch.getStatus());
-                
-                throw new IllegalStateException(errorMsg);
-            }
+            // 删除状态检查，允许任何状态的批次都能被启动
+            logger.info("批次{}当前状态为{}，开始启动处理", batchId, batch.getStatus());
             
             // 获取批次的所有运行
             List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batchId);
             if (runs.isEmpty()) {
                 String errorMsg = String.format("批次(ID: %d)没有关联的运行", batchId);
                 logger.error(errorMsg);
-                
-                // 通过WebSocket发送错误通知
                 webSocketService.sendErrorMessage(batchId, errorMsg, null);
-                
                 throw new IllegalStateException(errorMsg);
             }
             
@@ -339,62 +327,43 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             }
             
             // 所有模型都能正常连接，继续启动批次
-            logger.info("所有模型连通性测试通过，更新批次状态为IN_PROGRESS");
+            logger.info("所有模型连通性测试通过，更新批次状态为GENERATING_ANSWERS");
             
-            // 更新批次状态
-            batch.setStatus(BatchStatus.IN_PROGRESS);
-            batch.setLastActivityTime(LocalDateTime.now());
-            // 直接使用JDBC更新last_check_time字段，避免编译问题
+            // 直接使用JDBC更新批次状态和时间
             jdbcTemplate.update(
-                "UPDATE answer_generation_batches SET last_check_time = ? WHERE id = ?",
-                LocalDateTime.now(), batch.getId());
-            if (batch.getStatus() == BatchStatus.PAUSED) {
-                batch.setResumeCount(batch.getResumeCount() + 1);
-            }
-            batch = batchRepository.saveAndFlush(batch); // 使用saveAndFlush确保立即写入数据库
-            logger.info("批次状态已更新为: {}", batch.getStatus());
+                "UPDATE answer_generation_batches SET status = 'GENERATING_ANSWERS', last_activity_time = ?, last_check_time = ? WHERE id = ?",
+                LocalDateTime.now(), LocalDateTime.now(), batch.getId());
             
-            // 再次查询确认状态已更新
-            entityManager.clear(); // 清除一级缓存
-            batch = batchRepository.findById(batchId).orElseThrow();
-            logger.info("确认批次状态: {}", batch.getStatus());
+            logger.info("批次状态已更新为: GENERATING_ANSWERS");
+            
+            // 立即同步Redis状态 - 简单记录，不作为决策依据
+            if (batchStateManager != null) {
+                batchStateManager.setBatchState(batchId, "GENERATING_ANSWERS");
+                batchStateManager.setInterruptFlag(batchId, false);
+                logger.info("已同步批次{}的Redis状态为GENERATING_ANSWERS", batchId);
+            }
             
             // 更新运行状态
             for (ModelAnswerRun run : runs) {
-                if (run.getStatus() == RunStatus.PENDING || run.getStatus() == RunStatus.PAUSED) {
-                    run.setStatus(RunStatus.GENERATING_ANSWERS);
-                    run.setLastActivityTime(LocalDateTime.now());
-                    if (run.getStatus() == RunStatus.PAUSED) {
-                        run.setResumeCount(run.getResumeCount() + 1);
-                    }
-                    runRepository.save(run);
-                    
-                    // 通过WebSocket发送状态变更通知
-                    webSocketService.sendStatusChangeMessage(run.getId(), run.getStatus().name(), 
-                        "开始生成回答");
-                }
-            }
-            runRepository.flush(); // 确保运行状态立即写入数据库
-            
-            // 添加短延迟确保状态更新已持久化
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                jdbcTemplate.update(
+                    "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                    LocalDateTime.now(), run.getId()
+                );
+                
+                // 通过WebSocket发送状态变更通知
+                webSocketService.sendStatusChangeMessage(run.getId(), RunStatus.GENERATING_ANSWERS.name(), 
+                    "开始生成回答");
             }
             
             // 通过WebSocket发送批次启动通知
             Map<String, Object> notificationData = new HashMap<>();
             notificationData.put("batchId", batch.getId());
             notificationData.put("batchName", batch.getName());
-            notificationData.put("status", batch.getStatus().name());
+            notificationData.put("status", "GENERATING_ANSWERS");
             notificationData.put("startTime", LocalDateTime.now());
             notificationData.put("runsCount", runs.size());
             
             webSocketService.sendBatchMessage(batchId, MessageType.TASK_STARTED, notificationData);
-            
-            // 提交事务，确保状态更新对其他事务可见
-            entityManager.flush();
             
         } catch (Exception e) {
             logger.error("启动批次{}时发生异常: {}", batchId, e.getMessage(), e);
@@ -417,9 +386,16 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             throw e instanceof RuntimeException ? (RuntimeException)e : new RuntimeException("启动批次失败", e);
         }
         
-        // 状态更新事务结束后，使用任务调度器启动批次处理
-        logger.info("提交批次{}到任务调度器", batchId);
-        batchTaskScheduler.submitBatch(batchId);
+        // 直接提交任务
+        logger.info("直接启动批次{}处理任务", batchId);
+        taskExecutor.submit(() -> {
+            try {
+                answerGenerationTask.startBatchAnswerGeneration(batchId);
+                logger.info("批次{}处理任务完成", batchId);
+            } catch (Exception e) {
+                logger.error("批次{}处理任务执行失败: {}", batchId, e.getMessage(), e);
+            }
+        });
     }
     
     /**
@@ -428,7 +404,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startBatchProcessingTask(Long batchId) {
         try {
-            // 先获取当前状态
+            // 获取当前状态但不用于判断是否处理
             String currentStatus = jdbcTemplate.queryForObject(
                 "SELECT status FROM answer_generation_batches WHERE id = ?", 
                 String.class, batchId);
@@ -448,14 +424,14 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                 currentStatus = correctedStatus;
             }
             
-            // 如果是RESUMING状态，保持不变；否则更新为IN_PROGRESS
-            if (!"RESUMING".equals(currentStatus)) {
-                jdbcTemplate.update(
-                    "UPDATE answer_generation_batches SET status = 'IN_PROGRESS', last_activity_time = ? WHERE id = ?",
-                    LocalDateTime.now(), batchId);
-            }
+            // 直接更新状态为GENERATING_ANSWERS，不做状态检查
+            jdbcTemplate.update(
+                "UPDATE answer_generation_batches SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                LocalDateTime.now(), batchId);
             
-            // 确保批次状态为RESUMING或IN_PROGRESS
+            logger.info("批次{}状态已更新为GENERATING_ANSWERS", batchId);
+            
+            // 确保批次状态为GENERATING_ANSWERS
             // 这是关键部分：使用AtomicBoolean确保任务只执行一次
             final AtomicBoolean taskStarted = new AtomicBoolean(false);
             
@@ -472,8 +448,8 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                             
                             logger.debug("状态同步线程: 批次{}当前状态为{}", batchId, status);
                             
-                            // 如果状态是RESUMING或IN_PROGRESS，确保内存状态一致并清除中断标志
-                            if ("RESUMING".equals(status) || "IN_PROGRESS".equals(status)) {
+                            // 如果状态是GENERATING_ANSWERS，确保内存状态一致并清除中断标志
+                            if ("GENERATING_ANSWERS".equals(status) || "RESUMING".equals(status)) {
                                 answerGenerationTask.updateBatchMemoryState(batchId, status);
                                 answerGenerationTask.clearInterruptionFlag(batchId);
                                 logger.debug("状态同步线程: 批次{}处于活动状态{}，已同步内存状态并清除中断标志", batchId, status);
@@ -590,11 +566,12 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
                 try {
                     logger.info("测试模型连通性: {}", model.getName());
-                    // 使用LlmApiService中的方法进行测试
+                    // 使用LlmApiService中的方法进行测试，传入模型名称
                     return llmApiService.testModelConnectivity(
                         model.getApiUrl(), 
                         model.getApiKey(), 
-                        model.getApiType());
+                        model.getApiType(),
+                        model.getName());  // 传入模型表中的模型名称
                 } catch (Exception e) {
                     logger.error("模型 {} 连通性测试失败: {}", model.getName(), e.getMessage());
                     return false;
@@ -802,9 +779,12 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
             }
         };
         
-        // 委托BatchStateManager恢复批次，并在状态更新后立即执行任务启动回调
-        boolean success = batchStateManager.resumeBatch(batchId, startTaskCallback);
-        if (!success) {
+        // 先更新状态，状态更新成功后再执行任务启动回调
+        boolean success = batchStateManager.resumeBatch(batchId);
+        if (success) {
+            // 状态更新成功后，执行回调启动任务
+            startTaskCallback.run();
+        } else {
             throw new IllegalStateException("无法恢复批次 " + batchId);
         }
     }
@@ -870,8 +850,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batchId);
         for (ModelAnswerRun run : runs) {
             if (run.getStatus() == RunStatus.FAILED || 
-                run.getStatus() == RunStatus.GENERATING_ANSWERS || 
-                run.getStatus() == RunStatus.EVALUATING) {
+                run.getStatus() == RunStatus.GENERATING_ANSWERS) {
                 
                 run.setStatus(RunStatus.PAUSED);
                 run.setLastActivityTime(LocalDateTime.now());
@@ -903,77 +882,87 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         logger.info("强制恢复批次执行: {}", batchId);
         
         try {
-            // 获取批次关联的所有运行
-            logger.info("获取批次{}关联的所有运行", batchId);
-            List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batchId);
-            if (runs.isEmpty()) {
-                String errorMsg = String.format("批次(ID: %d)没有关联的运行", batchId);
-                logger.error(errorMsg);
-                throw new IllegalStateException(errorMsg);
+            // 无论如何，先清除Redis和内存中的中断标志
+            // 这是最关键的改动，确保即使数据库更新失败，中断标志也会被清除
+            if (batchStateManager != null) {
+                logger.info("批次{}：清除Redis中的中断标志", batchId);
+                batchStateManager.setInterruptFlag(batchId, false);
+                batchStateManager.setBatchState(batchId, "GENERATING_ANSWERS");
             }
             
-            // 测试所有模型的连通性
-            logger.info("执行恢复前的模型连通性测试...");
-            List<String> failedModels = testModelsConnectivity(runs);
-            
-            if (!failedModels.isEmpty()) {
-                String errorMsg = "恢复失败，以下模型连接测试失败: " + String.join(", ", failedModels);
-                logger.error("批次(ID: {})恢复失败: {}", batchId, errorMsg);
-                
-                // 更新批次状态为失败
-                jdbcTemplate.update(
-                    "UPDATE answer_generation_batches SET status = 'FAILED', error_message = ?, last_activity_time = ? WHERE id = ?",
-                    errorMsg, LocalDateTime.now(), batchId
-                );
-                
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, "FAILED");
-                }
-                
-                // 通过WebSocket发送错误通知
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("batchId", batchId);
-                payload.put("status", "FAILED");
-                payload.put("error", errorMsg);
-                payload.put("failedModels", failedModels);
-                
-                webSocketService.sendBatchMessage(batchId, MessageType.ERROR, payload);
-                
-                throw new IllegalStateException(errorMsg);
+            // 通知任务清除内存中的中断标志
+            if (answerGenerationTask != null) {
+                logger.info("批次{}：清除任务内存中的中断标志", batchId);
+                answerGenerationTask.clearInterruptionFlag(batchId);
+                answerGenerationTask.updateBatchMemoryState(batchId, "GENERATING_ANSWERS");
             }
             
-            logger.info("所有模型连通性测试通过，立即启动批次处理");
+            // 首先检查批次当前状态，避免重复恢复
+            String currentStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM answer_generation_batches WHERE id = ?", 
+                String.class, batchId);
+                
+            // 只有PAUSED状态的批次才需要恢复数据库状态
+            if (!"PAUSED".equals(currentStatus)) {
+                logger.info("批次{}当前状态为{}，无需在数据库中恢复", batchId, currentStatus);
+                return;
+            }
             
-            // 更新批次的恢复计数
+            // 使用乐观锁和处理实例标记，确保只有一个进程能处理该批次
+            String processingInstance = UUID.randomUUID().toString();
+            int updated = jdbcTemplate.update(
+                "UPDATE answer_generation_batches SET status = 'GENERATING_ANSWERS', last_activity_time = ?, " +
+                "processing_instance = ? WHERE id = ? AND status = 'PAUSED' AND " + 
+                "(processing_instance IS NULL OR processing_instance = '')",
+                LocalDateTime.now(), processingInstance, batchId);
+                
+            if (updated == 0) {
+                logger.info("批次{}数据库状态更新失败，可能已被其他进程处理，但中断标志已清除", batchId);
+                return;
+            }
+            
+            logger.info("批次{}状态已更新为GENERATING_ANSWERS并获取处理权", batchId);
+            
+            // 更新所有PAUSED状态的运行为GENERATING_ANSWERS
             jdbcTemplate.update(
-                "UPDATE answer_generation_batches SET resume_count = resume_count + 1 WHERE id = ?", 
-                batchId);
+                "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? " +
+                "WHERE answer_generation_batch_id = ? AND status = 'PAUSED'",
+                LocalDateTime.now(), batchId);
             
             // 通过WebSocket发送批次恢复通知
             Map<String, Object> notificationData = new HashMap<>();
             notificationData.put("batchId", batchId);
-            notificationData.put("status", "IN_PROGRESS");
+            notificationData.put("status", "GENERATING_ANSWERS");
             notificationData.put("resumeTime", LocalDateTime.now());
             webSocketService.sendBatchMessage(batchId, MessageType.STATUS_CHANGE, notificationData);
             
-            // 立即更新状态为IN_PROGRESS
-            jdbcTemplate.update(
-                "UPDATE answer_generation_batches SET status = 'IN_PROGRESS', last_activity_time = ? WHERE id = ?",
-                LocalDateTime.now(), batchId);
-            
-            if (batchStateManager != null) {
-                batchStateManager.setBatchState(batchId, "IN_PROGRESS");
+            try {
+                // 启动一个新线程执行批次处理任务
+                taskExecutor.submit(() -> {
+                    try {
+                        answerGenerationTask.startBatchAnswerGeneration(batchId);
+                        logger.info("批次{}处理任务完成", batchId);
+                    } catch (Exception e) {
+                        logger.error("批次{}处理任务执行失败: {}", batchId, e.getMessage(), e);
+                    } finally {
+                        // 任务结束后清除处理标记
+                        try {
+                            jdbcTemplate.update(
+                                "UPDATE answer_generation_batches SET processing_instance = NULL WHERE id = ? AND processing_instance = ?",
+                                batchId, processingInstance);
+                            logger.info("批次{}处理完成，已清除处理标记", batchId);
+                        } catch (Exception ex) {
+                            logger.error("清除批次{}处理标记时出错", batchId, ex);
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                // 如果无法提交任务，清除处理标记
+                jdbcTemplate.update(
+                    "UPDATE answer_generation_batches SET processing_instance = NULL WHERE id = ? AND processing_instance = ?",
+                    batchId, processingInstance);
+                throw e;
             }
-            
-            // 更新运行状态为GENERATING_ANSWERS
-            jdbcTemplate.update(
-                "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? " +
-                "WHERE answer_generation_batch_id = ? AND status = 'PAUSED' OR status = 'RESUMING'",
-                LocalDateTime.now(), batchId);
-            
-            // 直接启动批次处理，不再依赖调度器
-            logger.info("立即启动批次{}的处理任务", batchId);
-            answerGenerationTask.startBatchAnswerGeneration(batchId);
             
         } catch (Exception e) {
             logger.error("强制恢复批次{}失败: {}", batchId, e.getMessage(), e);
@@ -1016,11 +1005,12 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                 
                 long modelStartTime = System.currentTimeMillis();
                 try {
-                    // 测试模型连通性
+                    // 测试模型连通性，传入模型名称
                     boolean connected = llmApiService.testModelConnectivity(
                         model.getApiUrl(),
                         model.getApiKey(),
-                        model.getApiType()
+                        model.getApiType(),
+                        model.getName()  // 传入模型表中的模型名称
                     );
                     
                     long responseTime = System.currentTimeMillis() - modelStartTime;
@@ -1110,11 +1100,12 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         result.put("timestamp", System.currentTimeMillis());
         
         try {
-            // 测试模型连通性
+            // 测试模型连通性，传入模型名称
             boolean connected = llmApiService.testModelConnectivity(
                 model.getApiUrl(),
                 model.getApiKey(),
-                model.getApiType()
+                model.getApiType(),
+                model.getName()  // 传入模型表中的模型名称
             );
             
             long responseTime = System.currentTimeMillis() - startTime;
@@ -1188,11 +1179,12 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                 
                 long modelStartTime = System.currentTimeMillis();
                 try {
-                    // 测试模型连通性
+                    // 测试模型连通性，传入模型名称
                     boolean connected = llmApiService.testModelConnectivity(
                         model.getApiUrl(),
                         model.getApiKey(),
-                        model.getApiType()
+                        model.getApiType(),
+                        model.getName()  // 传入模型表中的模型名称
                     );
                     
                     long responseTime = System.currentTimeMillis() - modelStartTime;

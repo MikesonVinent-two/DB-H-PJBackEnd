@@ -49,6 +49,14 @@ public interface StandardQuestionService {
     Page<StandardQuestionDTO> findAllStandardQuestions(Pageable pageable);
     
     /**
+     * 获取所有最新版本的标准问题（分页）
+     * 只返回版本树中的叶子节点，即没有子版本的问题
+     * @param pageable 分页参数
+     * @return 最新版本的标准问题分页列表
+     */
+    Page<StandardQuestionDTO> findLatestStandardQuestions(Pageable pageable);
+    
+    /**
      * 操作单个标准问题的标签
      * @param operationDTO 标签操作请求
      * @return 更新后的标准问题DTO

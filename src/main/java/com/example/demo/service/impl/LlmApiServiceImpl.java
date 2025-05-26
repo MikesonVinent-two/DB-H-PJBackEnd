@@ -2,6 +2,8 @@ package com.example.demo.service.impl;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -9,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import com.example.demo.config.RestTemplateConfig;
 import com.example.demo.service.LlmApiService;
 import com.example.demo.entity.LlmModel;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,10 +32,18 @@ public class LlmApiServiceImpl implements LlmApiService {
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final RestTemplateConfig restTemplateConfig;
+    private final RestTemplateBuilder restTemplateBuilder;
     
-    public LlmApiServiceImpl(RestTemplate restTemplate, ObjectMapper objectMapper) {
+    @Value("${llm.default-model:gpt-3.5-turbo}")
+    private String defaultModelName;
+    
+    public LlmApiServiceImpl(RestTemplate restTemplate, ObjectMapper objectMapper, 
+                            RestTemplateConfig restTemplateConfig, RestTemplateBuilder restTemplateBuilder) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        this.restTemplateConfig = restTemplateConfig;
+        this.restTemplateBuilder = restTemplateBuilder;
     }
     
     @Override
@@ -130,14 +141,31 @@ public class LlmApiServiceImpl implements LlmApiService {
             // 构建请求体
             ObjectNode requestBody = createRequestBody(prompt, parameters, apiType);
             
+            // 获取模型名称，用于配置特定的超时时间
+            String modelName = null;
+            if (parameters != null && parameters.containsKey("model")) {
+                modelName = parameters.get("model").toString();
+            }
+            
+            // 根据模型类型获取特定的RestTemplate，以支持不同的超时设置
+            RestTemplate modelSpecificRestTemplate;
+            if (modelName != null) {
+                logger.info("使用模型特定的RestTemplate，模型: {}", modelName);
+                // 创建适合该模型特性的RestTemplate，支持更长的超时时间
+                modelSpecificRestTemplate = restTemplateConfig.getModelSpecificRestTemplate(restTemplateBuilder, modelName);
+            } else {
+                // 使用默认RestTemplate
+                modelSpecificRestTemplate = restTemplate;
+            }
+            
             // 打印问题内容
             logger.info("向LLM发送问题: {}", prompt);
             
             // 创建HTTP实体
             HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
             
-            // 发送请求
-            ResponseEntity<String> responseEntity = restTemplate.postForEntity(apiUrl, requestEntity, String.class);
+            // 使用模型特定的RestTemplate发送请求
+            ResponseEntity<String> responseEntity = modelSpecificRestTemplate.postForEntity(apiUrl, requestEntity, String.class);
             
             // 解析响应
             return parseResponse(responseEntity.getBody(), apiType);
@@ -172,7 +200,8 @@ public class LlmApiServiceImpl implements LlmApiService {
                     case "openai_compatible":
                         // OpenAI API格式或兼容格式
                         if (!defaultParams.containsKey("model")) {
-                            requestBody.put("model", "gpt-3.5-turbo");
+                            // 抛出异常，不使用默认模型名称
+                            throw new IllegalArgumentException("缺少必要的参数: model - 在调用OpenAI/兼容API时必须指定模型名称");
                         } else {
                             requestBody.put("model", defaultParams.get("model").toString());
                         }
@@ -189,7 +218,8 @@ public class LlmApiServiceImpl implements LlmApiService {
                     case "anthropic":
                         // Anthropic Claude API格式
                         if (!defaultParams.containsKey("model")) {
-                            requestBody.put("model", "claude-2");
+                            // 抛出异常，不使用默认模型名称
+                            throw new IllegalArgumentException("缺少必要的参数: model - 在调用Anthropic API时必须指定模型名称");
                         } else {
                             requestBody.put("model", defaultParams.get("model").toString());
                         }
@@ -334,8 +364,15 @@ public class LlmApiServiceImpl implements LlmApiService {
      * @param apiType API类型
      * @return 是否连接成功
      */
+    @Override
     public boolean testModelConnectivity(String apiUrl, String apiKey, String apiType) {
-        logger.info("测试模型连通性: URL={}, 类型={}", apiUrl, apiType);
+        // 调用新方法，但不指定模型名称
+        return testModelConnectivity(apiUrl, apiKey, apiType, null);
+    }
+    
+    @Override
+    public boolean testModelConnectivity(String apiUrl, String apiKey, String apiType, String modelName) {
+        logger.info("测试模型连通性: URL={}, 类型={}, 模型名称={}", apiUrl, apiType, modelName);
         
         // 确保API URL不为空
         if (apiUrl == null || apiUrl.trim().isEmpty()) {
@@ -398,72 +435,33 @@ public class LlmApiServiceImpl implements LlmApiService {
             // 根据不同API类型准备测试请求
             switch (normalizedApiType) {
                 case "OPENAI":
+                case "OPENAI_COMPATIBLE":
                     // OpenAI格式请求体
                     logger.debug("准备OpenAI格式测试请求");
+                    
+                    // 使用传入的模型名称，如果为空则返回错误
+                    if (modelName == null || modelName.isEmpty()) {
+                        logger.error("测试连接失败: 在测试OpenAI/兼容API连接时必须指定模型名称");
+                        return false;
+                    }
+                    requestBody.put("model", modelName);
+                    
+                    // 构建消息数组
                     ArrayNode messagesArray = requestBody.putArray("messages");
                     ObjectNode message = objectMapper.createObjectNode();
                     message.put("role", "user");
                     message.put("content", "Hello");
                     messagesArray.add(message);
-                    requestBody.put("model", "gpt-3.5-turbo");
+                    
+                    // 添加其他必要参数
                     requestBody.put("max_tokens", 5);
+                    requestBody.put("temperature", 0.1);
                     
                     // 检查并修复API端点
-                    if (!apiUrl.contains("/chat/completions")) {
-                        if (apiUrl.contains("/v1")) {
-                            endpointUrl = apiUrl.endsWith("/v1") ? 
-                                apiUrl + "/chat/completions" : 
-                                apiUrl + (apiUrl.endsWith("/") ? "v1/chat/completions" : "/v1/chat/completions");
-                        } else {
-                            endpointUrl = apiUrl.endsWith("/") ? 
-                                apiUrl + "v1/chat/completions" : 
-                                apiUrl + "/v1/chat/completions";
-                        }
-                    }
-                    break;
-                    
-                case "OPENAI_COMPATIBLE":
-                    // OpenAI兼容格式请求体
-                    logger.debug("准备OpenAI兼容格式测试请求");
-                    
-                    // 针对特定域名设置特殊处理
-                    if (apiUrl.contains("littlewheat.com")) {
-                        logger.info("检测到littlewheat.com API，使用特定格式");
-                        
-                        // 使用API探测功能自动发现正确的端点
-                        endpointUrl = probeApiEndpoint(apiUrl, apiKey);
-                        logger.info("探测结果端点URL: {}", endpointUrl);
-                        
-                        // 使用标准OpenAI格式请求体
-                        messagesArray = requestBody.putArray("messages");
-                        message = objectMapper.createObjectNode();
-                        message.put("role", "user");
-                        message.put("content", "Hello");
-                        messagesArray.add(message);
-                        requestBody.put("model", "gpt-3.5-turbo");
-                        requestBody.put("max_tokens", 5);
-                    } else {
-                        // 通用OpenAI兼容服务处理
-                        messagesArray = requestBody.putArray("messages");
-                        message = objectMapper.createObjectNode();
-                        message.put("role", "user");
-                        message.put("content", "Hello");
-                        messagesArray.add(message);
-                        requestBody.put("model", "gpt-3.5-turbo");
-                        requestBody.put("max_tokens", 5);
-                        
-                        // 检查并修复API端点 - 兼容服务通常直接使用/v1/chat/completions
-                        if (!apiUrl.contains("/chat/completions")) {
-                            if (apiUrl.contains("/v1")) {
-                                endpointUrl = apiUrl.endsWith("/v1") ? 
-                                    apiUrl + "/chat/completions" : 
-                                    apiUrl + (apiUrl.endsWith("/") ? "v1/chat/completions" : "/v1/chat/completions");
-                            } else {
-                                endpointUrl = apiUrl.endsWith("/") ? 
-                                    apiUrl + "v1/chat/completions" : 
-                                    apiUrl + "/v1/chat/completions";
-                            }
-                        }
+                    if (!apiUrl.contains("/v1/chat/completions")) {
+                        endpointUrl = apiUrl.endsWith("/") ? 
+                            apiUrl + "v1/chat/completions" : 
+                            apiUrl + "/v1/chat/completions";
                     }
                     break;
                     
@@ -487,7 +485,14 @@ public class LlmApiServiceImpl implements LlmApiService {
                     // Anthropic Claude格式请求体
                     logger.debug("准备Anthropic格式测试请求");
                     requestBody.put("prompt", "Human: Hello\nAssistant:");
-                    requestBody.put("model", "claude-instant-1");
+                    
+                    // 使用传入的模型名称，如果为空则返回错误
+                    if (modelName == null || modelName.isEmpty()) {
+                        logger.error("测试连接失败: 在测试Anthropic API连接时必须指定模型名称");
+                        return false;
+                    }
+                    requestBody.put("model", modelName);
+                    
                     requestBody.put("max_tokens_to_sample", 5);
                     
                     // 检查并修复API端点
@@ -505,40 +510,34 @@ public class LlmApiServiceImpl implements LlmApiService {
                     break;
                     
                 case "GOOGLE":
-                case "GEMINI":
-                    // Google/Gemini格式请求体
-                    logger.debug("准备Google/Gemini格式测试请求");
-                    ArrayNode partsArray = objectMapper.createArrayNode();
-                    ObjectNode part = objectMapper.createObjectNode();
-                    part.put("text", "Hello");
-                    partsArray.add(part);
+                    // Google PaLM格式请求体
+                    logger.debug("准备Google PaLM格式测试请求");
                     
-                    ObjectNode contentObject = objectMapper.createObjectNode();
-                    contentObject.set("parts", partsArray);
+                    // 使用传入的模型名称，如果为空则返回错误
+                    if (modelName == null || modelName.isEmpty()) {
+                        logger.error("测试连接失败: 在测试Google API连接时必须指定模型名称");
+                        return false;
+                    }
+                    String googleModel = modelName;
                     
-                    ArrayNode contentsArray = objectMapper.createArrayNode();
-                    contentsArray.add(contentObject);
-                    requestBody.set("contents", contentsArray);
+                    ObjectNode instance = objectMapper.createObjectNode();
+                    instance.put("prompt", "Hello");
                     
-                    // 检查并修复API端点
-                    if (!apiUrl.contains("/generateContent")) {
-                        if (apiUrl.contains("/v1")) {
-                            if (apiUrl.contains("/models")) {
-                                // 已经包含模型信息的URL
-                                if (!apiUrl.endsWith(":generateContent")) {
-                                    endpointUrl = apiUrl + ":generateContent";
-                                }
-                            } else {
-                                // 没有包含模型信息的URL
-                                endpointUrl = apiUrl.endsWith("/v1") || apiUrl.endsWith("/v1/") ? 
-                                    apiUrl + "models/gemini-pro:generateContent" : 
-                                    apiUrl + "/models/gemini-pro:generateContent";
-                            }
-                        } else {
-                            endpointUrl = apiUrl.endsWith("/") ? 
-                                apiUrl + "v1/models/gemini-pro:generateContent" : 
-                                apiUrl + "/v1/models/gemini-pro:generateContent";
-                        }
+                    ArrayNode instances = objectMapper.createArrayNode();
+                    instances.add(instance);
+                    
+                    ObjectNode parameters = objectMapper.createObjectNode();
+                    parameters.put("maxOutputTokens", 5);
+                    parameters.put("temperature", 0.1);
+                    
+                    requestBody.set("instances", instances);
+                    requestBody.set("parameters", parameters);
+                    
+                    // 检查并修复API端点 - Google通常需要模型名称在URL中
+                    if (!apiUrl.contains(googleModel)) {
+                        endpointUrl = apiUrl.endsWith("/") ? 
+                            apiUrl + googleModel + ":predict" : 
+                            apiUrl + "/" + googleModel + ":predict";
                     }
                     break;
                     
@@ -546,6 +545,14 @@ public class LlmApiServiceImpl implements LlmApiService {
                 case "GLM":
                     // 智谱格式请求体
                     logger.debug("准备智谱/GLM格式测试请求");
+                    
+                    // 使用传入的模型名称，如果为空则返回错误
+                    if (modelName == null || modelName.isEmpty()) {
+                        logger.error("测试连接失败: 在测试智谱/GLM API连接时必须指定模型名称");
+                        return false;
+                    }
+                    requestBody.put("model", modelName);
+                    
                     // ChatGLM支持多种接口，尝试使用通用的聊天接口
                     requestBody.put("prompt", "Hello");
                     requestBody.put("temperature", 0.7);
@@ -563,6 +570,14 @@ public class LlmApiServiceImpl implements LlmApiService {
                 default:
                     // 通用格式，发送最少的请求体
                     logger.debug("准备通用格式测试请求: {}", normalizedApiType);
+                    
+                    // 如果提供了模型名称，则使用它，否则返回错误
+                    if (modelName == null || modelName.isEmpty()) {
+                        logger.error("测试连接失败: 必须指定模型名称");
+                        return false;
+                    }
+                    requestBody.put("model", modelName);
+                    
                     requestBody.put("prompt", "Hello");
                     requestBody.put("max_tokens", 5);
                     break;
@@ -575,10 +590,14 @@ public class LlmApiServiceImpl implements LlmApiService {
             logger.info("发送测试POST请求到 {}", endpointUrl);
             logger.debug("请求头: {}", headers);
             logger.debug("请求体: {}", requestBody.toString());
+            
+            // 获取模型特定的RestTemplate，支持更长的超时设置
+            RestTemplate modelSpecificRestTemplate = restTemplateConfig.getModelSpecificRestTemplate(
+                    restTemplateBuilder, modelName);
                 
             try {
-                // 发送POST请求
-                ResponseEntity<String> response = restTemplate.postForEntity(
+                // 发送POST请求，使用模型特定的RestTemplate
+                ResponseEntity<String> response = modelSpecificRestTemplate.postForEntity(
                         endpointUrl, requestEntity, String.class);
                 
                 int statusCode = response.getStatusCodeValue();
@@ -675,6 +694,12 @@ public class LlmApiServiceImpl implements LlmApiService {
             parameters.putAll(contextVariables);
         }
         
+        // 确保参数中包含模型名称
+        if (!parameters.containsKey("model") && model.getName() != null) {
+            logger.debug("添加模型名称到请求参数: {}", model.getName());
+            parameters.put("model", model.getName());
+        }
+        
         // 调用生成回答
         return generateAnswer(
             model.getApiUrl(),
@@ -689,10 +714,18 @@ public class LlmApiServiceImpl implements LlmApiService {
      * 探测正确的API端点路径
      * @param baseUrl 基础API URL
      * @param apiKey API密钥
+     * @param modelName 模型名称
      * @return 找到的有效端点路径，如果没找到返回原始URL
      */
-    private String probeApiEndpoint(String baseUrl, String apiKey) {
-        logger.info("开始探测API端点: {}", baseUrl);
+    private String probeApiEndpoint(String baseUrl, String apiKey, String modelName) {
+        logger.info("开始探测API端点: {}, 使用模型: {}", baseUrl, modelName);
+        
+        // 确保有模型名称
+        String testModelName = modelName;
+        if (testModelName == null || testModelName.isEmpty()) {
+            testModelName = "gpt-3.5-turbo"; // 仅用于探测API端点
+            logger.warn("未提供模型名称，使用通用测试模型名称: {}", testModelName);
+        }
         
         // 常见的API路径组合
         String[] commonPaths = {
@@ -728,7 +761,7 @@ public class LlmApiServiceImpl implements LlmApiService {
             try {
                 logger.debug("探测API端点: {}", testUrl);
                 
-                // 创建最小请求体
+                // 创建最小请求体，使用模型名称
                 ObjectNode requestBody = objectMapper.createObjectNode();
                 ArrayNode messagesNode = requestBody.putArray("messages");
                 ObjectNode messageObject = objectMapper.createObjectNode();
@@ -736,7 +769,7 @@ public class LlmApiServiceImpl implements LlmApiService {
                 messageObject.put("content", "test");
                 messagesNode.add(messageObject);
                 requestBody.put("max_tokens", 1);
-                requestBody.put("model", "gpt-3.5-turbo");
+                requestBody.put("model", testModelName);
                 
                 // 创建HTTP实体
                 HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
@@ -744,8 +777,8 @@ public class LlmApiServiceImpl implements LlmApiService {
                 // 发送请求
                 ResponseEntity<String> response = restTemplate.postForEntity(testUrl, requestEntity, String.class);
                 
-                // 检查响应
-                if (response.getStatusCode().is2xxSuccessful() || response.getStatusCodeValue() == 401) {
+                // 检查响应 - 对于端点探测，我们认为400也是有效的（表示API存在但缺少必要参数）
+                if (response.getStatusCode().is2xxSuccessful() || response.getStatusCodeValue() == 400 || response.getStatusCodeValue() == 401) {
                     logger.info("找到可能的API端点: {}, 状态码: {}", testUrl, response.getStatusCodeValue());
                     return testUrl;
                 }

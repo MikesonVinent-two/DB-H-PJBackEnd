@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.demo.dto.AnswerGenerationBatchDTO;
@@ -27,12 +29,15 @@ public class AnswerGenerationController {
     
     private final AnswerGenerationService answerGenerationService;
     private final BatchStateManager batchStateManager;
+    private final JdbcTemplate jdbcTemplate;
     
     @Autowired
     public AnswerGenerationController(AnswerGenerationService answerGenerationService, 
-                                      BatchStateManager batchStateManager) {
+                                      BatchStateManager batchStateManager,
+                                      JdbcTemplate jdbcTemplate) {
         this.answerGenerationService = answerGenerationService;
         this.batchStateManager = batchStateManager;
+        this.jdbcTemplate = jdbcTemplate;
     }
     
     @PostMapping("/batches")
@@ -45,6 +50,33 @@ public class AnswerGenerationController {
     @PostMapping("/batches/{batchId}/start")
     public ResponseEntity<Map<String, Object>> startBatch(@PathVariable Long batchId) {
         logger.debug("启动回答生成批次: {}", batchId);
+        
+        // 首先检查批次当前状态
+        String currentStatus = batchStateManager.getBatchState(batchId);
+        logger.info("批次{}当前Redis状态为: {}", batchId, currentStatus);
+        
+        // 确保Redis状态与数据库一致
+        if (batchStateManager != null) {
+            String dbStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM answer_generation_batches WHERE id = ?", 
+                String.class, batchId);
+            
+            logger.info("批次{}数据库状态: {}, Redis状态: {}", batchId, dbStatus, currentStatus);
+            
+            // 如果状态不一致，以数据库为准更新Redis
+            if (!dbStatus.equals(currentStatus)) {
+                logger.warn("批次{}的Redis状态({})与数据库状态({})不一致，更新Redis状态", 
+                    batchId, currentStatus, dbStatus);
+                batchStateManager.setBatchState(batchId, dbStatus);
+                // 如果数据库是PAUSED状态，确保中断标志一致
+                if ("PAUSED".equals(dbStatus)) {
+                    batchStateManager.setInterruptFlag(batchId, true);
+                } else {
+                    batchStateManager.setInterruptFlag(batchId, false);
+                }
+                currentStatus = dbStatus;
+            }
+        }
         
         // 创建一个后台线程启动批次，不阻塞当前请求
         new Thread(() -> {
@@ -98,60 +130,45 @@ public class AnswerGenerationController {
     public ResponseEntity<Map<String, Object>> resumeBatch(@PathVariable Long batchId) {
         logger.debug("恢复回答生成批次: {}", batchId);
 
-        // 验证批次状态
-        String currentStatus = batchStateManager.getBatchState(batchId);
-        if (!"PAUSED".equals(currentStatus)) {
+        try {
+            // 验证批次状态
+            String currentStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM answer_generation_batches WHERE id = ?", 
+                String.class, batchId);
+                
+            if (!"PAUSED".equals(currentStatus)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("batchId", batchId);
+                response.put("status", currentStatus);
+                response.put("message", "只能恢复PAUSED状态的批次，当前状态: " + currentStatus);
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            // 直接调用服务层方法恢复批次
+            // 避免多重线程和多次调用导致的竞态条件
+            logger.info("直接调用服务方法恢复批次{}", batchId);
+            answerGenerationService.forceBatchResume(batchId);
+            
+            // 立即返回响应
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("batchId", batchId);
+            response.put("status", "IN_PROGRESS"); // 服务层已将状态更新为IN_PROGRESS
+            response.put("message", "批次恢复请求已处理");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("处理批次{}恢复请求时出错: {}", batchId, e.getMessage(), e);
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("batchId", batchId);
-            response.put("status", currentStatus);
-            response.put("message", "只能恢复PAUSED状态的批次，当前状态: " + currentStatus);
-            return ResponseEntity.badRequest().body(response);
+            response.put("error", e.getMessage());
+            response.put("message", "处理批次恢复请求时出错: " + e.getMessage());
+            
+            return ResponseEntity.status(500).body(response);
         }
-        
-        // 立即启动一个线程执行任务，不等待状态更新
-        new Thread(() -> {
-            try {
-                logger.info("启动独立线程恢复批次{}的处理", batchId);
-                
-                // 更新状态为RESUMING，但不等待它完成
-                batchStateManager.setBatchState(batchId, "RESUMING");
-                
-                // 清除中断标志
-                batchStateManager.setInterruptFlag(batchId, false);
-                
-                // 直接调用服务恢复批次
-                answerGenerationService.forceBatchResume(batchId);
-                
-                logger.info("批次{}恢复线程启动完成", batchId);
-            } catch (Exception e) {
-                logger.error("批次{}恢复启动失败: {}", batchId, e.getMessage(), e);
-                
-                // 发送错误通知
-                Map<String, Object> errorData = new HashMap<>();
-                errorData.put("batchId", batchId);
-                errorData.put("error", "恢复启动失败: " + e.getMessage());
-                errorData.put("timestamp", System.currentTimeMillis());
-                
-                try {
-                    answerGenerationService.sendErrorNotification(batchId, errorData);
-                } catch (Exception ex) {
-                    logger.error("发送错误通知失败", ex);
-                }
-            }
-        }).start();
-        
-        // 并行开始数据库状态更新流程，但不阻塞响应
-        boolean stateUpdateSuccess = batchStateManager.resumeBatch(batchId);
-        
-        // 立即返回响应，不等待任务执行结果
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true); // 任务已启动，所以设为true
-        response.put("batchId", batchId);
-        response.put("status", "RESUMING");  // 直接返回目标状态
-        response.put("message", "批次恢复请求已接收并开始处理，任务已启动");
-        
-        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/batches/{batchId}/reset-failed")

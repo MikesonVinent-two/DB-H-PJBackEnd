@@ -11,6 +11,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,32 +117,31 @@ public class AnswerGenerationTask {
     public void init() {
         logger.info("初始化回答生成任务管理器");
         
-        // 启动定期检查中断标志的任务
+        // 启动定期检查Redis中断标志的任务
         interruptionMonitor.scheduleAtFixedRate(() -> {
             try {
                 // 检查所有有中断标志的批次
                 for (Long batchId : interruptionFlags.keySet()) {
                     try {
-                        // 检查数据库中的批次状态
-                        String status = jdbcTemplate.queryForObject(
-                            "SELECT status FROM answer_generation_batches WHERE id = ?", 
-                            String.class, batchId);
-                        
-                        // 如果数据库状态不是PAUSED但有中断标志，则清除中断标志
-                        if (status != null && !status.equals("PAUSED") && interruptionFlags.get(batchId).get()) {
-                            // 检查是否是手动暂停
-                            String source = interruptionSource.getOrDefault(batchId, "UNKNOWN");
-                            if (!"MANUAL_PAUSE".equals(source)) {
-                                logger.info("批次{}数据库状态为{}，清除中断标志", batchId, status);
-                                clearInterruptionFlag(batchId);
-                            } else {
-                                logger.info("批次{}有手动暂停标志，保持中断状态", batchId);
+                        // 检查Redis中的中断标志
+                        if (batchStateManager != null) {
+                            boolean redisInterruptFlag = batchStateManager.isInterrupted(batchId);
+                            boolean memoryInterruptFlag = interruptionFlags.get(batchId).get();
+                            
+                            // 同步Redis和内存中的中断标志
+                            if (redisInterruptFlag && !memoryInterruptFlag) {
+                                logger.info("批次{}在Redis中有中断标志，同步到内存", batchId);
+                                markForInterruption(batchId, "REDIS_SYNC");
+                            } else if (!redisInterruptFlag && memoryInterruptFlag) {
+                                // 检查是否是手动暂停
+                                String source = interruptionSource.getOrDefault(batchId, "UNKNOWN");
+                                if (!"MANUAL_PAUSE".equals(source)) {
+                                    logger.info("批次{}在Redis中无中断标志，清除内存中的中断标志", batchId);
+                                    clearInterruptionFlag(batchId);
+                                } else {
+                                    logger.info("批次{}有手动暂停标志，保持中断状态", batchId);
+                                }
                             }
-                        }
-                        // 如果数据库状态是PAUSED但没有中断标志，则设置中断标志
-                        else if (status != null && status.equals("PAUSED") && !interruptionFlags.get(batchId).get()) {
-                            logger.info("批次{}数据库状态为PAUSED，设置中断标志", batchId);
-                            markForInterruption(batchId);
                         }
                     } catch (Exception e) {
                         logger.error("检查批次{}中断状态时出错", batchId, e);
@@ -195,64 +196,17 @@ public class AnswerGenerationTask {
      * 检查批次是否应该中断
      */
     public boolean shouldInterrupt(Long batchId) {
-        // 首先检查内存中的中断标志
-        AtomicBoolean interruptFlag = interruptionFlags.get(batchId);
-        if (interruptFlag != null && interruptFlag.get()) {
-            logger.debug("批次{}已被显式标记为需要中断", batchId);
-            
-            // 获取中断来源
-            String source = interruptionSource.getOrDefault(batchId, "UNKNOWN");
-            
-            // 如果中断来源是手动暂停，始终返回true
-            if ("MANUAL_PAUSE".equals(source)) {
-                logger.debug("批次{}中断来源是手动暂停，返回中断", batchId);
-                return true;
-            }
-        }
-        
-        // 检查是否存在BatchStateManager实例
-        if (batchStateManager == null) {
-            logger.warn("batchStateManager尚未注入，仅使用内存中的中断标志进行判断");
-            return interruptFlag != null && interruptFlag.get();
-        }
-        
-        // 检查Redis中的中断标志
-        boolean redisInterrupt = batchStateManager.isInterrupted(batchId);
-        if (redisInterrupt) {
-            logger.debug("批次{}在Redis中被标记为中断", batchId);
-            // 同步内存中的中断标志
-            markForInterruption(batchId, "REDIS");
+        // 只检查内存中的中断标志
+        AtomicBoolean flag = interruptionFlags.get(batchId);
+        if (flag != null && flag.get()) {
+            logger.debug("批次{}有内存中断标志，需要中断", batchId);
             return true;
         }
         
-        // 检查Redis中的批次状态
-        String redisState = batchStateManager.getBatchState(batchId);
-        if ("PAUSED".equals(redisState)) {
-            logger.debug("批次{}在Redis中的状态为PAUSED，需要中断", batchId);
-            markForInterruption(batchId, "REDIS_STATE");
+        // 如果Redis中有中断标志，也应该中断
+        if (batchStateManager != null && batchStateManager.isInterrupted(batchId)) {
+            logger.debug("批次{}在Redis中有中断标志，需要中断", batchId);
             return true;
-        }
-        
-        // 最后检查数据库状态
-        try {
-            String dbStatus = jdbcTemplate.queryForObject(
-                "SELECT status FROM answer_generation_batches WHERE id = ?", 
-                String.class, batchId);
-            
-            if ("PAUSED".equals(dbStatus)) {
-                logger.debug("批次{}在数据库中的状态为PAUSED，需要中断", batchId);
-                // 同步Redis状态
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, "PAUSED");
-                    batchStateManager.setInterruptFlag(batchId, true);
-                }
-                // 同步内存状态
-                markForInterruption(batchId, "DB_STATE");
-                return true;
-            }
-        } catch (Exception e) {
-            logger.error("检查批次暂停状态失败", e);
-            return false;
         }
         
         return false;
@@ -272,98 +226,36 @@ public class AnswerGenerationTask {
     public void startBatchAnswerGeneration(Long batchId) {
         logger.info("开始处理批次: {}", batchId);
         
-        // 开始处理前确认数据库状态
-        String dbStatus;
         try {
-            dbStatus = jdbcTemplate.queryForObject(
+            // 获取当前状态但不用于判断是否处理
+            String currentStatus = jdbcTemplate.queryForObject(
                 "SELECT status FROM answer_generation_batches WHERE id = ?", 
                 String.class, batchId);
                 
-            logger.info("批次{}当前数据库状态: {}", batchId, dbStatus);
-                
-            // 检查并修正状态值异常
-            if (dbStatus != null && dbStatus.contains("bootRun")) {
-                String correctedStatus = dbStatus.replace("bootRun", "");
-                logger.warn("批次{}状态值异常: {}，修正为: {}", batchId, dbStatus, correctedStatus);
-                
-                jdbcTemplate.update(
-                    "UPDATE answer_generation_batches SET status = ? WHERE id = ?",
-                    correctedStatus, batchId);
-                
-                dbStatus = correctedStatus;
-                logger.info("批次{}状态已修正为: {}", batchId, dbStatus);
+            logger.info("批次{}当前状态为{}，开始处理", batchId, currentStatus);
+            
+            // 直接更新状态为GENERATING_ANSWERS，不做状态检查
+            int updated = jdbcTemplate.update(
+                "UPDATE answer_generation_batches SET status = 'GENERATING_ANSWERS', last_activity_time = ?, " + 
+                "last_check_time = ?, processing_instance = ? WHERE id = ?",
+                LocalDateTime.now(), LocalDateTime.now(), UUID.randomUUID().toString(), batchId);
+                    
+            logger.info("已将批次{}状态更新为GENERATING_ANSWERS并获取处理权", batchId);
+            
+            // 同步Redis状态
+            if (batchStateManager != null) {
+                batchStateManager.setBatchState(batchId, "GENERATING_ANSWERS");
+                batchStateManager.setInterruptFlag(batchId, false);
             }
             
-            // 如果是活动状态，确保状态一致
-            if ("IN_PROGRESS".equals(dbStatus) || "RESUMING".equals(dbStatus)) {
-                logger.info("批次{}处于活动状态: {}", batchId, dbStatus);
-                
-                // 更新Redis状态
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, dbStatus);
-                    batchStateManager.setInterruptFlag(batchId, false);
-                    logger.info("批次{}Redis状态已更新为: {}", batchId, dbStatus);
-                }
-                
-                // 更新内存状态
-                clearInterruptionFlag(batchId);
-                logger.info("开始处理前确认批次{}状态为{}，已同步状态并清除中断标志", batchId, dbStatus);
-            } else if ("PAUSED".equals(dbStatus)) {
-                // 如果状态是暂停，设置中断标志并退出
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, "PAUSED");
-                    batchStateManager.setInterruptFlag(batchId, true);
-                }
-                markForInterruption(batchId, "DB_STATE");
-                logger.info("批次{}状态为PAUSED，设置中断标志并退出处理", batchId);
-                return;
-            }
-        } catch (Exception e) {
-            logger.warn("查询批次状态失败", e);
-        }
-        
-        try {
-            // 首先检查批次是否已被标记为中断
-            if (shouldInterrupt(batchId)) {
-                logger.info("批次{}在开始处理前已被标记为需要中断，不启动处理", batchId);
-                return;
-            }
+            // 清除内存中断标志
+            clearInterruptionFlag(batchId);
             
             // 获取批次信息
-            logger.info("开始加载批次{}的详细信息", batchId);
             AnswerGenerationBatch batch = batchRepository.findById(batchId)
                 .orElseThrow(() -> new EntityNotFoundException("找不到指定的批次: " + batchId));
-            logger.info("批次{}详细信息加载完成，状态: {}", batchId, batch.getStatus());
-            
-            // 更新状态
-            if (batch.getStatus() == BatchStatus.IN_PROGRESS || batch.getStatus() == BatchStatus.RESUMING) {
-                // 同步Redis状态
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, batch.getStatus().name());
-                    batchStateManager.setInterruptFlag(batchId, false);
-                    logger.info("批次{}Redis状态已更新为: {}", batchId, batch.getStatus().name());
-                }
-                
-                // 同步内存状态
-                clearInterruptionFlag(batchId);
-                logger.info("批次{}内存中断标志已清除", batchId);
-            }
-            
-            // 确保批次状态为IN_PROGRESS或RESUMING
-            if (batch.getStatus() != BatchStatus.IN_PROGRESS && batch.getStatus() != BatchStatus.RESUMING) {
-                logger.warn("批次{}当前状态为{}，不是IN_PROGRESS或RESUMING，无法启动处理", batchId, batch.getStatus());
-                return;
-            }
-            
-            // 更新批次的活动时间和检查时间
-            jdbcTemplate.update(
-                "UPDATE answer_generation_batches SET last_activity_time = ?, last_check_time = ? WHERE id = ?",
-                LocalDateTime.now(), LocalDateTime.now(), batchId);
-                
-            logger.info("批次{}的活动时间和检查时间已更新", batchId);
             
             // 获取批次关联的所有运行
-            logger.info("加载批次{}关联的所有运行", batchId);
             List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batchId);
             if (runs.isEmpty()) {
                 logger.warn("批次{}没有关联的运行，无法启动处理", batchId);
@@ -372,7 +264,6 @@ public class AnswerGenerationTask {
             logger.info("批次{}共有{}个运行", batchId, runs.size());
             
             // 获取批次关联的所有问题
-            logger.info("加载批次{}关联的所有问题", batchId);
             List<StandardQuestion> questions = questionRepository.findByDatasetVersionId(batch.getDatasetVersion().getId());
             if (questions.isEmpty()) {
                 logger.warn("批次{}关联的数据集版本没有问题，无法启动处理", batchId);
@@ -408,134 +299,76 @@ public class AnswerGenerationTask {
             int totalQuestions = questions.size() * runs.size() * batch.getAnswerRepeatCount();
             logger.info("批次{}总问题数: {}", batchId, totalQuestions);
             
-            // 判断是否是从暂停状态恢复
-            boolean isResuming = batch.getStatus() == BatchStatus.RESUMING;
-            if (isResuming) {
-                logger.info("批次{}处于RESUMING状态，将从断点处恢复处理", batchId);
-                
-                // 如果是恢复状态，更新为IN_PROGRESS
-                jdbcTemplate.update(
-                    "UPDATE answer_generation_batches SET status = 'IN_PROGRESS' WHERE id = ?",
-                    batchId);
-                
-                if (batchStateManager != null) {
-                    batchStateManager.setBatchState(batchId, "IN_PROGRESS");
-                }
-                
-                logger.info("批次{}状态已从RESUMING更新为IN_PROGRESS", batchId);
-                batch.setStatus(BatchStatus.IN_PROGRESS);
-            } else {
-                logger.info("批次{}处于IN_PROGRESS状态，将从头开始处理", batchId);
-            }
-            
-            // 启动每个运行的处理
+            // 启动每个运行的处理，不跳过任何运行
             for (ModelAnswerRun run : runs) {
-                // 每次处理一个运行前检查批次是否应该暂停
-                if (shouldPauseBatch(batchId)) {
-                    logger.info("批次{}已暂停，停止处理新的运行", batchId);
-                    return;
-                }
+                Long runId = run.getId();
                 
-                logger.info("开始处理批次{}的运行: {}，模型: {}", batchId, run.getId(), run.getLlmModel().getName());
+                // 获取当前状态但不用于判断是否处理
+                String runStatus = jdbcTemplate.queryForObject(
+                    "SELECT status FROM model_answer_runs WHERE id = ?", 
+                    String.class, runId);
                 
-                // 从数据库获取最新的运行状态
-                run = refreshRunStatus(run.getId());
+                logger.info("开始处理批次{}的运行: {}，模型: {}, 当前状态: {}", 
+                        batchId, runId, run.getLlmModel().getName(), runStatus);
                 
-                // 如果是恢复操作，检查运行的状态
-                if (isResuming && run.getStatus() == RunStatus.PAUSED) {
-                    logger.info("运行{}处于PAUSED状态，将从断点处恢复", run.getId());
+                // 直接更新运行状态为GENERATING_ANSWERS
+                jdbcTemplate.update(
+                    "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                    LocalDateTime.now(), runId);
                     
-                    // 查询该运行最近处理的问题ID和索引
-                    Long lastProcessedQuestionId = run.getLastProcessedQuestionId();
-                    Integer lastProcessedQuestionIndex = run.getLastProcessedQuestionIndex();
+                logger.info("运行{}状态已更新为GENERATING_ANSWERS", runId);
+                
+                // 检查是否有断点信息
+                Long lastProcessedQuestionId = run.getLastProcessedQuestionId();
+                Integer lastProcessedQuestionIndex = run.getLastProcessedQuestionIndex();
+                
+                if (lastProcessedQuestionId != null && lastProcessedQuestionIndex != null && lastProcessedQuestionIndex >= 0) {
+                    logger.info("运行{}有断点信息，将从断点处继续: 问题ID={}, 索引={}", 
+                                runId, lastProcessedQuestionId, lastProcessedQuestionIndex);
                     
-                    logger.info("运行{}最近处理的问题ID: {}, 索引: {}", 
-                                run.getId(), lastProcessedQuestionId, lastProcessedQuestionIndex);
-                    
-                    // 检查断点信息是否有效
-                    if (lastProcessedQuestionId != null && lastProcessedQuestionIndex != null && lastProcessedQuestionIndex >= 0) {
-                        // 更新运行状态为GENERATING_ANSWERS
-                        jdbcTemplate.update(
-                            "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
-                            LocalDateTime.now(), run.getId());
-                        
-                        logger.info("恢复运行{}的处理，上次处理到的问题ID: {}, 索引: {}", 
-                                    run.getId(), lastProcessedQuestionId, lastProcessedQuestionIndex);
-                        
-                        // 从断点处继续处理
-                        startRunAnswerGenerationFromCheckpoint(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
-                    } else {
-                        logger.warn("运行{}没有有效的断点信息，将从头开始处理", run.getId());
-                        
-                        // 更新运行状态为GENERATING_ANSWERS
-                        jdbcTemplate.update(
-                            "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
-                            LocalDateTime.now(), run.getId());
-                            
-                        // 从头开始处理
-                        startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
-                    }
-                } else if (run.getStatus() == RunStatus.GENERATING_ANSWERS) {
-                    logger.info("运行{}已处于GENERATING_ANSWERS状态，将继续处理", run.getId());
-                    
-                    // 查询该运行最近处理的问题ID和索引
-                    Long lastProcessedQuestionId = run.getLastProcessedQuestionId();
-                    Integer lastProcessedQuestionIndex = run.getLastProcessedQuestionIndex();
-                    
-                    // 检查是否有断点信息
-                    if (lastProcessedQuestionId != null && lastProcessedQuestionIndex != null && lastProcessedQuestionIndex >= 0) {
-                        logger.info("运行{}有断点信息，将从断点处继续: 问题ID={}, 索引={}", 
-                                    run.getId(), lastProcessedQuestionId, lastProcessedQuestionIndex);
-                        
-                        // 从断点处继续处理
-                        startRunAnswerGenerationFromCheckpoint(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
-                    } else {
-                        logger.info("运行{}没有断点信息，将从头开始处理", run.getId());
-                        
-                        // 从头开始处理
-                        startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
-                    }
+                    // 从断点处继续处理
+                    startRunAnswerGenerationFromCheckpoint(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
                 } else {
-                    logger.info("运行{}状态为{}，将从头开始处理", run.getId(), run.getStatus());
-                    // 新开始的处理
+                    logger.info("运行{}没有断点信息，将从头开始处理", runId);
+                    
+                    // 从头开始处理
                     startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
                 }
                 
-                logger.info("批次{}的运行{}处理已启动", batchId, run.getId());
+                logger.info("批次{}的运行{}处理已启动", batchId, runId);
             }
             
             // 批次处理完成后，检查所有运行状态并更新批次状态
-            logger.info("所有运行处理已启动，检查批次{}的完成状态", batchId);
-            boolean allCompleted = checkAndUpdateBatchCompletion(batch);
+            checkAndUpdateBatchCompletion(batch);
             
-            // 如果所有运行都完成了，发送批次完成通知
-            if (allCompleted) {
-                logger.info("批次{}的所有运行已完成", batchId);
-                sendBatchCompletedNotification(batch);
-            } else {
-                logger.info("批次{}有运行尚未完成，继续处理中", batchId);
-            }
+            // 处理完成后，清除处理标记
+            jdbcTemplate.update(
+                "UPDATE answer_generation_batches SET processing_instance = NULL WHERE id = ?",
+                batchId);
+                
+            logger.info("批次{}处理完成，已清除处理标记", batchId);
         } catch (Exception e) {
-            logger.error("处理批次{}时发生错误", batchId, e);
+            logger.error("处理批次{}失败: {}", batchId, e.getMessage(), e);
             
-            // 更新批次状态为失败
             try {
+                // 更新批次状态为失败
                 jdbcTemplate.update(
-                    "UPDATE answer_generation_batches SET status = 'FAILED', error_message = ?, last_activity_time = ? WHERE id = ?",
+                    "UPDATE answer_generation_batches SET status = 'FAILED', error_message = ?, " +
+                    "last_activity_time = ?, processing_instance = NULL WHERE id = ?",
                     e.getMessage(), LocalDateTime.now(), batchId);
                 
-                // 更新Redis状态
-                batchStateManager.setBatchState(batchId, "FAILED");
+                if (batchStateManager != null) {
+                    batchStateManager.setBatchState(batchId, "FAILED");
+                }
                 
-                // 发送批次失败通知
-                Map<String, Object> notificationData = new HashMap<>();
-                notificationData.put("batchId", batchId);
-                notificationData.put("status", "FAILED");
-                notificationData.put("errorMessage", e.getMessage());
-                
-                webSocketService.sendBatchMessage(batchId, MessageType.TASK_FAILED, notificationData);
+                // 发送错误通知
+                Map<String, Object> errorData = new HashMap<>();
+                errorData.put("batchId", batchId);
+                errorData.put("error", "批次处理失败: " + e.getMessage());
+                errorData.put("timestamp", System.currentTimeMillis());
+                webSocketService.sendBatchMessage(batchId, MessageType.ERROR, errorData);
             } catch (Exception ex) {
-                logger.error("更新批次{}状态为失败时发生错误", batchId, ex);
+                logger.error("更新批次{}失败状态时出错", batchId, ex);
             }
         }
     }
@@ -548,30 +381,20 @@ public class AnswerGenerationTask {
         Long batchId = run.getAnswerGenerationBatch().getId();
         logger.info("从断点处恢复运行: {}, 模型: {}", runId, run.getLlmModel().getName());
         
-        // 获取批次最新状态
+        // 获取批次状态但不用于判断是否处理
         String batchStatus = jdbcTemplate.queryForObject(
             "SELECT status FROM answer_generation_batches WHERE id = ?", 
             String.class, batchId);
         
-        logger.info("断点恢复前检查批次{}状态: {}", batchId, batchStatus);
-        
-        // 如果批次已暂停或完成，不处理该运行
-        if (!"IN_PROGRESS".equals(batchStatus) && !"RESUMING".equals(batchStatus)) {
-            logger.info("批次{}当前状态为{}，跳过运行{}的处理", batchId, batchStatus, runId);
-            return;
-        }
+        logger.info("断点恢复前批次{}状态: {}，继续处理", batchId, batchStatus);
         
         try {
-            // 检查运行状态
-            RunStatus runStatus = run.getStatus();
-            logger.info("运行{}当前状态: {}", runId, runStatus);
+            // 直接更新运行状态为GENERATING_ANSWERS，不做状态检查
+            jdbcTemplate.update(
+                "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                LocalDateTime.now(), runId);
             
-            if (runStatus != RunStatus.GENERATING_ANSWERS) {
-                logger.info("运行{}当前状态为{}，更新为GENERATING_ANSWERS", runId, runStatus);
-                jdbcTemplate.update(
-                    "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
-                    LocalDateTime.now(), runId);
-            }
+            logger.info("运行{}状态已更新为GENERATING_ANSWERS", runId);
             
             // 初始化计数器
             int totalQuestions = questions.size() * repeatCount;
@@ -700,26 +523,18 @@ public class AnswerGenerationTask {
         Long batchId = run.getAnswerGenerationBatch().getId();
         logger.info("开始处理运行: {}, 模型: {}", runId, run.getLlmModel().getName());
         
-        // 获取批次最新状态
+        // 获取批次状态但不用于判断是否处理
         String batchStatus = jdbcTemplate.queryForObject(
             "SELECT status FROM answer_generation_batches WHERE id = ?", 
             String.class, batchId);
         
-        // 如果批次已暂停或完成，不处理该运行
-        if (!"IN_PROGRESS".equals(batchStatus)) {
-            logger.info("批次{}当前状态为{}，跳过运行{}的处理", batchId, batchStatus, runId);
-            return;
-        }
+        logger.info("批次{}当前状态为{}，继续处理运行{}", batchId, batchStatus, runId);
         
         try {
-            // 检查运行状态
-            RunStatus runStatus = run.getStatus();
-            if (runStatus != RunStatus.GENERATING_ANSWERS) {
-                logger.info("运行{}当前状态为{}，更新为GENERATING_ANSWERS", runId, runStatus);
-                jdbcTemplate.update(
-                    "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
-                    LocalDateTime.now(), runId);
-            }
+            // 直接更新运行状态为GENERATING_ANSWERS，不做状态检查
+            jdbcTemplate.update(
+                "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                LocalDateTime.now(), runId);
             
             // 初始化计数器
             int totalQuestions = questions.size() * repeatCount;
@@ -1250,7 +1065,7 @@ public class AnswerGenerationTask {
             // 检查当前批次状态，避免从PENDING直接变为COMPLETED
             if (batch.getStatus() == BatchStatus.PENDING) {
                 logger.warn("批次{}状态异常: 从PENDING直接尝试变为COMPLETED", batch.getId());
-                updateBatchStatus(batch, BatchStatus.IN_PROGRESS, null);
+                updateBatchStatus(batch, BatchStatus.GENERATING_ANSWERS, null);
                 
                 // 添加延迟确保状态能被正确更新
                 try {
@@ -1373,7 +1188,7 @@ public class AnswerGenerationTask {
         // 根据状态设置中断标志
         if ("PAUSED".equals(status)) {
             markForInterruption(batchId, "MEMORY_STATE_UPDATE");
-        } else if ("IN_PROGRESS".equals(status) || "RESUMING".equals(status)) {
+        } else if ("GENERATING_ANSWERS".equals(status) || "RESUMING".equals(status)) {
             clearInterruptionFlag(batchId);
         }
         

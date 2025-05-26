@@ -50,4 +50,15 @@ public interface LlmApiService {
      * @return 连接是否成功
      */
     boolean testModelConnectivity(String apiUrl, String apiKey, String apiType);
+    
+    /**
+     * 测试模型连通性（使用指定的模型名称）
+     * 
+     * @param apiUrl API URL
+     * @param apiKey API密钥
+     * @param apiType API类型
+     * @param modelName 模型名称
+     * @return 连接是否成功
+     */
+    boolean testModelConnectivity(String apiUrl, String apiKey, String apiType, String modelName);
 } 

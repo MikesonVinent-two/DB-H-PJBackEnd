@@ -60,6 +60,29 @@ public class StandardQuestionController {
         }
     }
     
+    /**
+     * 获取所有最新版本的标准问题，支持分页
+     * 只返回版本树中的叶子节点，即没有子版本的问题
+     * 
+     * @param pageable 分页参数
+     * @return 最新版本的标准问题分页列表
+     */
+    @GetMapping("/latest")
+    public ResponseEntity<Page<StandardQuestionDTO>> getLatestStandardQuestions(
+            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+        logger.info("接收到获取最新版本标准问题请求 - 页码: {}, 每页大小: {}", 
+            pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            Page<StandardQuestionDTO> questions = standardQuestionService.findLatestStandardQuestions(pageable);
+            logger.info("成功获取最新版本标准问题 - 总数: {}", questions.getTotalElements());
+            return ResponseEntity.ok(questions);
+        } catch (Exception e) {
+            logger.error("获取最新版本标准问题失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
     @PostMapping
     public ResponseEntity<StandardQuestionDTO> createStandardQuestion(
             @RequestBody @Valid StandardQuestionDTO questionDTO) {

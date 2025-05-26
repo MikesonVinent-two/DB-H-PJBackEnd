@@ -493,7 +493,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 获取API信息
             String apiUrl = "https://api.openai.com/v1/chat/completions";
             String apiKey = aiServiceApiKey; // 使用配置的API密钥
-            String model = "gpt-3.5-turbo"; // 使用GPT-3.5-Turbo模型
+            String model = aiServiceModel; // 使用配置文件中设置的模型名称
             
             // 构建请求头
             HttpHeaders headers = new HttpHeaders();

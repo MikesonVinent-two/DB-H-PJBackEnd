@@ -7,6 +7,8 @@ import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.client.ClientHttpRequestFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 
@@ -15,6 +17,8 @@ import java.time.Duration;
  */
 @Configuration
 public class RestTemplateConfig {
+
+    private static final Logger logger = LoggerFactory.getLogger(RestTemplateConfig.class);
 
     /**
      * 创建RestTemplate Bean
@@ -55,15 +59,43 @@ public class RestTemplateConfig {
         int readTimeoutSeconds = 120; // 默认2分钟
         
         // 大型模型需要更长的超时时间
-        if (modelName != null) {
-            if (modelName.contains("gpt-4")) {
-                readTimeoutSeconds = 300; // GPT-4模型设置5分钟超时
-            } else if (modelName.contains("claude")) {
-                readTimeoutSeconds = 240; // Claude模型设置4分钟超时
-            } else if (modelName.contains("gpt-3.5")) {
-                readTimeoutSeconds = 180; // GPT-3.5模型设置3分钟超时
+        if (modelName != null && !modelName.isEmpty()) {
+            String modelNameLower = modelName.toLowerCase();
+            
+            // 思考类模型 - 最长超时时间（10分钟）
+            if (modelNameLower.contains("gpt-4-turbo") || 
+                modelNameLower.contains("gpt-4o") ||
+                modelNameLower.contains("claude-3-opus") ||
+                modelNameLower.contains("claude-3-sonnet") ||
+                modelNameLower.contains("gemini-pro") ||
+                modelNameLower.contains("llama-3") ||
+                modelNameLower.contains("mixtral") ||
+                modelNameLower.contains("qwen") ||
+                modelNameLower.contains("glm-4") ||
+                modelNameLower.contains("deepseek-r1") ||
+                modelNameLower.contains("grok")) {
+                readTimeoutSeconds = 600; // 10分钟
+                
+            // GPT-4系列其他模型 - 长超时时间（5分钟）
+            } else if (modelNameLower.contains("gpt-4")) {
+                readTimeoutSeconds = 300; // 5分钟
+                
+            // Claude系列其他模型 - 中等超时时间（4分钟）
+            } else if (modelNameLower.contains("claude")) {
+                readTimeoutSeconds = 240; // 4分钟
+                
+            // 常规模型 - 标准超时时间（3分钟）
+            } else if (modelNameLower.contains("gpt-3.5") ||
+                       modelNameLower.contains("chatglm") ||
+                       modelNameLower.contains("spark") ||
+                       modelNameLower.contains("ernie") ||
+                       modelNameLower.contains("baichuan") ||
+                       modelNameLower.contains("qwen-turbo")) {
+                readTimeoutSeconds = 180; // 3分钟
             }
         }
+        
+        logger.info("为模型 [{}] 配置超时时间: {}秒", modelName, readTimeoutSeconds);
         
         // 创建并配置RestTemplate
         return builder

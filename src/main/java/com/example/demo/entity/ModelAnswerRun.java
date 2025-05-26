@@ -64,9 +64,7 @@ public class ModelAnswerRun {
     @Column(name = "last_activity_time")
     private LocalDateTime lastActivityTime;
     
-    @Column(name = "checkpoint_data", columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> checkpointData;
+    // 已移除 checkpoint_data 字段
     
     @Column(name = "resume_count", nullable = false)
     private Integer resumeCount = 0;
@@ -91,15 +89,11 @@ public class ModelAnswerRun {
     private Integer totalQuestionsCount;
     
     public enum RunStatus {
-        PENDING,                  // 等待中
-        GENERATING_ANSWERS,       // 生成答案中
-        ANSWER_GENERATION_FAILED, // 答案生成失败
-        READY_FOR_EVALUATION,     // 准备评测
-        EVALUATING,               // 评测中
-        COMPLETED,                // 已完成
-        FAILED,                   // 失败
-        PAUSED,                   // 已暂停
-        RESUMING                  // 正在恢复
+        PENDING,             // 等待中
+        GENERATING_ANSWERS,  // 正在生成回答
+        COMPLETED,           // 已完成
+        FAILED,              // 失败
+        PAUSED               // 已暂停
     }
     
     // Getters and Setters
@@ -223,13 +217,7 @@ public class ModelAnswerRun {
         this.lastActivityTime = lastActivityTime;
     }
 
-    public Map<String, Object> getCheckpointData() {
-        return checkpointData;
-    }
-
-    public void setCheckpointData(Map<String, Object> checkpointData) {
-        this.checkpointData = checkpointData;
-    }
+    // 已移除 checkpoint_data 字段的getter和setter方法
 
     public Integer getResumeCount() {
         return resumeCount;

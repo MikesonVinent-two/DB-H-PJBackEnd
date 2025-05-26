@@ -527,23 +527,31 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     @Override
     @Transactional(readOnly = true)
     public Page<StandardQuestionDTO> findAllStandardQuestions(Pageable pageable) {
-        logger.debug("开始查询所有标准问题 - 页码: {}, 每页大小: {}", 
+        logger.debug("获取所有标准问题 - 页码: {}, 每页大小: {}", 
             pageable.getPageNumber(), pageable.getPageSize());
         
         try {
-            // 获取分页的标准问题数据
             Page<StandardQuestion> standardQuestions = standardQuestionRepository.findAll(pageable);
-            
-            logger.info("成功查询标准问题 - 总数: {}, 当前页: {}, 每页大小: {}", 
-                standardQuestions.getTotalElements(),
-                standardQuestions.getNumber(),
-                standardQuestions.getSize());
-            
-            // 将实体转换为DTO并返回
             return standardQuestions.map(this::convertToDTO);
         } catch (Exception e) {
-            logger.error("查询标准问题失败", e);
-            throw new RuntimeException("查询标准问题失败: " + e.getMessage());
+            logger.error("获取所有标准问题失败", e);
+            throw new RuntimeException("获取标准问题列表失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StandardQuestionDTO> findLatestStandardQuestions(Pageable pageable) {
+        logger.debug("获取所有最新版本的标准问题 - 页码: {}, 每页大小: {}", 
+            pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            Page<StandardQuestion> latestQuestions = standardQuestionRepository.findLatestVersions(pageable);
+            logger.info("成功获取最新版本标准问题 - 总数: {}", latestQuestions.getTotalElements());
+            return latestQuestions.map(this::convertToDTO);
+        } catch (Exception e) {
+            logger.error("获取最新版本标准问题失败", e);
+            throw new RuntimeException("获取最新版本标准问题列表失败: " + e.getMessage());
         }
     }
 

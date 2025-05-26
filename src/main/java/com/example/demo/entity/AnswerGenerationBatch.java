@@ -69,12 +69,6 @@ public class AnswerGenerationBatch {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
     
-    @Column(name = "last_processed_question_id")
-    private Long lastProcessedQuestionId;
-    
-    @Column(name = "last_processed_run_id")
-    private Long lastProcessedRunId;
-    
     @Column(name = "progress_percentage", precision = 5, scale = 2)
     private BigDecimal progressPercentage;
     
@@ -83,10 +77,6 @@ public class AnswerGenerationBatch {
     
     @Column(name = "last_check_time")
     private LocalDateTime lastCheckTime;
-    
-    @Column(name = "checkpoint_data", columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> checkpointData;
     
     @Column(name = "resume_count", nullable = false)
     private Integer resumeCount = 0;
@@ -103,9 +93,12 @@ public class AnswerGenerationBatch {
     @Column(name = "error_message")
     private String errorMessage;
     
+    @Column(name = "processing_instance")
+    private String processingInstance;
+    
     public enum BatchStatus {
         PENDING,        // 等待中
-        IN_PROGRESS,    // 进行中
+        GENERATING_ANSWERS,    // 生成回答中
         COMPLETED,      // 已完成
         FAILED,         // 失败
         PAUSED,         // 已暂停
@@ -201,22 +194,6 @@ public class AnswerGenerationBatch {
         this.completedAt = completedAt;
     }
 
-    public Long getLastProcessedQuestionId() {
-        return lastProcessedQuestionId;
-    }
-
-    public void setLastProcessedQuestionId(Long lastProcessedQuestionId) {
-        this.lastProcessedQuestionId = lastProcessedQuestionId;
-    }
-
-    public Long getLastProcessedRunId() {
-        return lastProcessedRunId;
-    }
-
-    public void setLastProcessedRunId(Long lastProcessedRunId) {
-        this.lastProcessedRunId = lastProcessedRunId;
-    }
-
     public BigDecimal getProgressPercentage() {
         return progressPercentage;
     }
@@ -239,14 +216,6 @@ public class AnswerGenerationBatch {
 
     public void setLastCheckTime(LocalDateTime lastCheckTime) {
         this.lastCheckTime = lastCheckTime;
-    }
-
-    public Map<String, Object> getCheckpointData() {
-        return checkpointData;
-    }
-
-    public void setCheckpointData(Map<String, Object> checkpointData) {
-        this.checkpointData = checkpointData;
     }
 
     public Integer getResumeCount() {
@@ -287,6 +256,14 @@ public class AnswerGenerationBatch {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public String getProcessingInstance() {
+        return processingInstance;
+    }
+
+    public void setProcessingInstance(String processingInstance) {
+        this.processingInstance = processingInstance;
     }
 
     // 题型prompt的getter和setter
