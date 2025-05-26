@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import com.example.demo.service.LlmApiService;
+import com.example.demo.entity.LlmModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -127,6 +129,9 @@ public class LlmApiServiceImpl implements LlmApiService {
             
             // 构建请求体
             ObjectNode requestBody = createRequestBody(prompt, parameters, apiType);
+            
+            // 打印问题内容
+            logger.info("向LLM发送问题: {}", prompt);
             
             // 创建HTTP实体
             HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
@@ -320,5 +325,122 @@ public class LlmApiServiceImpl implements LlmApiService {
             logger.error("解析API响应失败", e);
             return "";
         }
+    }
+    
+    /**
+     * 测试模型连通性（修复版本）
+     * @param apiUrl API地址
+     * @param apiKey API密钥
+     * @param apiType API类型
+     * @return 是否连接成功
+     */
+    public boolean testModelConnectivity(String apiUrl, String apiKey, String apiType) {
+        logger.info("测试模型连通性: URL={}, 类型={}", apiUrl, apiType);
+        
+        try {
+            // 准备请求头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            if (apiKey != null && !apiKey.isEmpty()) {
+                headers.set("Authorization", "Bearer " + apiKey);
+                logger.debug("添加授权头: Bearer {}", apiKey.substring(0, Math.min(5, apiKey.length())) + "...");
+            }
+            
+            // 准备简单请求体
+            ObjectNode requestBody = objectMapper.createObjectNode();
+            
+            // 根据不同API类型准备测试请求
+            if ("OPENAI".equalsIgnoreCase(apiType) || "AZURE_OPENAI".equalsIgnoreCase(apiType)) {
+                // OpenAI格式请求体
+                logger.debug("准备OpenAI格式测试请求");
+                ArrayNode messagesArray = requestBody.putArray("messages");
+                ObjectNode message = objectMapper.createObjectNode();
+                message.put("role", "user");
+                message.put("content", "测试连接");
+                messagesArray.add(message);
+                requestBody.put("model", "gpt-3.5-turbo");
+                requestBody.put("max_tokens", 10);
+            } else if ("ANTHROPIC".equalsIgnoreCase(apiType)) {
+                // Anthropic格式请求体
+                logger.debug("准备Anthropic格式测试请求");
+                requestBody.put("prompt", "Human: 测试连接\nAssistant:");
+                requestBody.put("model", "claude-instant-1");
+                requestBody.put("max_tokens_to_sample", 10);
+            } else {
+                // 通用格式
+                logger.debug("准备通用格式测试请求: {}", apiType);
+                requestBody.put("message", "测试连接");
+            }
+            
+            // 创建HTTP实体
+            HttpEntity<String> requestEntity = new HttpEntity<>(requestBody.toString(), headers);
+            
+            try {
+                // 发送POST请求
+                logger.debug("发送测试POST请求: {}", requestBody);
+                
+                ResponseEntity<String> response = restTemplate.postForEntity(
+                        apiUrl, requestEntity, String.class);
+                
+                boolean success = response.getStatusCode().is2xxSuccessful();
+                logger.info("模型连通性测试结果: {}, 状态码: {}, 响应长度: {}", 
+                        success ? "成功" : "失败", 
+                        response.getStatusCodeValue(),
+                        response.getBody() != null ? response.getBody().length() : 0);
+                
+                return success;
+            } catch (Exception e) {
+                logger.warn("POST请求测试失败，尝试GET请求: {}", e.getMessage());
+                
+                try {
+                    // 尝试GET请求
+                    ResponseEntity<String> getResponse = restTemplate.getForEntity(
+                            apiUrl, String.class);
+                    
+                    boolean success = getResponse.getStatusCode().is2xxSuccessful();
+                    logger.info("模型GET请求测试结果: {}, 状态码: {}", 
+                            success ? "成功" : "失败", getResponse.getStatusCodeValue());
+                    
+                    return success;
+                } catch (Exception getEx) {
+                    logger.error("模型连通性测试失败（GET请求）: {}", getEx.getMessage());
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            logger.error("模型连通性测试失败: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 使用LLM模型生成回答
+     */
+    @Override
+    public String generateModelAnswer(LlmModel model, String prompt, Map<String, Object> contextVariables) {
+        logger.debug("调用LLM模型生成回答, 模型: {}, API类型: {}", model.getName(), model.getApiType());
+        
+        // 组装参数
+        Map<String, Object> parameters = new HashMap<>();
+        
+        // 添加模型默认参数
+        if (model.getModelParameters() != null) {
+            parameters.putAll(model.getModelParameters());
+        }
+        
+        // 添加上下文变量（优先级更高）
+        if (contextVariables != null) {
+            parameters.putAll(contextVariables);
+        }
+        
+        // 调用生成回答
+        return generateAnswer(
+            model.getApiUrl(),
+            model.getApiKey(),
+            model.getApiType(),
+            prompt,
+            parameters
+        );
     }
 } 

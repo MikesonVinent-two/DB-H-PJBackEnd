@@ -41,6 +41,23 @@ public class AnswerGenerationBatch {
     @JoinColumn(name = "evaluation_assembly_config_id")
     private EvaluationPromptAssemblyConfig evaluationAssemblyConfig;
     
+    // 题型prompt配置
+    @ManyToOne
+    @JoinColumn(name = "single_choice_prompt_id")
+    private AnswerQuestionTypePrompt singleChoicePrompt;
+    
+    @ManyToOne
+    @JoinColumn(name = "multiple_choice_prompt_id")
+    private AnswerQuestionTypePrompt multipleChoicePrompt;
+    
+    @ManyToOne
+    @JoinColumn(name = "simple_fact_prompt_id")
+    private AnswerQuestionTypePrompt simpleFactPrompt;
+    
+    @ManyToOne
+    @JoinColumn(name = "subjective_prompt_id")
+    private AnswerQuestionTypePrompt subjectivePrompt;
+    
     @Column(name = "global_parameters", columnDefinition = "json")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> globalParameters;
@@ -63,6 +80,9 @@ public class AnswerGenerationBatch {
     
     @Column(name = "last_activity_time")
     private LocalDateTime lastActivityTime;
+    
+    @Column(name = "last_check_time")
+    private LocalDateTime lastCheckTime;
     
     @Column(name = "checkpoint_data", columnDefinition = "json")
     @JdbcTypeCode(SqlTypes.JSON)
@@ -213,6 +233,14 @@ public class AnswerGenerationBatch {
         this.lastActivityTime = lastActivityTime;
     }
 
+    public LocalDateTime getLastCheckTime() {
+        return lastCheckTime;
+    }
+
+    public void setLastCheckTime(LocalDateTime lastCheckTime) {
+        this.lastCheckTime = lastCheckTime;
+    }
+
     public Map<String, Object> getCheckpointData() {
         return checkpointData;
     }
@@ -259,5 +287,38 @@ public class AnswerGenerationBatch {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    // 题型prompt的getter和setter
+    public AnswerQuestionTypePrompt getSingleChoicePrompt() {
+        return singleChoicePrompt;
+    }
+    
+    public void setSingleChoicePrompt(AnswerQuestionTypePrompt singleChoicePrompt) {
+        this.singleChoicePrompt = singleChoicePrompt;
+    }
+    
+    public AnswerQuestionTypePrompt getMultipleChoicePrompt() {
+        return multipleChoicePrompt;
+    }
+    
+    public void setMultipleChoicePrompt(AnswerQuestionTypePrompt multipleChoicePrompt) {
+        this.multipleChoicePrompt = multipleChoicePrompt;
+    }
+    
+    public AnswerQuestionTypePrompt getSimpleFactPrompt() {
+        return simpleFactPrompt;
+    }
+    
+    public void setSimpleFactPrompt(AnswerQuestionTypePrompt simpleFactPrompt) {
+        this.simpleFactPrompt = simpleFactPrompt;
+    }
+    
+    public AnswerQuestionTypePrompt getSubjectivePrompt() {
+        return subjectivePrompt;
+    }
+    
+    public void setSubjectivePrompt(AnswerQuestionTypePrompt subjectivePrompt) {
+        this.subjectivePrompt = subjectivePrompt;
     }
 } 

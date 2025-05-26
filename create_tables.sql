@@ -510,6 +510,10 @@ CREATE TABLE `answer_generation_batches` (
     `status` ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'PAUSED', 'RESUMING') NOT NULL DEFAULT 'PENDING' COMMENT '整体状态',
     `answer_assembly_config_id` BIGINT NULL COMMENT '回答阶段使用的prompt组装配置',
     `evaluation_assembly_config_id` BIGINT NULL COMMENT '评测阶段使用的prompt组装配置',
+    `single_choice_prompt_id` BIGINT NULL COMMENT '单选题prompt',
+    `multiple_choice_prompt_id` BIGINT NULL COMMENT '多选题prompt',
+    `simple_fact_prompt_id` BIGINT NULL COMMENT '简单事实题prompt',
+    `subjective_prompt_id` BIGINT NULL COMMENT '主观题prompt',
     `global_parameters` JSON NULL COMMENT '应用于所有模型的全局参数',
     `created_by_user_id` BIGINT NULL COMMENT '创建者',
     `completed_at` DATETIME NULL COMMENT '完成时间',
@@ -517,6 +521,7 @@ CREATE TABLE `answer_generation_batches` (
     `last_processed_run_id` BIGINT NULL COMMENT '上次处理到的运行ID',
     `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
     `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `last_check_time` DATETIME NULL COMMENT '最近一次调度器检查时间',
     `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
     `resume_count` INT NOT NULL DEFAULT 0 COMMENT '重启次数',
     `pause_time` DATETIME NULL COMMENT '暂停时间',
@@ -527,6 +532,10 @@ CREATE TABLE `answer_generation_batches` (
     FOREIGN KEY (`created_by_user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`answer_assembly_config_id`) REFERENCES `answer_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
     FOREIGN KEY (`evaluation_assembly_config_id`) REFERENCES `evaluation_prompt_assembly_configs`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`single_choice_prompt_id`) REFERENCES `answer_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`multiple_choice_prompt_id`) REFERENCES `answer_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`simple_fact_prompt_id`) REFERENCES `answer_question_type_prompts`(`id`) ON DELETE SET NULL,
+    FOREIGN KEY (`subjective_prompt_id`) REFERENCES `answer_question_type_prompts`(`id`) ON DELETE SET NULL,
     INDEX `idx_answer_gen_batches_status` (`status`),
     INDEX `idx_answer_gen_batches_dataset` (`dataset_version_id`),
     INDEX `idx_answer_gen_batches_time` (`creation_time`)
@@ -550,6 +559,7 @@ CREATE TABLE `model_answer_runs` (
     `last_processed_question_index` INT NULL COMMENT '上次处理到的问题在数据集中的索引',
     `progress_percentage` DECIMAL(5,2) NULL COMMENT '完成百分比',
     `last_activity_time` DATETIME NULL COMMENT '最后活动时间',
+    `last_check_time` DATETIME NULL COMMENT '最近一次调度器检查时间',
     `checkpoint_data` JSON NULL COMMENT '断点续传的检查点数据',
     `resume_count` INT NOT NULL DEFAULT 0 COMMENT '重启次数',
     `pause_time` DATETIME NULL COMMENT '暂停时间',
@@ -807,18 +817,22 @@ INSERT INTO `standard_question_tags` (`standard_question_id`, `tag_id`, `created
 -- 插入回答场景的标签提示词
 INSERT INTO `answer_tag_prompts` (`tag_id`, `name`, `prompt_template`, `description`, `prompt_priority`, `created_by_user_id`) VALUES
 (1, '内科基础知识prompt', '作为一名内科医生，你需要：\n1. 使用准确的医学术语\n2. 解释复杂的内科疾病机制\n3. 强调疾病的系统性表现\n4. 注重药物治疗的详细说明', '内科回答的基础指导prompt', 10, 1),
+(2, '外科基础知识prompt', '作为一名外科医生，你需要：\n1. 详细描述手术适应症和禁忌症\n2. 解释手术方式的选择依据\n3. 说明手术风险和并发症\n4. 强调围手术期管理要点\n5. 注重手术后康复指导', '外科回答的基础指导prompt', 10, 1),
 (3, '心脏病专业prompt', '在回答心脏病相关问题时：\n1. 详细说明心血管系统的病理生理变化\n2. 强调症状与体征的关联性\n3. 说明心电图等检查的重要性\n4. 突出用药注意事项和禁忌症', '心脏病问题的专业指导prompt', 20, 1),
 (4, '高血压专业prompt', '回答高血压相关问题时：\n1. 强调血压值的正常范围和异常标准\n2. 详细说明生活方式的影响\n3. 解释各类降压药物的作用机制\n4. 说明并发症的预防措施', '高血压问题的专业指导prompt', 20, 1),
+(5, '糖尿病专业prompt', '回答糖尿病相关问题时：\n1. 明确血糖控制目标范围\n2. 强调血糖监测的重要性\n3. 详细说明饮食和运动管理\n4. 解释降糖药物选择原则\n5. 说明常见并发症的预防和处理', '糖尿病问题的专业指导prompt', 20, 1),
 (6, '诊断类prompt', '对于诊断类问题：\n1. 系统性列举症状和体征\n2. 说明必要的检查项目\n3. 解释鉴别诊断要点\n4. 强调诊断的金标准', '诊断类问题的通用prompt', 30, 1),
-(7, '治疗类prompt', '对于治疗类问题：\n1. 按照循证医学证据等级排序治疗方案\n2. 详细说明用药方案和注意事项\n3. 解释非药物治疗的重要性\n4. 说明治疗效果评估方法', '治疗类问题的通用prompt', 30, 1);
+(7, '治疗类prompt', '对于治疗类问题：\n1. 按照循证医学证据等级排序治疗方案\n2. 详细说明用药方案和注意事项\n3. 解释非药物治疗的重要性\n4. 说明治疗效果评估方法', '治疗类问题的通用prompt', 30, 1),
+(8, '预防类prompt', '对于预防类问题：\n1. 区分一级预防和二级预防措施\n2. 强调生活方式干预的具体方法\n3. 说明预防保健的关键时间点\n4. 解释风险因素的控制方法\n5. 提供可操作的预防建议', '预防类问题的通用prompt', 30, 1);
 
 -- 插入回答场景的题型提示词
 INSERT INTO `answer_question_type_prompts` (`name`, `question_type`, `prompt_template`, `response_format_instruction`, `response_example`, `created_by_user_id`) VALUES
 ('单选题回答prompt', 'SINGLE_CHOICE', '请仔细分析每个选项，选择最准确的一个答案。\n需要：\n1. 明确指出正确选项\n2. 解释为什么这个选项是正确的\n3. 简要说明其他选项不正确的原因', '回答格式：\n正确答案：[选项字母]\n选择理由：[解释]\n其他选项分析：[分析]', '正确答案：A\n选择理由：该选项准确描述了正常空腹血糖范围\n其他选项分析：B、C、D的数值都超出正常范围', 1),
 ('多选题回答prompt', 'MULTIPLE_CHOICE', '请仔细分析所有选项，选择所有正确的答案。\n需要：\n1. 明确指出所有正确选项\n2. 解释每个正确选项的原因\n3. 说明为什么排除其他选项', '回答格式：\n正确答案：[选项字母列表]\n选择理由：[解释]\n排除理由：[分析]', '正确答案：A,B,C\n选择理由：这些都是典型的冠心病症状\n排除理由：D选项不是典型症状', 1),
+('简单事实题回答prompt', 'SIMPLE_FACT', '请提供简洁、准确的事实回答。\n需要：\n1. 直接给出准确答案\n2. 使用规范的医学术语\n3. 必要时提供计量单位\n4. 可以补充简短解释', '回答格式：\n答案：[核心事实]\n补充说明：[简要解释]', '答案：正常成人心率为60-100次/分\n补充说明：运动、情绪等因素可能导致心率变化，但不应超出正常范围太多', 1),
 ('主观题回答prompt', 'SUBJECTIVE', '请提供详细、系统的回答。\n需要：\n1. 结构化组织内容\n2. 使用专业准确的医学术语\n3. 提供具体的例子或解释\n4. 注意回答的完整性和逻辑性', '回答格式：\n[主要观点]\n1. [要点1]\n2. [要点2]\n...\n补充说明：[其他重要信息]', '高血压的主要症状：\n1. 头痛（特别是后枕部）\n2. 头晕\n3. 视物模糊\n补充说明：部分患者可能无明显症状', 1);
 
--- 插入评测场景的标签提示词
+-- 插入评测场景的标签提示词 
 INSERT INTO `evaluation_tag_prompts` (`tag_id`, `name`, `prompt_template`, `prompt_priority`, `created_by_user_id`) VALUES
 (1, '内科评测prompt', '评估内科问题回答时，请注意：\n1. 医学术语使用的准确性（0-10分）\n2. 病理生理机制解释的深度（0-10分）\n3. 治疗方案的规范性（0-10分）\n4. 整体专业水平（0-10分）', 10, 1),
 (3, '心脏病评测prompt', '评估心脏病相关回答时，重点关注：\n1. 心血管病理生理的解释准确性（0-10分）\n2. 症状体征描述的完整性（0-10分）\n3. 检查方法推荐的合理性（0-10分）\n4. 治疗方案的循证医学支持（0-10分）', 20, 1),

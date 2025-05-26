@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import java.util.List;
+import java.util.Map;
 
 import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.ModelAnswerRunDTO;
@@ -36,6 +37,28 @@ public interface AnswerGenerationService {
      * @param batchId 批次ID
      */
     void resumeBatch(Long batchId);
+    
+    /**
+     * 重置失败的批次状态为暂停
+     * 
+     * @param batchId 批次ID
+     */
+    void resetFailedBatch(Long batchId);
+    
+    /**
+     * 强制恢复批次执行，不依赖于状态更新
+     * 
+     * @param batchId 批次ID
+     */
+    void forceBatchResume(Long batchId);
+    
+    /**
+     * 发送错误通知
+     * 
+     * @param batchId 批次ID
+     * @param errorData 错误数据
+     */
+    void sendErrorNotification(Long batchId, Map<String, Object> errorData);
     
     /**
      * 获取批次状态
@@ -91,6 +114,12 @@ public interface AnswerGenerationService {
         private java.util.Map<Long, java.util.Map<String, Object>> modelSpecificParameters;
         private Integer answerRepeatCount;
         private Long userId;
+        
+        // 题型prompt配置
+        private Long singleChoicePromptId;    // 单选题prompt ID
+        private Long multipleChoicePromptId;  // 多选题prompt ID
+        private Long simpleFactPromptId;      // 简单事实题prompt ID
+        private Long subjectivePromptId;      // 主观题prompt ID
         
         // Getters and Setters
         public String getName() {
@@ -171,6 +200,38 @@ public interface AnswerGenerationService {
         
         public void setUserId(Long userId) {
             this.userId = userId;
+        }
+        
+        public Long getSingleChoicePromptId() {
+            return singleChoicePromptId;
+        }
+        
+        public void setSingleChoicePromptId(Long singleChoicePromptId) {
+            this.singleChoicePromptId = singleChoicePromptId;
+        }
+        
+        public Long getMultipleChoicePromptId() {
+            return multipleChoicePromptId;
+        }
+        
+        public void setMultipleChoicePromptId(Long multipleChoicePromptId) {
+            this.multipleChoicePromptId = multipleChoicePromptId;
+        }
+        
+        public Long getSimpleFactPromptId() {
+            return simpleFactPromptId;
+        }
+        
+        public void setSimpleFactPromptId(Long simpleFactPromptId) {
+            this.simpleFactPromptId = simpleFactPromptId;
+        }
+        
+        public Long getSubjectivePromptId() {
+            return subjectivePromptId;
+        }
+        
+        public void setSubjectivePromptId(Long subjectivePromptId) {
+            this.subjectivePromptId = subjectivePromptId;
         }
     }
 } 

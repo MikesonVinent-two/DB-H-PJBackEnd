@@ -24,6 +24,8 @@ public class WebSocketMessage {
         TASK_PAUSED,
         // 任务恢复
         TASK_RESUMED,
+        // 任务失败
+        TASK_FAILED,
         // 问题开始处理
         QUESTION_STARTED,
         // 问题处理完成

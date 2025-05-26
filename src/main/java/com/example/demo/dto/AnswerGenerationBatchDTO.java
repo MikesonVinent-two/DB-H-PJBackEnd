@@ -32,6 +32,16 @@ public class AnswerGenerationBatchDTO {
     private Integer completedRuns;
     private Integer failedRuns;
     
+    // 题型prompt相关字段
+    private Long singleChoicePromptId;
+    private String singleChoicePromptName;
+    private Long multipleChoicePromptId;
+    private String multipleChoicePromptName;
+    private Long simpleFactPromptId;
+    private String simpleFactPromptName;
+    private Long subjectivePromptId;
+    private String subjectivePromptName;
+    
     // Constructors
     public AnswerGenerationBatchDTO() {
     }
@@ -219,5 +229,70 @@ public class AnswerGenerationBatchDTO {
     
     public void setFailedRuns(Integer failedRuns) {
         this.failedRuns = failedRuns;
+    }
+    
+    // 题型prompt的getter和setter
+    public Long getSingleChoicePromptId() {
+        return singleChoicePromptId;
+    }
+    
+    public void setSingleChoicePromptId(Long singleChoicePromptId) {
+        this.singleChoicePromptId = singleChoicePromptId;
+    }
+    
+    public String getSingleChoicePromptName() {
+        return singleChoicePromptName;
+    }
+    
+    public void setSingleChoicePromptName(String singleChoicePromptName) {
+        this.singleChoicePromptName = singleChoicePromptName;
+    }
+    
+    public Long getMultipleChoicePromptId() {
+        return multipleChoicePromptId;
+    }
+    
+    public void setMultipleChoicePromptId(Long multipleChoicePromptId) {
+        this.multipleChoicePromptId = multipleChoicePromptId;
+    }
+    
+    public String getMultipleChoicePromptName() {
+        return multipleChoicePromptName;
+    }
+    
+    public void setMultipleChoicePromptName(String multipleChoicePromptName) {
+        this.multipleChoicePromptName = multipleChoicePromptName;
+    }
+    
+    public Long getSimpleFactPromptId() {
+        return simpleFactPromptId;
+    }
+    
+    public void setSimpleFactPromptId(Long simpleFactPromptId) {
+        this.simpleFactPromptId = simpleFactPromptId;
+    }
+    
+    public String getSimpleFactPromptName() {
+        return simpleFactPromptName;
+    }
+    
+    public void setSimpleFactPromptName(String simpleFactPromptName) {
+        this.simpleFactPromptName = simpleFactPromptName;
+    }
+    
+    public Long getSubjectivePromptId() {
+        return subjectivePromptId;
+    }
+    
+    public void setSubjectivePromptId(Long subjectivePromptId) {
+        this.subjectivePromptId = subjectivePromptId;
+    }
+    
+    public String getSubjectivePromptName() {
+        return subjectivePromptName;
+    }
+    
+    public void setSubjectivePromptName(String subjectivePromptName) {
+        this.subjectivePromptName = subjectivePromptName;
     }
 } 
