@@ -22,13 +22,6 @@ public interface EvaluatorRepository extends JpaRepository<Evaluator, Long> {
     Optional<Evaluator> findByName(String name);
     
     /**
-     * 查找所有激活状态的评测者
-     * 
-     * @return 评测者列表
-     */
-    List<Evaluator> findByIsActiveTrue();
-    
-    /**
      * 根据类型查找评测者
      * 
      * @param evaluatorType 评测者类型
@@ -37,11 +30,10 @@ public interface EvaluatorRepository extends JpaRepository<Evaluator, Long> {
     List<Evaluator> findByEvaluatorType(Evaluator.EvaluatorType evaluatorType);
     
     /**
-     * 根据类型和激活状态查找评测者
+     * 根据类型查找未删除的评测者
      * 
      * @param evaluatorType 评测者类型
-     * @param isActive 是否激活
      * @return 评测者列表
      */
-    List<Evaluator> findByEvaluatorTypeAndIsActive(Evaluator.EvaluatorType evaluatorType, boolean isActive);
+    List<Evaluator> findByEvaluatorTypeAndDeletedAtIsNull(Evaluator.EvaluatorType evaluatorType);
 } 

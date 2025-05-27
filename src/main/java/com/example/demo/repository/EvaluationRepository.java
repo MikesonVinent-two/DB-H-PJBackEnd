@@ -68,4 +68,6 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
     int countByEvaluationRunId(Long evaluationRunId);
     boolean existsByLlmAnswerIdAndEvaluatorId(Long llmAnswerId, Long evaluatorId);
     boolean existsByLlmAnswerIdAndEvaluationRunId(Long llmAnswerId, Long evaluationRunId);
+    
+    List<Evaluation> findByLlmAnswerIdAndEvaluatorId(Long llmAnswerId, Long evaluatorId);
 } 

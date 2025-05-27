@@ -1,11 +1,18 @@
 package com.example.demo.entity;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.Map;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 /**
  * 评测者实体类，包括人类评测者和AI评测者
@@ -25,9 +32,6 @@ public class Evaluator {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(nullable = false)
-    private String name;
 
     @Column(name = "evaluator_type", nullable = false)
     @Enumerated(EnumType.STRING)
@@ -35,49 +39,25 @@ public class Evaluator {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
-    private User user; // 如果是人类评测员，关联到用户表
+    private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "llm_model_id")
-    private LlmModel llmModel; // 如果是AI评测员，关联到模型表
+    private LlmModel llmModel;
 
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
-    
-    @Column(columnDefinition = "TEXT")
-    private String description;
-    
-    @Column(name = "expertise_areas", columnDefinition = "TEXT")
-    private String expertiseAreas;
-    
-    @Column(name = "api_url")
-    private String apiUrl;
-    
-    @Column(name = "api_key")
-    private String apiKey;
-    
-    @Column(name = "api_type")
-    private String apiType; // openai, azure_openai, openai_compatible
-    
-    @Column(name = "model_name")
-    private String modelName;
-    
-    @Column(name = "model_parameters", columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> modelParameters;
-    
-    @Column(name = "evaluation_prompt_template", columnDefinition = "TEXT")
-    private String evaluationPromptTemplate;
+    @Column(nullable = false)
+    private String name;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-    
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_change_log_id")
+    private ChangeLog createdChangeLog;
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
@@ -89,14 +69,6 @@ public class Evaluator {
 
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public EvaluatorType getEvaluatorType() {
@@ -123,76 +95,12 @@ public class Evaluator {
         this.llmModel = llmModel;
     }
 
-    public Boolean getIsActive() {
-        return isActive;
+    public String getName() {
+        return name;
     }
 
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getExpertiseAreas() {
-        return expertiseAreas;
-    }
-
-    public void setExpertiseAreas(String expertiseAreas) {
-        this.expertiseAreas = expertiseAreas;
-    }
-
-    public String getApiUrl() {
-        return apiUrl;
-    }
-
-    public void setApiUrl(String apiUrl) {
-        this.apiUrl = apiUrl;
-    }
-
-    public String getApiKey() {
-        return apiKey;
-    }
-
-    public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
-    }
-
-    public String getApiType() {
-        return apiType;
-    }
-
-    public void setApiType(String apiType) {
-        this.apiType = apiType;
-    }
-
-    public String getModelName() {
-        return modelName;
-    }
-
-    public void setModelName(String modelName) {
-        this.modelName = modelName;
-    }
-
-    public Map<String, Object> getModelParameters() {
-        return modelParameters;
-    }
-
-    public void setModelParameters(Map<String, Object> modelParameters) {
-        this.modelParameters = modelParameters;
-    }
-
-    public String getEvaluationPromptTemplate() {
-        return evaluationPromptTemplate;
-    }
-
-    public void setEvaluationPromptTemplate(String evaluationPromptTemplate) {
-        this.evaluationPromptTemplate = evaluationPromptTemplate;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -203,20 +111,20 @@ public class Evaluator {
         this.createdAt = createdAt;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
     public User getCreatedByUser() {
         return createdByUser;
     }
 
     public void setCreatedByUser(User createdByUser) {
         this.createdByUser = createdByUser;
+    }
+
+    public ChangeLog getCreatedChangeLog() {
+        return createdChangeLog;
+    }
+
+    public void setCreatedChangeLog(ChangeLog createdChangeLog) {
+        this.createdChangeLog = createdChangeLog;
     }
 
     public LocalDateTime getDeletedAt() {

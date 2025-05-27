@@ -27,11 +27,15 @@ public class Evaluation {
     @JoinColumn(name = "evaluation_run_id")
     private EvaluationRun evaluationRun;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "evaluation_type")
+    private EvaluationType evaluationType;
+
     @Column(name = "overall_score")
     private BigDecimal score;
 
     @Column(name = "evaluation_time", nullable = false)
-    private LocalDateTime evaluationTime;
+    private LocalDateTime evaluationTime = LocalDateTime.now();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "evaluation_status", nullable = false)
@@ -71,7 +75,8 @@ public class Evaluation {
     public enum EvaluationStatus {
         SUCCESS,        // 评测成功
         FAILED,         // 评测失败
-        PENDING        // 待评测
+        PENDING,        // 待评测
+        PROCESSING      // 评测进行中
     }
 
     // Getters and Setters
@@ -201,6 +206,14 @@ public class Evaluation {
 
     public void setCompletionTime(LocalDateTime completionTime) {
         this.completionTime = completionTime;
+    }
+    
+    public EvaluationType getEvaluationType() {
+        return evaluationType;
+    }
+    
+    public void setEvaluationType(EvaluationType evaluationType) {
+        this.evaluationType = evaluationType;
     }
     
     /**

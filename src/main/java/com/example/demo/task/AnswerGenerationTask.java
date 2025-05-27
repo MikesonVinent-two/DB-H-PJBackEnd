@@ -6,13 +6,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Set;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -299,8 +298,29 @@ public class AnswerGenerationTask {
             int totalQuestions = questions.size() * runs.size() * batch.getAnswerRepeatCount();
             logger.info("批次{}总问题数: {}", batchId, totalQuestions);
             
-            // 启动每个运行的处理，不跳过任何运行
-            for (ModelAnswerRun run : runs) {
+            // 检查是否有上次处理到的运行记录
+            Long lastProcessedRunId = batch.getLastProcessedRunId();
+            ModelAnswerRun lastProcessedRun = null;
+            int startIndex = 0;
+            
+            if (lastProcessedRunId != null) {
+                lastProcessedRun = runRepository.findById(lastProcessedRunId).orElse(null);
+                if (lastProcessedRun != null) {
+                    logger.info("批次{}有上次处理记录，从运行ID={}之后开始处理", batchId, lastProcessedRunId);
+                    // 找到上次处理的运行在列表中的位置
+                    for (int i = 0; i < runs.size(); i++) {
+                        if (runs.get(i).getId().equals(lastProcessedRunId)) {
+                            startIndex = i; // 从下一个运行开始
+                            break;
+                        }
+                    }
+                    logger.info("将从运行列表的索引{}开始处理", startIndex);
+                }
+            }
+            
+            // 启动每个运行的处理，从startIndex开始
+            for (int i = startIndex; i < runs.size(); i++) {
+                ModelAnswerRun run = runs.get(i);
                 Long runId = run.getId();
                 
                 // 获取当前状态但不用于判断是否处理
@@ -317,6 +337,12 @@ public class AnswerGenerationTask {
                     LocalDateTime.now(), runId);
                     
                 logger.info("运行{}状态已更新为GENERATING_ANSWERS", runId);
+                
+                // 更新批次的lastProcessedRun为当前运行
+                jdbcTemplate.update(
+                    "UPDATE answer_generation_batches SET last_processed_run_id = ? WHERE id = ?",
+                    runId, batchId);
+                logger.info("批次{}的last_processed_run_id已更新为{}", batchId, runId);
                 
                 // 检查是否有断点信息
                 Long lastProcessedQuestionId = run.getLastProcessedQuestionId();

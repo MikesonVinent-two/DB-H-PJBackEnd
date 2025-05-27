@@ -31,6 +31,7 @@ public class AnswerGenerationBatchDTO {
     private Integer pendingRuns;
     private Integer completedRuns;
     private Integer failedRuns;
+    private Long lastProcessedRunId;
     
     // 题型prompt相关字段
     private Long singleChoicePromptId;
@@ -229,6 +230,14 @@ public class AnswerGenerationBatchDTO {
     
     public void setFailedRuns(Integer failedRuns) {
         this.failedRuns = failedRuns;
+    }
+    
+    public Long getLastProcessedRunId() {
+        return lastProcessedRunId;
+    }
+    
+    public void setLastProcessedRunId(Long lastProcessedRunId) {
+        this.lastProcessedRunId = lastProcessedRunId;
     }
     
     // 题型prompt的getter和setter

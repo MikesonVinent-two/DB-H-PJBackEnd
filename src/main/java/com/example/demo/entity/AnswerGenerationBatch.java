@@ -96,6 +96,9 @@ public class AnswerGenerationBatch {
     @Column(name = "processing_instance")
     private String processingInstance;
     
+    @Column(name = "last_processed_run_id")
+    private Long lastProcessedRunId;
+    
     public enum BatchStatus {
         PENDING,        // 等待中
         GENERATING_ANSWERS,    // 生成回答中
@@ -266,6 +269,7 @@ public class AnswerGenerationBatch {
         this.processingInstance = processingInstance;
     }
 
+
     // 题型prompt的getter和setter
     public AnswerQuestionTypePrompt getSingleChoicePrompt() {
         return singleChoicePrompt;
@@ -297,5 +301,13 @@ public class AnswerGenerationBatch {
     
     public void setSubjectivePrompt(AnswerQuestionTypePrompt subjectivePrompt) {
         this.subjectivePrompt = subjectivePrompt;
+    }
+
+    public Long getLastProcessedRunId() {
+        return lastProcessedRunId;
+    }
+
+    public void setLastProcessedRunId(Long lastProcessedRunId) {
+        this.lastProcessedRunId = lastProcessedRunId;
     }
 } 

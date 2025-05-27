@@ -196,13 +196,22 @@ public interface EvaluationService {
     List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType);
     
     /**
-     * 计算文本相似度（用于简单事实题评测）
+     * 计算文本相似度
      * 
-     * @param text1 文本1
-     * @param text2 文本2
-     * @return 相似度分数（0-1）
+     * @param text1 第一个文本
+     * @param text2 第二个文本
+     * @return 相似度（0-1之间）
      */
     BigDecimal calculateTextSimilarity(String text1, String text2);
+    
+    /**
+     * 使用BERT模型计算文本相似度
+     * 
+     * @param text1 第一个文本
+     * @param text2 第二个文本
+     * @return 相似度（0-1之间）
+     */
+    BigDecimal calculateBertSimilarity(String text1, String text2);
     
     /**
      * 计算ROUGE分数
@@ -221,4 +230,23 @@ public interface EvaluationService {
      * @return BLEU分数
      */
     BigDecimal calculateBleuScore(String candidateText, String referenceText);
+    
+    /**
+     * 评测一个批次中的所有客观题（单选题、多选题和简单事实题）
+     * 
+     * @param batchId 回答生成批次ID
+     * @param evaluatorId 评测者ID
+     * @param userId 用户ID
+     * @return 评测结果统计信息
+     */
+    Map<String, Object> evaluateBatchObjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
+
+    /**
+     * 评测批次的主观题
+     * @param batchId 批次ID
+     * @param evaluatorId 评测者ID（必须是AI模型类型）
+     * @param userId 用户ID
+     * @return 评测结果统计
+     */
+    Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
 } 

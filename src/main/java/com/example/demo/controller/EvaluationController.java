@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
+import lombok.Data;
 
 @RestController
 @RequestMapping("/evaluations")
@@ -64,7 +65,7 @@ public class EvaluationController {
      */
     @PostMapping("/batch")
     public ResponseEntity<List<Evaluation>> evaluateAnswers(
-            @RequestBody BatchEvaluationRequest request) {
+            @RequestBody BatchAnswerEvaluationRequest request) {
         
         logger.info("接收到批量评测请求，回答数量: {}, 评测者ID: {}, 用户ID: {}",
                 request.getAnswerIds().size(), request.getEvaluatorId(), request.getUserId());
@@ -333,20 +334,100 @@ public class EvaluationController {
     }
     
     /**
-     * 批量评测请求类
+     * 评测一个批次中的所有客观题（单选题、多选题和简单事实题）
      */
-    public static class BatchEvaluationRequest {
+    @PostMapping("/batch/{batchId}/objective-questions")
+    public ResponseEntity<Map<String, Object>> evaluateBatchObjectiveQuestions(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到批次客观题评测请求，批次ID: {}, 评测者ID: {}, 用户ID: {}", batchId, evaluatorId, userId);
+        
+        Map<String, Object> result = evaluationService.evaluateBatchObjectiveQuestions(batchId, evaluatorId, userId);
+        
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 批量评测客观题
+     */
+    @PostMapping("/batch/objective")
+    public ResponseEntity<Map<String, Object>> evaluateBatchObjectiveQuestions(
+            @RequestBody BatchEvaluationRequest request) {
+        
+        logger.info("接收到批量评测客观题请求，批次ID: {}", request.getBatchId());
+        
+        Map<String, Object> result = evaluationService.evaluateBatchObjectiveQuestions(
+                request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+        
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 批量评测主观题
+     */
+    @PostMapping("/batch/subjective")
+    public ResponseEntity<Map<String, Object>> evaluateBatchSubjectiveQuestions(
+            @RequestBody BatchEvaluationRequest request) {
+        
+        logger.info("接收到批量评测主观题请求，批次ID: {}", request.getBatchId());
+        
+        Map<String, Object> result = evaluationService.evaluateBatchSubjectiveQuestions(
+                request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+        
+        return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 批量按答案ID评测请求DTO
+     */
+    @Data
+    public static class BatchAnswerEvaluationRequest {
         private List<Long> answerIds;
         private Long evaluatorId;
         private Long userId;
         
-        // Getters and Setters
         public List<Long> getAnswerIds() {
             return answerIds;
         }
         
         public void setAnswerIds(List<Long> answerIds) {
             this.answerIds = answerIds;
+        }
+        
+        public Long getEvaluatorId() {
+            return evaluatorId;
+        }
+        
+        public void setEvaluatorId(Long evaluatorId) {
+            this.evaluatorId = evaluatorId;
+        }
+        
+        public Long getUserId() {
+            return userId;
+        }
+        
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+    }
+    
+    /**
+     * 批量评测请求DTO
+     */
+    @Data
+    public static class BatchEvaluationRequest {
+        private Long batchId;
+        private Long evaluatorId;
+        private Long userId;
+        
+        public Long getBatchId() {
+            return batchId;
+        }
+        
+        public void setBatchId(Long batchId) {
+            this.batchId = batchId;
         }
         
         public Long getEvaluatorId() {

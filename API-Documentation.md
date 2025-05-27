@@ -453,6 +453,104 @@
 
 7. 支持对每个问题生成多次回答（通过answerRepeatCount参数控制）
 
+## 8. 评测接口
+基础路径：`/api/evaluations`
+
+### 8.1 批量评测客观题
+- 路径：`POST /api/evaluations/batch/objective`
+- 功能：对批次中的所有客观题回答进行批量评测
+- 请求体：
+```json
+{
+    "batchId": "number",     // 批次ID
+    "evaluatorId": "number", // 评测者ID
+    "userId": "number"       // 操作用户ID
+}
+```
+- 返回体：
+```json
+{
+    "totalAnswers": "number",      // 总评测数量
+    "successCount": "number",      // 成功数量
+    "failedCount": "number",       // 失败数量
+    "averageScore": "number",      // 平均分数
+    "repeatIndexStatistics": {     // 按重复索引的统计
+        "repeat_0": {
+            "count": "number",     // 数量
+            "averageScore": "number" // 平均分数
+        },
+        "repeat_1": {
+            // 同上
+        }
+    }
+}
+```
+
+### 8.2 批量评测主观题
+- 路径：`POST /api/evaluations/batch/subjective`
+- 功能：使用大模型对批次中的所有主观题回答进行批量评测
+- 请求体：
+```json
+{
+    "batchId": "number",     // 批次ID
+    "evaluatorId": "number", // 评测者ID（必须是AI模型类型）
+    "userId": "number"       // 操作用户ID
+}
+```
+- 返回体：
+```json
+{
+    "totalAnswers": "number",      // 总评测数量
+    "successCount": "number",      // 成功数量
+    "failedCount": "number",       // 失败数量
+    "averageScore": "number",      // 平均分数
+    "repeatIndexStatistics": {     // 按重复索引的统计
+        "repeat_0": {
+            "count": "number",     // 数量
+            "averageScore": "number" // 平均分数
+        },
+        "repeat_1": {
+            // 同上
+        }
+    }
+}
+```
+
+### 8.3 单个主观题AI评测
+- 路径：`POST /api/evaluations/manual/subjective/ai`
+- 功能：使用大模型对单个主观题回答进行评测
+- 请求体：
+```json
+{
+    "answerText": "string",     // 回答文本
+    "questionText": "string",   // 问题文本
+    "referenceAnswer": "string", // 参考答案
+    "criteria": [               // 评测标准
+        {
+            "name": "string",   // 标准名称
+            "description": "string" // 标准描述
+        }
+    ],
+    "evaluatorId": "number"     // 评测者ID（必须是AI模型类型）
+}
+```
+- 返回体：
+```json
+{
+    "score": "number",          // 评分
+    "comments": "string",       // 评语
+    "improvement_suggestions": "string", // 改进建议
+    "criteria_scores": [        // 各标准的得分
+        {
+            "criterion": "string", // 标准名称
+            "score": "number",     // 得分
+            "comments": "string"   // 评语
+        }
+    ],
+    "raw_ai_response": "string" // 原始AI响应
+}
+```
+
 ## 注意事项
 1. 所有接口都支持跨域访问（CORS）
 2. 错误响应格式统一为：
@@ -467,10 +565,10 @@
 6. 所有ID字段类型均为Long
 7. 文本内容（content、answerText等）均使用UTF-8编码
 
-## 8. LLM模型管理接口
+## 9. LLM模型管理接口
 基础路径：`/api/llm-models`
 
-### 8.1 注册LLM模型
+### 9.1 注册LLM模型
 - 路径：`POST /api/llm-models/register`
 - 功能：注册新的LLM模型
 - 请求体：
@@ -505,7 +603,7 @@
 }
 ```
 
-### 8.2 模型表结构说明
+### 9.2 模型表结构说明
 LLM模型表（llm_models）包含以下字段：
 
 | 字段名 | 类型 | 说明 |
@@ -524,7 +622,7 @@ LLM模型表（llm_models）包含以下字段：
 | created_change_log_id | BIGINT | 变更日志ID |
 | deleted_at | DATETIME | 软删除时间 |
 
-### 8.3 模型运行表结构说明
+### 9.3 模型运行表结构说明
 模型运行表（model_answer_runs）包含以下字段：
 
 | 字段名 | 类型 | 说明 |
@@ -544,7 +642,7 @@ LLM模型表（llm_models）包含以下字段：
 | failed_questions_count | INT | 失败问题数 |
 | total_questions_count | INT | 总问题数 |
 
-### 8.4 模型回答表结构说明
+### 9.4 模型回答表结构说明
 模型回答表（llm_answers）包含以下字段：
 
 | 字段名 | 类型 | 说明 |
@@ -561,7 +659,7 @@ LLM模型表（llm_models）包含以下字段：
 | other_metadata | JSON | 其他元数据 |
 | repeat_index | INT | 重复索引 |
 
-### 8.5 注意事项
+### 9.5 注意事项
 1. 模型状态（RunStatus）包括：
    - PENDING：等待中
    - GENERATING_ANSWERS：生成答案中
@@ -588,10 +686,10 @@ LLM模型表（llm_models）包含以下字段：
    - 支持软删除机制
    - 记录所有变更日志
 
-## 9. LLM聊天接口
+## 10. LLM聊天接口
 基础路径：`/api/llm`
 
-### 9.1 发送聊天请求
+### 10.1 发送聊天请求
 - 路径：`POST /api/llm/chat`
 - 功能：向LLM模型发送聊天请求并获取回答
 - 请求体：
@@ -659,7 +757,7 @@ LLM模型表（llm_models）包含以下字段：
 - `apiKey`需要填写对应服务的API密钥
 - `model`填写实际可用的模型名称
 
-### 9.2 获取可用模型列表
+### 10.2 获取可用模型列表
 - 路径：`POST /api/llm/models`
 - 功能：获取指定API提供商的可用模型列表
 - 请求体：
@@ -682,7 +780,7 @@ LLM模型表（llm_models）包含以下字段：
 ]
 ```
 
-### 9.3 支持的API类型
+### 10.3 支持的API类型
 1. OpenAI API
    - 支持gpt-3.5-turbo、gpt-4等模型
    - 使用标准的OpenAI chat completions格式
@@ -698,7 +796,7 @@ LLM模型表（llm_models）包含以下字段：
 4. 其他兼容OpenAI接口的模型
    - 支持任何兼容OpenAI chat completions格式的API
 
-### 9.4 注意事项
+### 10.4 注意事项
 1. API认证：
    - OpenAI/兼容API：使用Bearer Token认证
    - Azure：使用api-key认证
