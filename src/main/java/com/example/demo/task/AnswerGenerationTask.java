@@ -44,6 +44,7 @@ import com.example.demo.repository.ModelAnswerRunRepository;
 import com.example.demo.repository.StandardQuestionRepository;
 import com.example.demo.service.LlmApiService;
 import com.example.demo.service.WebSocketService;
+import com.example.demo.utils.TextPreprocessor;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -694,6 +695,25 @@ public class AnswerGenerationTask {
             
             logger.info("LLM API生成回答成功: 运行={}, 问题ID={}, 回答长度={}", 
                 runId, questionId, answer.length());
+            
+            // 使用TextPreprocessor处理模型回答，移除思考过程标记
+            String cleanedAnswer = TextPreprocessor.cleanText(answer);
+            
+            // 检查是否有思考过程标记被移除
+            if (cleanedAnswer.length() != answer.length()) {
+                // 提取并保存思考过程（可选）
+                String thinkingProcess = TextPreprocessor.extractThinkingProcess(answer);
+                if (!thinkingProcess.isEmpty()) {
+                    // 保存思考过程（如果系统有相应字段）
+                    // answer.setThinkingProcess(thinkingProcess);  // 假设系统有该字段
+                    
+                    logger.info("检测到并提取了思考过程，长度: {}, 回答ID: {}", 
+                        thinkingProcess.length(), questionId);
+                }
+            }
+            
+            // 保存清理后的回答
+            answer = cleanedAnswer;
             
             // 保存回答结果
             logger.debug("开始保存回答结果: 运行={}, 问题ID={}", runId, questionId);

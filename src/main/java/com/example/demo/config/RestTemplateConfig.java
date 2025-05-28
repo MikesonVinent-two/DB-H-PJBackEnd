@@ -28,8 +28,8 @@ public class RestTemplateConfig {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplateBuilder()
-                .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(30))
+                .setConnectTimeout(Duration.ofSeconds(500))
+                .setReadTimeout(Duration.ofSeconds(3000))
                 .requestFactory(this::clientHttpRequestFactory)
                 .build();
     }
@@ -56,7 +56,7 @@ public class RestTemplateConfig {
      */
     public RestTemplate getModelSpecificRestTemplate(RestTemplateBuilder builder, String modelName) {
         // 根据模型名称设置不同的超时时间
-        int readTimeoutSeconds = 120; // 默认2分钟
+        int readTimeoutSeconds = 1200; // 默认2分钟
         
         // 大型模型需要更长的超时时间
         if (modelName != null && !modelName.isEmpty()) {
@@ -74,15 +74,15 @@ public class RestTemplateConfig {
                 modelNameLower.contains("glm-4") ||
                 modelNameLower.contains("deepseek-r1") ||
                 modelNameLower.contains("grok")) {
-                readTimeoutSeconds = 600; // 10分钟
+                readTimeoutSeconds = 6000; // 10分钟
                 
             // GPT-4系列其他模型 - 长超时时间（5分钟）
             } else if (modelNameLower.contains("gpt-4")) {
-                readTimeoutSeconds = 300; // 5分钟
+                readTimeoutSeconds = 3000; // 5分钟
                 
             // Claude系列其他模型 - 中等超时时间（4分钟）
             } else if (modelNameLower.contains("claude")) {
-                readTimeoutSeconds = 240; // 4分钟
+                readTimeoutSeconds = 2400; // 4分钟
                 
             // 常规模型 - 标准超时时间（3分钟）
             } else if (modelNameLower.contains("gpt-3.5") ||
@@ -91,7 +91,7 @@ public class RestTemplateConfig {
                        modelNameLower.contains("ernie") ||
                        modelNameLower.contains("baichuan") ||
                        modelNameLower.contains("qwen-turbo")) {
-                readTimeoutSeconds = 180; // 3分钟
+                readTimeoutSeconds = 1800; // 3分钟
             }
         }
         

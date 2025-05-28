@@ -80,8 +80,8 @@ ai:
 llm:
   default-api-url: https://api.openai.com/v1/chat/completions
   default-model: gpt-3.5-turbo
-  connection-timeout: 30
-  read-timeout: 60
+  connection-timeout: 3000
+  read-timeout: 6000
   retry:
     max-attempts: 3
     backoff-delay: 1000

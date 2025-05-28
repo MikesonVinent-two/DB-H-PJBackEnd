@@ -292,6 +292,7 @@ public class LlmApiServiceImpl implements LlmApiService {
             }
             
             JsonNode responseNode = objectMapper.readTree(responseJson);
+            String result = "";
             
             // 根据API类型解析不同格式的响应
             if (apiType != null) {
@@ -302,7 +303,7 @@ public class LlmApiServiceImpl implements LlmApiService {
                         if (responseNode.has("choices") && responseNode.get("choices").size() > 0) {
                             JsonNode choice = responseNode.get("choices").get(0);
                             if (choice.has("message") && choice.get("message").has("content")) {
-                                return choice.get("message").get("content").asText();
+                                result = choice.get("message").get("content").asText();
                             }
                         }
                         break;
@@ -310,14 +311,14 @@ public class LlmApiServiceImpl implements LlmApiService {
                     case "anthropic":
                         // Anthropic Claude响应格式
                         if (responseNode.has("completion")) {
-                            return responseNode.get("completion").asText();
+                            result = responseNode.get("completion").asText();
                         }
                         break;
                         
                     case "google":
                         // Google PaLM2/Gemini响应格式
                         if (responseNode.has("candidates") && responseNode.get("candidates").size() > 0) {
-                            return responseNode.get("candidates").get(0).get("content").asText();
+                            result = responseNode.get("candidates").get(0).get("content").asText();
                         }
                         break;
                         
@@ -327,29 +328,45 @@ public class LlmApiServiceImpl implements LlmApiService {
                 }
             }
             
-            // 通用响应解析逻辑，尝试从各种常见格式中提取
-            if (responseNode.has("choices") && responseNode.get("choices").size() > 0) {
-                // OpenAI或类似格式
-                JsonNode choice = responseNode.get("choices").get(0);
-                if (choice.has("message") && choice.get("message").has("content")) {
-                    return choice.get("message").get("content").asText();
-                } else if (choice.has("text")) {
-                    return choice.get("text").asText();
+            // 如果特定解析没有结果，尝试通用响应解析逻辑
+            if (result.isEmpty()) {
+                // 通用响应解析逻辑，尝试从各种常见格式中提取
+                if (responseNode.has("choices") && responseNode.get("choices").size() > 0) {
+                    // OpenAI或类似格式
+                    JsonNode choice = responseNode.get("choices").get(0);
+                    if (choice.has("message") && choice.get("message").has("content")) {
+                        result = choice.get("message").get("content").asText();
+                    } else if (choice.has("text")) {
+                        result = choice.get("text").asText();
+                    }
+                } else if (responseNode.has("completion")) {
+                    // Anthropic或类似格式
+                    result = responseNode.get("completion").asText();
+                } else if (responseNode.has("generated_text")) {
+                    // 某些模型的格式
+                    result = responseNode.get("generated_text").asText();
+                } else if (responseNode.has("result") && responseNode.get("result").isTextual()) {
+                    // 通用格式
+                    result = responseNode.get("result").asText();
                 }
-            } else if (responseNode.has("completion")) {
-                // Anthropic或类似格式
-                return responseNode.get("completion").asText();
-            } else if (responseNode.has("generated_text")) {
-                // 某些模型的格式
-                return responseNode.get("generated_text").asText();
-            } else if (responseNode.has("result") && responseNode.get("result").isTextual()) {
-                // 通用格式
-                return responseNode.get("result").asText();
             }
             
             // 如果无法提取，记录并返回原始响应
-            logger.warn("无法从响应中提取文本内容，返回空字符串。原始响应: {}", responseJson);
-            return "";
+            if (result.isEmpty()) {
+                logger.warn("无法从响应中提取文本内容，返回空字符串。原始响应: {}", responseJson);
+                return "";
+            }
+            
+            // 使用TextPreprocessor处理文本，移除思考过程标记
+            String cleanedResult = com.example.demo.utils.TextPreprocessor.cleanText(result);
+            
+            // 如果处理前后文本长度不同，记录日志
+            if (cleanedResult.length() != result.length()) {
+                logger.info("已清理模型回答中的思考过程标记和特殊字符，原长度: {}，处理后长度: {}", 
+                          result.length(), cleanedResult.length());
+            }
+            
+            return cleanedResult;
             
         } catch (Exception e) {
             logger.error("解析API响应失败", e);

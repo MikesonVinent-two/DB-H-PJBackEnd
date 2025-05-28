@@ -626,7 +626,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
      */
     private int getModelTimeoutSeconds(LlmModel model) {
         // 默认超时时间为60秒
-        int timeout = 60;
+        int timeout = 600;
         
         if (model == null || model.getName() == null) {
             return timeout;
@@ -638,25 +638,25 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         // 根据模型名称和提供商设置不同的超时时间
         if (modelName.contains("gpt-4") || modelName.contains("gpt4")) {
             // GPT-4系列模型超时时间较长
-            timeout = 90;
+            timeout = 900;
         } else if (modelName.contains("claude")) {
             // Claude模型超时时间
-            timeout = 75;
+            timeout = 750;
         } else if (modelName.contains("gpt-3.5") || modelName.contains("gpt3")) {
             // GPT-3.5模型
-            timeout = 45;
+            timeout = 450;
         } else if (provider.contains("anthropic")) {
             // Anthropic其他模型
-            timeout = 75;
+            timeout = 750;
         } else if (provider.contains("openai")) {
             // OpenAI其他模型
-            timeout = 60;
+            timeout = 600;
         } else if (modelName.contains("gemini") || modelName.contains("palm")) {
             // Google模型
-            timeout = 60;
+            timeout = 600;
         } else if (modelName.contains("llama") || modelName.contains("mixtral")) {
             // 开源大型模型
-            timeout = 90;
+            timeout = 900;
         }
         
         // 可以从配置中读取更精确的超时设置

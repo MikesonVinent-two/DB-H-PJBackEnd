@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/llm-models")
+@RequestMapping("/llm-models")
 @CrossOrigin(origins = "*")
 public class LLMModelController {
     
