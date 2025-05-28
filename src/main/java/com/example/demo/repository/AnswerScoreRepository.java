@@ -74,4 +74,9 @@ public interface AnswerScoreRepository extends JpaRepository<AnswerScore, Long> 
      * 根据评测者ID和分数类型查找所有分数记录
      */
     List<AnswerScore> findByEvaluatorIdAndScoreType(Long evaluatorId, String scoreType);
+    
+    /**
+     * 根据评测ID删除所有分数记录
+     */
+    void deleteByEvaluationId(Long evaluationId);
 } 

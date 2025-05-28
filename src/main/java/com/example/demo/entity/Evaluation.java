@@ -28,8 +28,8 @@ public class Evaluation {
     private EvaluationRun evaluationRun;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "evaluation_type")
-    private EvaluationType evaluationType;
+    @Column(name = "evaluation_type", nullable = false)
+    private EvaluationType evaluationType = EvaluationType.AI_MODEL;
 
     @Column(name = "overall_score")
     private BigDecimal score;
@@ -70,6 +70,22 @@ public class Evaluation {
 
     @Column(name = "completion_time")
     private LocalDateTime completionTime;
+
+    // 从AnswerScore表合并的字段
+    @Column(name = "raw_score")
+    private BigDecimal rawScore;
+
+    @Column(name = "normalized_score")
+    private BigDecimal normalizedScore;
+
+    @Column(name = "weighted_score")
+    private BigDecimal weightedScore;
+
+    @Column(name = "score_type")
+    private String scoreType;
+
+    @Column(name = "scoring_method")
+    private String scoringMethod;
 
     // 评测状态枚举
     public enum EvaluationStatus {
@@ -216,6 +232,47 @@ public class Evaluation {
         this.evaluationType = evaluationType;
     }
     
+    // 从AnswerScore合并的字段的getter/setter
+    public BigDecimal getRawScore() {
+        return rawScore;
+    }
+
+    public void setRawScore(BigDecimal rawScore) {
+        this.rawScore = rawScore;
+    }
+
+    public BigDecimal getNormalizedScore() {
+        return normalizedScore;
+    }
+
+    public void setNormalizedScore(BigDecimal normalizedScore) {
+        this.normalizedScore = normalizedScore;
+    }
+
+    public BigDecimal getWeightedScore() {
+        return weightedScore;
+    }
+
+    public void setWeightedScore(BigDecimal weightedScore) {
+        this.weightedScore = weightedScore;
+    }
+
+    public String getScoreType() {
+        return scoreType;
+    }
+
+    public void setScoreType(String scoreType) {
+        this.scoreType = scoreType;
+    }
+
+    public String getScoringMethod() {
+        return scoringMethod;
+    }
+
+    public void setScoringMethod(String scoringMethod) {
+        this.scoringMethod = scoringMethod;
+    }
+    
     /**
      * 获取关联的问题
      * 
@@ -238,5 +295,10 @@ public class Evaluation {
             return llmAnswer.getAnswerText();
         }
         return null;
+    }
+
+    // 创建新的Evaluation实体时，设置默认的评测类型
+    public Evaluation() {
+        this.evaluationType = EvaluationType.AI_MODEL; // 设置默认值为AI_MODEL
     }
 } 

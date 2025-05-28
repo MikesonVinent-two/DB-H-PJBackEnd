@@ -1,6 +1,7 @@
 package com.example.demo.dto;
 
 import jakarta.validation.constraints.NotNull;
+import java.util.Map;
 
 /**
  * 创建评测运行请求DTO
@@ -18,7 +19,7 @@ public class CreateEvaluationRunRequest {
     
     private String runDescription;
     
-    private String parameters;
+    private Map<String, Object> parameters;
     
     @NotNull(message = "用户ID不能为空")
     private Long userId;
@@ -56,11 +57,11 @@ public class CreateEvaluationRunRequest {
         this.runDescription = runDescription;
     }
     
-    public String getParameters() {
+    public Map<String, Object> getParameters() {
         return parameters;
     }
     
-    public void setParameters(String parameters) {
+    public void setParameters(Map<String, Object> parameters) {
         this.parameters = parameters;
     }
     

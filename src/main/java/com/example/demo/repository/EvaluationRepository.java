@@ -39,6 +39,25 @@ public interface EvaluationRepository extends JpaRepository<Evaluation, Long> {
     List<Evaluation> findByEvaluatorId(Long evaluatorId);
     
     /**
+     * 根据评测者ID查询已评测的回答ID列表
+     *
+     * @param evaluatorId 评测者ID
+     * @return 已评测的回答ID列表
+     */
+    @Query("SELECT e.llmAnswer.id FROM Evaluation e WHERE e.evaluator.id = :evaluatorId")
+    List<Long> findAnswerIdsByEvaluatorId(@Param("evaluatorId") Long evaluatorId);
+    
+    /**
+     * 根据评测者ID和回答ID列表统计评测数量
+     *
+     * @param evaluatorId 评测者ID
+     * @param llmAnswerIds 回答ID列表
+     * @return 评测数量
+     */
+    @Query("SELECT COUNT(e) FROM Evaluation e WHERE e.evaluator.id = :evaluatorId AND e.llmAnswer.id IN :llmAnswerIds")
+    int countByEvaluatorIdAndLlmAnswerInList(@Param("evaluatorId") Long evaluatorId, @Param("llmAnswerIds") List<Long> llmAnswerIds);
+    
+    /**
      * 统计评测运行中已完成的评测数量
      * 
      * @param evaluationRunId 评测运行ID

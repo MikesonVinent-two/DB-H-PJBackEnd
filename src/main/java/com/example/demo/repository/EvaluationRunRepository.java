@@ -4,8 +4,12 @@ import com.example.demo.entity.EvaluationRun;
 import com.example.demo.entity.EvaluationRun.RunStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -81,4 +85,34 @@ public interface EvaluationRunRepository extends JpaRepository<EvaluationRun, Lo
      * @return 评测运行列表
      */
     List<EvaluationRun> findByModelAnswerRunIdAndEvaluatorIdAndStatus(Long modelAnswerRunId, Long evaluatorId, RunStatus status, Pageable pageable);
+    
+    // 新增的查询方法
+    List<EvaluationRun> findByModelAnswerRunIdAndEvaluatorIdAndStatusNot(
+            Long modelAnswerRunId, Long evaluatorId, RunStatus status);
+    
+    List<EvaluationRun> findByStatusAndLastActivityTimeBefore(
+            RunStatus status, LocalDateTime time);
+    
+    @Query("SELECT e FROM EvaluationRun e WHERE e.status = :status " +
+           "AND e.lastActivityTime < :time " +
+           "AND e.isAutoResume = true")
+    List<EvaluationRun> findStaleRunsForAutoResume(
+            @Param("status") RunStatus status, 
+            @Param("time") LocalDateTime time);
+    
+    @Query("SELECT e FROM EvaluationRun e WHERE e.status IN :statuses " +
+           "AND e.lastActivityTime < :time")
+    List<EvaluationRun> findStaleRuns(
+            @Param("statuses") List<RunStatus> statuses, 
+            @Param("time") LocalDateTime time);
+    
+    @Modifying
+    @Query("UPDATE EvaluationRun e SET e.status = :newStatus, " +
+           "e.lastActivityTime = CURRENT_TIMESTAMP, " +
+           "e.errorMessage = :errorMessage " +
+           "WHERE e.id = :runId")
+    void updateRunStatus(
+            @Param("runId") Long runId, 
+            @Param("newStatus") RunStatus newStatus, 
+            @Param("errorMessage") String errorMessage);
 } 

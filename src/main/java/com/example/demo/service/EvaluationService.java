@@ -106,18 +106,18 @@ public interface EvaluationService {
                                     List<Map<String, Object>> detailScores, Long userId);
     
     /**
-     * 创建评测运行
+     * 创建评测运行记录
      * 
      * @param modelAnswerRunId 模型回答运行ID
      * @param evaluatorId 评测者ID
      * @param runName 运行名称
      * @param runDescription 运行描述
-     * @param parameters 参数
+     * @param parameters 运行参数
      * @param userId 用户ID
-     * @return 创建的评测运行
+     * @return 创建的评测运行记录
      */
-    EvaluationRun createEvaluationRun(Long modelAnswerRunId, Long evaluatorId, String runName, 
-                                     String runDescription, String parameters, Long userId);
+    EvaluationRun createEvaluationRun(Long modelAnswerRunId, Long evaluatorId, String runName,
+                                     String runDescription, Map<String, Object> parameters, Long userId);
     
     /**
      * 启动评测运行
@@ -249,4 +249,24 @@ public interface EvaluationService {
      * @return 评测结果统计
      */
     Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
+    
+    /**
+     * 重新评测单个主观题回答（强制覆盖已有评测）
+     * 
+     * @param llmAnswerId LLM回答ID
+     * @param evaluatorId 评测者ID
+     * @param userId 用户ID
+     * @return 评测分数
+     */
+    BigDecimal reEvaluateSubjectiveAnswer(Long llmAnswerId, Long evaluatorId, Long userId);
+    
+    /**
+     * 批量重新评测一个批次中的所有主观题（强制覆盖已有评测）
+     * 
+     * @param batchId 回答生成批次ID
+     * @param evaluatorId 评测者ID
+     * @param userId 用户ID
+     * @return 评测结果统计
+     */
+    Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
 } 

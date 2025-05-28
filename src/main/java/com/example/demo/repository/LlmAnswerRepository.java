@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import com.example.demo.entity.LlmAnswer;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * LLM回答仓库接口
@@ -22,6 +23,24 @@ public interface LlmAnswerRepository extends JpaRepository<LlmAnswer, Long> {
      * @return 回答列表
      */
     List<LlmAnswer> findByModelAnswerRunId(Long modelAnswerRunId);
+    
+    /**
+     * 根据运行ID查找回答，同时预加载问题
+     * 
+     * @param modelAnswerRunId 运行ID
+     * @return 回答列表，包含预加载的问题
+     */
+    @Query("SELECT a FROM LlmAnswer a JOIN FETCH a.datasetQuestionMapping dqm JOIN FETCH dqm.standardQuestion q WHERE a.modelAnswerRun.id = :modelAnswerRunId")
+    List<LlmAnswer> findByModelAnswerRunIdWithQuestions(@Param("modelAnswerRunId") Long modelAnswerRunId);
+    
+    /**
+     * 根据ID查找回答，同时预加载问题
+     * 
+     * @param id 回答ID
+     * @return 回答，包含预加载的问题
+     */
+    @Query("SELECT a FROM LlmAnswer a JOIN FETCH a.datasetQuestionMapping dqm JOIN FETCH dqm.standardQuestion q WHERE a.id = :id")
+    Optional<LlmAnswer> findByIdWithQuestion(@Param("id") Long id);
     
     /**
      * 根据数据集映射问题ID查找回答

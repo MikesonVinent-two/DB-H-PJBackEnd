@@ -1333,9 +1333,11 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         dto.setPauseTime(batch.getPauseTime());
         dto.setPauseReason(batch.getPauseReason());
         dto.setAnswerRepeatCount(batch.getAnswerRepeatCount());
-
-        dto.setLastProcessedRunId(batch.getLastProcessedRunId());
         
+        // 添加上次处理的运行ID
+        if (batch.getLastProcessedRunId() != null) {
+            dto.setLastProcessedRunId(batch.getLastProcessedRunId());
+        }
         
         return dto;
     }

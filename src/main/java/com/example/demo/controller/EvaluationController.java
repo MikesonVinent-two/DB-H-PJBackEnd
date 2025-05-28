@@ -183,6 +183,41 @@ public class EvaluationController {
     }
     
     /**
+     * 重新评测主观题答案（强制覆盖已有评测）
+     */
+    @PostMapping("/subjective/re-evaluate/{answerId}")
+    public ResponseEntity<Map<String, Object>> reEvaluateSubjectiveAnswer(
+            @PathVariable Long answerId,
+            @RequestParam Long evaluatorId,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到重新评测主观题请求，回答ID: {}, 评测者ID: {}, 用户ID: {}", 
+                answerId, evaluatorId, userId);
+        
+        try {
+            BigDecimal score = evaluationService.reEvaluateSubjectiveAnswer(answerId, evaluatorId, userId);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("answerId", answerId);
+            result.put("score", score);
+            result.put("success", true);
+            result.put("message", "重新评测成功");
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("处理重新评测请求时发生异常", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("answerId", answerId);
+            result.put("success", false);
+            result.put("message", "重新评测失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    /**
      * 获取评测详情
      */
     @GetMapping("/{evaluationId}/details")
@@ -373,10 +408,99 @@ public class EvaluationController {
         
         logger.info("接收到批量评测主观题请求，批次ID: {}", request.getBatchId());
         
-        Map<String, Object> result = evaluationService.evaluateBatchSubjectiveQuestions(
-                request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+        // 创建评测运行记录
+        Map<String, Object> params = new HashMap<>();
+        params.put("batchId", request.getBatchId());
+        params.put("evaluationType", "SUBJECTIVE_BATCH");
         
-        return ResponseEntity.ok(result);
+        EvaluationRun evaluationRun = evaluationService.createEvaluationRun(
+                request.getBatchId(),
+                request.getEvaluatorId(),
+                "批量主观题评测-" + request.getBatchId(),
+                null,
+                params,  // 使用Map<String, Object>类型的参数
+                request.getUserId());
+        
+        // 异步启动评测
+        CompletableFuture.runAsync(() -> {
+            try {
+                evaluationService.evaluateBatchSubjectiveQuestions(
+                    request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+            } catch (Exception e) {
+                logger.error("批量评测主观题失败", e);
+            }
+        });
+        
+        // 立即返回响应
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "评测任务已启动");
+        response.put("runId", evaluationRun.getId());
+        response.put("status", "STARTED");
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 批量重新评测主观题（强制覆盖已有评测）
+     */
+    @PostMapping("/batch/subjective/re-evaluate")
+    public ResponseEntity<Map<String, Object>> reEvaluateBatchSubjectiveQuestions(
+            @RequestBody BatchEvaluationRequest request) {
+        
+        logger.info("接收到批量重新评测主观题请求，批次ID: {}", request.getBatchId());
+        
+        try {
+            Map<String, Object> result = evaluationService.reEvaluateBatchSubjectiveQuestions(
+                    request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+            
+            result.put("success", true);
+            result.put("message", "批量重新评测成功");
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("处理批量重新评测请求时发生异常", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("batchId", request.getBatchId());
+            result.put("success", false);
+            result.put("message", "批量重新评测失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    /**
+     * 直接通过路径参数进行批量重新评测
+     */
+    @PostMapping("/batch/{batchId}/subjective/re-evaluate")
+    public ResponseEntity<Map<String, Object>> reEvaluateBatchSubjectiveQuestionsByPath(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到批量重新评测主观题请求，批次ID: {}, 评测者ID: {}, 用户ID: {}", 
+                batchId, evaluatorId, userId);
+        
+        try {
+            Map<String, Object> result = evaluationService.reEvaluateBatchSubjectiveQuestions(
+                    batchId, evaluatorId, userId);
+            
+            result.put("success", true);
+            result.put("message", "批量重新评测成功");
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("处理批量重新评测请求时发生异常", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("batchId", batchId);
+            result.put("success", false);
+            result.put("message", "批量重新评测失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
     }
     
     /**
