@@ -83,9 +83,9 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 保存评测标签提示�?
+     * 保存评测标签提示?
      *
-     * @param prompt 评测标签提示词对�?
+     * @param prompt 评测标签提示词对?
      * @return 带有ID的评测标签提示词对象
      */
     public EvaluationTagPrompt save(EvaluationTagPrompt prompt) {
@@ -99,7 +99,7 @@ public class EvaluationTagPromptRepository {
     /**
      * 插入新评测标签提示词
      *
-     * @param prompt 评测标签提示词对�?
+     * @param prompt 评测标签提示词对?
      * @return 带有ID的评测标签提示词对象
      */
     private EvaluationTagPrompt insert(EvaluationTagPrompt prompt) {
@@ -182,10 +182,10 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 更新评测标签提示�?
+     * 更新评测标签提示?
      *
-     * @param prompt 评测标签提示词对�?
-     * @return 更新后的评测标签提示词对�?
+     * @param prompt 评测标签提示词对?
+     * @return 更新后的评测标签提示词对?
      */
     private EvaluationTagPrompt update(EvaluationTagPrompt prompt) {
         jdbcTemplate.update(connection -> {
@@ -257,7 +257,7 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 根据ID查找评测标签提示�?
+     * 根据ID查找评测标签提示?
      *
      * @param id 评测标签提示词ID
      * @return 评测标签提示词对象（可选）
@@ -278,7 +278,7 @@ public class EvaluationTagPromptRepository {
     /**
      * 查找所有评测标签提示词
      *
-     * @return 评测标签提示词列�?
+     * @return 评测标签提示词列?
      */
     public List<EvaluationTagPrompt> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new EvaluationTagPromptRowMapper());
@@ -288,7 +288,7 @@ public class EvaluationTagPromptRepository {
      * 分页查找所有评测标签提示词
      *
      * @param pageable 分页参数
-     * @return 评测标签提示词分页结�?
+     * @return 评测标签提示词分页结?
      */
     public Page<EvaluationTagPrompt> findAll(Pageable pageable) {
         List<EvaluationTagPrompt> prompts = jdbcTemplate.query(
@@ -306,7 +306,7 @@ public class EvaluationTagPromptRepository {
      * 查找指定标签的所有激活状态的评测提示词，按优先级排序
      *
      * @param tag 标签
-     * @return 评测标签提示词列�?
+     * @return 评测标签提示词列?
      */
     public List<EvaluationTagPrompt> findByTagAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(Tag tag) {
         if (tag == null || tag.getId() == null) {
@@ -321,10 +321,10 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 按标签ID查询激活状态的评测提示�?
+     * 按标签ID查询激活状态的评测提示?
      *
      * @param tagId 标签ID
-     * @return 评测标签提示词列�?
+     * @return 评测标签提示词列?
      */
     public List<EvaluationTagPrompt> findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(Long tagId) {
         return jdbcTemplate.query(
@@ -338,7 +338,7 @@ public class EvaluationTagPromptRepository {
      * 按版本号查询特定标签的评测提示词
      *
      * @param tagId 标签ID
-     * @param version 版本�?
+     * @param version 版本?
      * @return 评测标签提示词对象（可选）
      */
     public Optional<EvaluationTagPrompt> findByTagIdAndVersionAndDeletedAtIsNull(Long tagId, String version) {
@@ -357,7 +357,7 @@ public class EvaluationTagPromptRepository {
     /**
      * 查找所有未删除的标签评测提示词
      *
-     * @return 评测标签提示词列�?
+     * @return 评测标签提示词列?
      */
     public List<EvaluationTagPrompt> findByDeletedAtIsNull() {
         return jdbcTemplate.query(
@@ -367,10 +367,10 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 查找最新版本的标签评测提示�?
+     * 查找最新版本的标签评测提示?
      *
      * @param tagId 标签ID
-     * @return 评测标签提示词列�?
+     * @return 评测标签提示词列?
      */
     public List<EvaluationTagPrompt> findLatestByTagId(Long tagId) {
         return jdbcTemplate.query(
@@ -381,12 +381,12 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 删除评测标签提示�?
+     * 删除评测标签提示?
      *
      * @param id 评测标签提示词ID
      */
     public void deleteById(Long id) {
-        // 实现软删�?
+        // 实现软删?
         jdbcTemplate.update(
             "UPDATE evaluation_tag_prompts SET deleted_at=? WHERE id=?",
             Timestamp.valueOf(LocalDateTime.now()),
@@ -395,7 +395,7 @@ public class EvaluationTagPromptRepository {
     }
 
     /**
-     * 评测标签提示词行映射�?
+     * 评测标签提示词行映射?
      */
     private class EvaluationTagPromptRowMapper implements RowMapper<EvaluationTagPrompt> {
         @Override
@@ -427,7 +427,7 @@ public class EvaluationTagPromptRepository {
                 prompt.setUpdatedAt(updatedAt.toLocalDateTime());
             }
             
-            // 设置创建者用�?
+            // 设置创建者用?
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(createdByUserId).ifPresent(user -> prompt.setCreatedByUser(user));
@@ -440,7 +440,7 @@ public class EvaluationTagPromptRepository {
                 parentPrompt.setId(parentPromptId);
                 prompt.setParentPrompt(parentPrompt);
                 
-                // 注意：这里不递归加载父提示词的完整信息，以避免无限循�?
+                // 注意：这里不递归加载父提示词的完整信息，以避免无限循?
             }
             
             // 设置创建变更日志

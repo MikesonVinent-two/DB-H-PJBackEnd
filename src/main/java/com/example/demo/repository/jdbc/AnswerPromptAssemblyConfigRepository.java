@@ -72,7 +72,7 @@ public class AnswerPromptAssemblyConfigRepository {
      * 保存配置
      *
      * @param config 配置对象
-     * @return 带有ID的配置对�?
+     * @return 带有ID的配置对?
      */
     public AnswerPromptAssemblyConfig save(AnswerPromptAssemblyConfig config) {
         if (config.getId() == null) {
@@ -83,10 +83,10 @@ public class AnswerPromptAssemblyConfigRepository {
     }
 
     /**
-     * 插入新配�?
+     * 插入新配?
      *
      * @param config 配置对象
-     * @return 带有ID的配置对�?
+     * @return 带有ID的配置对?
      */
     private AnswerPromptAssemblyConfig insert(AnswerPromptAssemblyConfig config) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -112,7 +112,7 @@ public class AnswerPromptAssemblyConfigRepository {
                 ps.setNull(2, Types.VARCHAR);
             }
             
-            // 设置是否激�?
+            // 设置是否激?
             ps.setBoolean(3, config.getIsActive());
             
             // 设置基础系统提示
@@ -137,13 +137,13 @@ public class AnswerPromptAssemblyConfigRepository {
             // 设置问题类型部分标题
             ps.setString(9, config.getQuestionTypeSectionHeader());
             
-            // 设置标签提示分隔�?
+            // 设置标签提示分隔?
             ps.setString(10, config.getTagPromptSeparator());
             
-            // 设置部分分隔�?
+            // 设置部分分隔?
             ps.setString(11, config.getSectionSeparator());
             
-            // 设置最终指�?
+            // 设置最终指?
             ps.setString(12, config.getFinalInstruction());
             
             // 设置关联的变更日志ID
@@ -171,7 +171,7 @@ public class AnswerPromptAssemblyConfigRepository {
      * @return 更新后的配置对象
      */
     private AnswerPromptAssemblyConfig update(AnswerPromptAssemblyConfig config) {
-        // 更新最后修改时�?
+        // 更新最后修改时?
         config.setUpdatedAt(LocalDateTime.now());
 
         jdbcTemplate.update(connection -> {
@@ -187,7 +187,7 @@ public class AnswerPromptAssemblyConfigRepository {
                 ps.setNull(2, Types.VARCHAR);
             }
             
-            // 设置是否激�?
+            // 设置是否激?
             ps.setBoolean(3, config.getIsActive());
             
             // 设置基础系统提示
@@ -212,13 +212,13 @@ public class AnswerPromptAssemblyConfigRepository {
             // 设置问题类型部分标题
             ps.setString(9, config.getQuestionTypeSectionHeader());
             
-            // 设置标签提示分隔�?
+            // 设置标签提示分隔?
             ps.setString(10, config.getTagPromptSeparator());
             
-            // 设置部分分隔�?
+            // 设置部分分隔?
             ps.setString(11, config.getSectionSeparator());
             
-            // 设置最终指�?
+            // 设置最终指?
             ps.setString(12, config.getFinalInstruction());
             
             // 设置关联的变更日志ID
@@ -269,7 +269,7 @@ public class AnswerPromptAssemblyConfigRepository {
      * 根据名称查找配置
      * 
      * @param name 配置名称
-     * @return 匹配的配置列�?
+     * @return 匹配的配置列?
      */
     public List<AnswerPromptAssemblyConfig> findByName(String name) {
         return jdbcTemplate.query(SQL_FIND_BY_NAME, new AnswerPromptAssemblyConfigRowMapper(), name);
@@ -286,9 +286,9 @@ public class AnswerPromptAssemblyConfigRepository {
     }
     
     /**
-     * 查找所有配�?
+     * 查找所有配?
      *
-     * @return 所有配置列�?
+     * @return 所有配置列?
      */
     public List<AnswerPromptAssemblyConfig> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new AnswerPromptAssemblyConfigRowMapper());
@@ -311,14 +311,14 @@ public class AnswerPromptAssemblyConfigRepository {
         public AnswerPromptAssemblyConfig mapRow(ResultSet rs, int rowNum) throws SQLException {
             AnswerPromptAssemblyConfig config = new AnswerPromptAssemblyConfig();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属?
             config.setId(rs.getLong("id"));
             config.setName(rs.getString("name"));
             config.setDescription(rs.getString("description"));
             config.setIsActive(rs.getBoolean("is_active"));
             config.setBaseSystemPrompt(rs.getString("base_system_prompt"));
             
-            // 设置创建�?
+            // 设置创建?
             User createdByUser = null;
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
@@ -337,7 +337,7 @@ public class AnswerPromptAssemblyConfigRepository {
                 config.setUpdatedAt(updatedAt.toLocalDateTime());
             }
             
-            // 设置其他属�?
+            // 设置其他属?
             config.setTagPromptsSectionHeader(rs.getString("tag_prompts_section_header"));
             config.setQuestionTypeSectionHeader(rs.getString("question_type_section_header"));
             config.setTagPromptSeparator(rs.getString("tag_prompt_separator"));

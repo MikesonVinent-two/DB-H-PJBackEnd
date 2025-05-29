@@ -26,7 +26,7 @@ import java.util.Optional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 基于JDBC的主观题评测提示词仓库实�?
+ * 基于JDBC的主观题评测提示词仓库实?
  */
 @Repository
 public class EvaluationSubjectivePromptRepository {
@@ -85,7 +85,7 @@ public class EvaluationSubjectivePromptRepository {
      * 保存主观题评测提示词
      *
      * @param prompt 主观题评测提示词对象
-     * @return 带有ID的主观题评测提示词对�?
+     * @return 带有ID的主观题评测提示词对?
      */
     public EvaluationSubjectivePrompt save(EvaluationSubjectivePrompt prompt) {
         if (prompt.getId() == null) {
@@ -96,10 +96,10 @@ public class EvaluationSubjectivePromptRepository {
     }
 
     /**
-     * 插入新主观题评测提示�?
+     * 插入新主观题评测提示?
      *
      * @param prompt 主观题评测提示词对象
-     * @return 带有ID的主观题评测提示词对�?
+     * @return 带有ID的主观题评测提示词对?
      */
     private EvaluationSubjectivePrompt insert(EvaluationSubjectivePrompt prompt) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -303,7 +303,7 @@ public class EvaluationSubjectivePromptRepository {
     }
 
     /**
-     * 查找所有主观题评测提示�?
+     * 查找所有主观题评测提示?
      *
      * @return 主观题评测提示词列表
      */
@@ -312,7 +312,7 @@ public class EvaluationSubjectivePromptRepository {
     }
 
     /**
-     * 分页查找所有主观题评测提示�?
+     * 分页查找所有主观题评测提示?
      *
      * @param pageable 分页参数
      * @return 主观题评测提示词分页结果
@@ -344,7 +344,7 @@ public class EvaluationSubjectivePromptRepository {
     /**
      * 按版本号查询主观题评测提示词
      *
-     * @param version 版本�?
+     * @param version 版本?
      * @return 主观题评测提示词对象（可选）
      */
     public Optional<EvaluationSubjectivePrompt> findByVersionAndDeletedAtIsNull(String version) {
@@ -361,7 +361,7 @@ public class EvaluationSubjectivePromptRepository {
     }
 
     /**
-     * 查找所有未删除的主观题评测提示�?
+     * 查找所有未删除的主观题评测提示?
      *
      * @return 主观题评测提示词列表
      */
@@ -385,7 +385,7 @@ public class EvaluationSubjectivePromptRepository {
     }
 
     /**
-     * 按名称查找主观题评测提示�?
+     * 按名称查找主观题评测提示?
      *
      * @param name 名称
      * @return 主观题评测提示词列表
@@ -404,7 +404,7 @@ public class EvaluationSubjectivePromptRepository {
      * @param id 主观题评测提示词ID
      */
     public void deleteById(Long id) {
-        // 实现软删�?
+        // 实现软删?
         jdbcTemplate.update(
             "UPDATE evaluation_subjective_prompts SET deleted_at=? WHERE id=?",
             Timestamp.valueOf(LocalDateTime.now()),
@@ -452,7 +452,7 @@ public class EvaluationSubjectivePromptRepository {
                 prompt.setUpdatedAt(updatedAt.toLocalDateTime());
             }
             
-            // 设置创建者用�?
+            // 设置创建者用?
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(createdByUserId).ifPresent(user -> prompt.setCreatedByUser(user));
@@ -465,7 +465,7 @@ public class EvaluationSubjectivePromptRepository {
                 parentPrompt.setId(parentPromptId);
                 prompt.setParentPrompt(parentPrompt);
                 
-                // 注意：这里不递归加载父提示词的完整信息，以避免无限循�?
+                // 注意：这里不递归加载父提示词的完整信息，以避免无限循?
             }
             
             // 设置创建变更日志

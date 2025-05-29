@@ -73,15 +73,15 @@ public class AnswerQuestionTypePromptRepository {
             "SELECT * FROM answer_question_type_prompts WHERE is_active=TRUE AND deleted_at IS NULL ORDER BY question_type, created_at DESC";
 
     @Autowired
-    public AnswerQuestionTypePromptRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository) {
+    public AnswerQuestionTypePromptRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
         this.jdbcTemplate = jdbcTemplate;
-        this.UserRepository = UserRepository;
+        this.userRepository = userRepository;
     }
 
     /**
-     * 保存回答题型提示�?
+     * 保存回答题型提示?
      *
-     * @param prompt 回答题型提示词对�?
+     * @param prompt 回答题型提示词对?
      * @return 带有ID的回答题型提示词对象
      */
     public AnswerQuestionTypePrompt save(AnswerQuestionTypePrompt prompt) {
@@ -95,7 +95,7 @@ public class AnswerQuestionTypePromptRepository {
     /**
      * 插入新回答题型提示词
      *
-     * @param prompt 回答题型提示词对�?
+     * @param prompt 回答题型提示词对?
      * @return 带有ID的回答题型提示词对象
      */
     private AnswerQuestionTypePrompt insert(AnswerQuestionTypePrompt prompt) {
@@ -189,10 +189,10 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 更新回答题型提示�?
+     * 更新回答题型提示?
      *
-     * @param prompt 回答题型提示词对�?
-     * @return 更新后的回答题型提示词对�?
+     * @param prompt 回答题型提示词对?
+     * @return 更新后的回答题型提示词对?
      */
     private AnswerQuestionTypePrompt update(AnswerQuestionTypePrompt prompt) {
         jdbcTemplate.update(connection -> {
@@ -275,7 +275,7 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 根据ID查找回答题型提示�?
+     * 根据ID查找回答题型提示?
      *
      * @param id 回答题型提示词ID
      * @return 回答题型提示词对象（可选）
@@ -296,7 +296,7 @@ public class AnswerQuestionTypePromptRepository {
     /**
      * 查找所有回答题型提示词
      *
-     * @return 回答题型提示词列�?
+     * @return 回答题型提示词列?
      */
     public List<AnswerQuestionTypePrompt> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new AnswerQuestionTypePromptRowMapper());
@@ -306,7 +306,7 @@ public class AnswerQuestionTypePromptRepository {
      * 分页查找所有回答题型提示词
      *
      * @param pageable 分页参数
-     * @return 回答题型提示词分页结�?
+     * @return 回答题型提示词分页结?
      */
     public Page<AnswerQuestionTypePrompt> findAll(Pageable pageable) {
         List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
@@ -321,10 +321,10 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 按题型查找激活状态的提示�?
+     * 按题型查找激活状态的提示?
      *
      * @param questionType 题型
-     * @return 回答题型提示词列�?
+     * @return 回答题型提示词列?
      */
     public List<AnswerQuestionTypePrompt> findByQuestionTypeAndIsActiveTrueAndDeletedAtIsNull(QuestionType questionType) {
         return jdbcTemplate.query(
@@ -338,7 +338,7 @@ public class AnswerQuestionTypePromptRepository {
      * 按版本号查询特定题型的提示词
      *
      * @param questionType 题型
-     * @param version 版本�?
+     * @param version 版本?
      * @return 回答题型提示词对象（可选）
      */
     public Optional<AnswerQuestionTypePrompt> findByQuestionTypeAndVersionAndDeletedAtIsNull(QuestionType questionType, String version) {
@@ -357,7 +357,7 @@ public class AnswerQuestionTypePromptRepository {
     /**
      * 查找所有未删除的题型提示词
      *
-     * @return 回答题型提示词列�?
+     * @return 回答题型提示词列?
      */
     public List<AnswerQuestionTypePrompt> findByDeletedAtIsNull() {
         return jdbcTemplate.query(
@@ -367,10 +367,10 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 查找最新版本的题型提示�?
+     * 查找最新版本的题型提示?
      *
      * @param questionType 题型
-     * @return 回答题型提示词列�?
+     * @return 回答题型提示词列?
      */
     public List<AnswerQuestionTypePrompt> findLatestByQuestionType(QuestionType questionType) {
         return jdbcTemplate.query(
@@ -383,7 +383,7 @@ public class AnswerQuestionTypePromptRepository {
     /**
      * 查找所有已启用的题型提示词，按题型分组
      *
-     * @return 回答题型提示词列�?
+     * @return 回答题型提示词列?
      */
     public List<AnswerQuestionTypePrompt> findAllActiveGroupByQuestionType() {
         return jdbcTemplate.query(
@@ -393,12 +393,12 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 删除回答题型提示�?
+     * 删除回答题型提示?
      *
      * @param id 回答题型提示词ID
      */
     public void deleteById(Long id) {
-        // 实现软删�?
+        // 实现软删?
         jdbcTemplate.update(
             "UPDATE answer_question_type_prompts SET deleted_at=? WHERE id=?",
             Timestamp.valueOf(LocalDateTime.now()),
@@ -407,7 +407,7 @@ public class AnswerQuestionTypePromptRepository {
     }
 
     /**
-     * 回答题型提示词行映射�?
+     * 回答题型提示词行映射?
      */
     private class AnswerQuestionTypePromptRowMapper implements RowMapper<AnswerQuestionTypePrompt> {
         @Override
@@ -446,7 +446,7 @@ public class AnswerQuestionTypePromptRepository {
                 user.setId(createdByUserId);
                 prompt.setCreatedByUser(user);
                 
-                // 可选：加载完整的用户信�?
+                // 可选：加载完整的用户信?
                 UserRepository.findById(createdByUserId).ifPresent(prompt::setCreatedByUser);
             }
             
@@ -457,7 +457,7 @@ public class AnswerQuestionTypePromptRepository {
                 parentPrompt.setId(parentPromptId);
                 prompt.setParentPrompt(parentPrompt);
                 
-                // 注意：这里不递归加载父提示词的完整信息，以避免无限循�?
+                // 注意：这里不递归加载父提示词的完整信息，以避免无限循?
             }
             
             // 设置创建变更日志

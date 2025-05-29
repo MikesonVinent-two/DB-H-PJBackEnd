@@ -30,7 +30,7 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 基于JDBC的评测标准仓库实�?
+ * 基于JDBC的评测标准仓库实?
  */
 @Repository
 public class EvaluationCriterionRepository {
@@ -88,7 +88,7 @@ public class EvaluationCriterionRepository {
      * 保存评测标准
      *
      * @param criterion 评测标准对象
-     * @return 带有ID的评测标准对�?
+     * @return 带有ID的评测标准对?
      */
     public EvaluationCriterion save(EvaluationCriterion criterion) {
         if (criterion.getId() == null) {
@@ -99,10 +99,10 @@ public class EvaluationCriterionRepository {
     }
 
     /**
-     * 插入新评测标�?
+     * 插入新评测标?
      *
      * @param criterion 评测标准对象
-     * @return 带有ID的评测标准对�?
+     * @return 带有ID的评测标准对?
      */
     private EvaluationCriterion insert(EvaluationCriterion criterion) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -351,7 +351,7 @@ public class EvaluationCriterionRepository {
     }
 
     /**
-     * 查找所有评测标�?
+     * 查找所有评测标?
      *
      * @return 评测标准列表
      */
@@ -360,7 +360,7 @@ public class EvaluationCriterionRepository {
     }
 
     /**
-     * 分页查找所有评测标�?
+     * 分页查找所有评测标?
      *
      * @param pageable 分页参数
      * @return 评测标准分页结果
@@ -425,7 +425,7 @@ public class EvaluationCriterionRepository {
     }
 
     /**
-     * 根据ID和名称查找评测标�?
+     * 根据ID和名称查找评测标?
      *
      * @param id 标准ID
      * @param name 标准名称
@@ -464,7 +464,7 @@ public class EvaluationCriterionRepository {
      * @param id 评测标准ID
      */
     public void deleteById(Long id) {
-        // 实现软删�?
+        // 实现软删?
         jdbcTemplate.update(
             "UPDATE evaluation_criteria SET deleted_at=? WHERE id=?",
             Timestamp.valueOf(LocalDateTime.now()),
@@ -547,7 +547,7 @@ public class EvaluationCriterionRepository {
                 user.setId(createdByUserId);
                 criterion.setCreatedByUser(user);
                 
-                // 可选：加载完整的用户信�?
+                // 可选：加载完整的用户信?
                 UserRepository.findById(createdByUserId).ifPresent(criterion::setCreatedByUser);
             }
             

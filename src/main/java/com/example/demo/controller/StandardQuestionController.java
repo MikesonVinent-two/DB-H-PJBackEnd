@@ -18,8 +18,8 @@ import com.example.demo.dto.BatchTagOperationsDTO;
 import com.example.demo.dto.StandardQuestionDTO;
 import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.TagOperationDTO;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.StandardQuestionTag;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.StandardQuestionTag;
 import com.example.demo.service.StandardQuestionService;
 
 import jakarta.validation.Valid;

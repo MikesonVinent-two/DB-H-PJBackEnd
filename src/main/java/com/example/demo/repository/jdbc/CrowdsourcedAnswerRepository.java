@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的众包回答仓库实�?
+ * 基于JDBC的众包回答仓库实?
  */
 @Repository
 public class CrowdsourcedAnswerRepository {
@@ -101,7 +101,7 @@ public class CrowdsourcedAnswerRepository {
      * 保存众包回答
      *
      * @param crowdsourcedAnswer 众包回答对象
-     * @return 带有ID的众包回答对�?
+     * @return 带有ID的众包回答对?
      */
     public CrowdsourcedAnswer save(CrowdsourcedAnswer crowdsourcedAnswer) {
         if (crowdsourcedAnswer.getId() == null) {
@@ -112,10 +112,10 @@ public class CrowdsourcedAnswerRepository {
     }
 
     /**
-     * 插入新众包回�?
+     * 插入新众包回?
      *
      * @param crowdsourcedAnswer 众包回答对象
-     * @return 带有ID的众包回答对�?
+     * @return 带有ID的众包回答对?
      */
     private CrowdsourcedAnswer insert(CrowdsourcedAnswer crowdsourcedAnswer) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -155,7 +155,7 @@ public class CrowdsourcedAnswerRepository {
                 ps.setNull(5, Types.BIGINT);
             }
             
-            // 设置质量审核状�?
+            // 设置质量审核状?
             if (crowdsourcedAnswer.getQualityReviewStatus() != null) {
                 ps.setString(6, crowdsourcedAnswer.getQualityReviewStatus().name());
             } else {
@@ -183,7 +183,7 @@ public class CrowdsourcedAnswerRepository {
                 ps.setNull(9, Types.VARCHAR);
             }
             
-            // 设置其他元数�?
+            // 设置其他元数?
             if (crowdsourcedAnswer.getOtherMetadata() != null) {
                 ps.setString(10, crowdsourcedAnswer.getOtherMetadata());
             } else {
@@ -238,7 +238,7 @@ public class CrowdsourcedAnswerRepository {
                 ps.setNull(5, Types.BIGINT);
             }
             
-            // 设置质量审核状�?
+            // 设置质量审核状?
             if (crowdsourcedAnswer.getQualityReviewStatus() != null) {
                 ps.setString(6, crowdsourcedAnswer.getQualityReviewStatus().name());
             } else {
@@ -266,7 +266,7 @@ public class CrowdsourcedAnswerRepository {
                 ps.setNull(9, Types.VARCHAR);
             }
             
-            // 设置其他元数�?
+            // 设置其他元数?
             if (crowdsourcedAnswer.getOtherMetadata() != null) {
                 ps.setString(10, crowdsourcedAnswer.getOtherMetadata());
             } else {
@@ -356,9 +356,9 @@ public class CrowdsourcedAnswerRepository {
     }
 
     /**
-     * 根据审核状态查询众包回�?
+     * 根据审核状态查询众包回?
      *
-     * @param status 审核状�?
+     * @param status 审核状?
      * @param pageable 分页参数
      * @return 众包回答分页列表
      */
@@ -384,10 +384,10 @@ public class CrowdsourcedAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID和审核状态查询众包回�?
+     * 根据标准问题ID和审核状态查询众包回?
      *
      * @param standardQuestionId 标准问题ID
-     * @param status 审核状�?
+     * @param status 审核状?
      * @param pageable 分页参数
      * @return 众包回答分页列表
      */
@@ -435,9 +435,9 @@ public class CrowdsourcedAnswerRepository {
     }
 
     /**
-     * 查找所有众包回�?
+     * 查找所有众包回?
      *
-     * @return 所有众包回答列�?
+     * @return 所有众包回答列?
      */
     public List<CrowdsourcedAnswer> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new CrowdsourcedAnswerRowMapper());
@@ -460,7 +460,7 @@ public class CrowdsourcedAnswerRepository {
         public CrowdsourcedAnswer mapRow(ResultSet rs, int rowNum) throws SQLException {
             CrowdsourcedAnswer crowdsourcedAnswer = new CrowdsourcedAnswer();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属?
             crowdsourcedAnswer.setId(rs.getLong("ID"));
             crowdsourcedAnswer.setAnswerText(rs.getString("ANSWER_TEXT"));
             
@@ -473,10 +473,10 @@ public class CrowdsourcedAnswerRepository {
             // 设置审核反馈
             crowdsourcedAnswer.setReviewFeedback(rs.getString("REVIEW_FEEDBACK"));
             
-            // 设置其他元数�?
+            // 设置其他元数?
             crowdsourcedAnswer.setOtherMetadata(rs.getString("OTHER_METADATA"));
             
-            // 设置质量审核状�?
+            // 设置质量审核状?
             String qualityReviewStatusStr = rs.getString("QUALITY_REVIEW_STATUS");
             if (qualityReviewStatusStr != null) {
                 crowdsourcedAnswer.setQualityReviewStatus(
@@ -496,21 +496,21 @@ public class CrowdsourcedAnswerRepository {
                 crowdsourcedAnswer.setReviewTime(reviewTime.toLocalDateTime());
             }
             
-            // 获取并设置标准问�?
+            // 获取并设置标准问?
             Long standardQuestionId = rs.getLong("STANDARD_QUESTION_ID");
             if (!rs.wasNull()) {
                 standardQuestionRepository.findById(standardQuestionId)
                     .ifPresent(crowdsourcedAnswer::setStandardQuestion);
             }
             
-            // 获取并设置用�?
+            // 获取并设置用?
             Long userId = rs.getLong("USER_ID");
             if (!rs.wasNull()) {
                 userRepository.findById(userId)
                     .ifPresent(crowdsourcedAnswer::setUser);
             }
             
-            // 获取并设置审核者用�?
+            // 获取并设置审核者用?
             Long reviewedByUserId = rs.getLong("REVIEWED_BY_USER_ID");
             if (!rs.wasNull()) {
                 userRepository.findById(reviewedByUserId)

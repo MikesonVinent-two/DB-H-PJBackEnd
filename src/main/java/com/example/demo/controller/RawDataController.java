@@ -14,8 +14,8 @@ import com.example.demo.dto.RawAnswerDTO;
 import com.example.demo.dto.RawQuestionDTO;
 import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.dto.RawQuestionDisplayDTO;
-import com.example.demo.entity.RawAnswer;
-import com.example.demo.entity.RawQuestion;
+import com.example.demo.entity.jdbc.RawAnswer;
+import com.example.demo.entity.jdbc.RawQuestion;
 import com.example.demo.service.RawDataService;
 
 import jakarta.validation.Valid;

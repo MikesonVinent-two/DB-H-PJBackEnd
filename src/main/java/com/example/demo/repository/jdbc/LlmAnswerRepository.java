@@ -19,6 +19,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 基于JDBC的LLM回答仓库实现
@@ -79,6 +80,9 @@ public class LlmAnswerRepository {
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM llm_answers";
 
+    private static final String SQL_FIND_BY_IDS = 
+            "SELECT * FROM llm_answers WHERE id IN (%s)";
+
     @Autowired
     public LlmAnswerRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -123,7 +127,7 @@ public class LlmAnswerRepository {
                 ps.setNull(3, java.sql.Types.VARCHAR);
             }
             
-            // 设置生成状�?
+            // 设置生成状态
             ps.setString(4, llmAnswer.getGenerationStatus().name());
             
             // 设置错误信息
@@ -154,7 +158,7 @@ public class LlmAnswerRepository {
                 ps.setNull(8, java.sql.Types.VARCHAR);
             }
             
-            // 设置其他元数�?
+            // 设置其他元数据
             if (llmAnswer.getOtherMetadata() != null) {
                 ps.setString(9, llmAnswer.getOtherMetadata());
             } else {
@@ -216,7 +220,7 @@ public class LlmAnswerRepository {
      * 根据ID查找LLM回答，同时预加载问题
      *
      * @param id 回答ID
-     * @return 回答的Optional包装，包含预加载的问�?
+     * @return 回答的Optional包装，包含预加载的问题
      */
     public Optional<LlmAnswer> findByIdWithQuestion(Long id) {
         try {
@@ -245,7 +249,7 @@ public class LlmAnswerRepository {
      * 根据运行ID查找回答，同时预加载问题
      *
      * @param modelAnswerRunId 运行ID
-     * @return 回答列表，包含预加载的问�?
+     * @return 回答列表，包含预加载的问题
      */
     public List<LlmAnswer> findByModelAnswerRunIdWithQuestions(Long modelAnswerRunId) {
         return jdbcTemplate.query(
@@ -285,7 +289,7 @@ public class LlmAnswerRepository {
     }
     
     /**
-     * 根据运行ID和数据集映射问题ID及重复索引查找回�?
+     * 根据运行ID和数据集映射问题ID及重复索引查找回答
      *
      * @param runId 运行ID
      * @param datasetQuestionMappingId 数据集映射问题ID
@@ -321,7 +325,7 @@ public class LlmAnswerRepository {
     }
     
     /**
-     * 按批次ID查找所有回�?
+     * 按批次ID查找所有回答
      *
      * @param batchId 批次ID
      * @return 回答列表
@@ -335,7 +339,7 @@ public class LlmAnswerRepository {
     }
     
     /**
-     * 根据模型回答运行ID和回答ID查询大于指定ID的回答列�?
+     * 根据模型回答运行ID和回答ID查询大于指定ID的回答列表
      *
      * @param modelAnswerRunId 模型回答运行ID
      * @param id 回答ID
@@ -359,6 +363,31 @@ public class LlmAnswerRepository {
     }
 
     /**
+     * 根据ID列表查找LLM回答
+     *
+     * @param ids LLM回答ID列表
+     * @return LLM回答列表
+     */
+    public List<LlmAnswer> findAllById(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        
+        // 构建IN子句的占位符
+        String placeholders = String.join(",", ids.stream()
+                .map(id -> "?")
+                .collect(Collectors.toList()));
+        
+        // 构建完整的SQL查询
+        String sql = String.format(SQL_FIND_BY_IDS, placeholders);
+        
+        // 将ID列表转换为Object数组
+        Object[] params = ids.toArray();
+        
+        return jdbcTemplate.query(sql, params, new LlmAnswerRowMapper());
+    }
+
+    /**
      * LLM回答行映射器
      */
     private class LlmAnswerRowMapper implements RowMapper<LlmAnswer> {
@@ -375,7 +404,7 @@ public class LlmAnswerRepository {
                 llmAnswer.setModelAnswerRun(modelAnswerRun);
             }
             
-            // 设置数据集问题映�?
+            // 设置数据集问题映射
             Long datasetQuestionMappingId = rs.getLong("dataset_question_mapping_id");
             if (!rs.wasNull()) {
                 DatasetQuestionMapping datasetQuestionMapping = new DatasetQuestionMapping();
@@ -386,7 +415,7 @@ public class LlmAnswerRepository {
             // 设置回答文本
             llmAnswer.setAnswerText(rs.getString("answer_text"));
             
-            // 设置生成状�?
+            // 设置生成状态
             String generationStatusStr = rs.getString("generation_status");
             if (generationStatusStr != null) {
                 llmAnswer.setGenerationStatus(LlmAnswer.GenerationStatus.valueOf(generationStatusStr));
@@ -407,7 +436,7 @@ public class LlmAnswerRepository {
             // 设置原始模型响应
             llmAnswer.setRawModelResponse(rs.getString("raw_model_response"));
             
-            // 设置其他元数�?
+            // 设置其他元数据
             llmAnswer.setOtherMetadata(rs.getString("other_metadata"));
             
             // 设置重复索引
@@ -426,7 +455,7 @@ public class LlmAnswerRepository {
             // 首先获取基本的LLM回答对象
             LlmAnswer llmAnswer = super.mapRow(rs, rowNum);
             
-            // 进一步填充问题相关信�?
+            // 进一步填充问题相关信息
             try {
                 Long dqmId = rs.getLong("dqm_id");
                 Long sqId = rs.getLong("sq_id");

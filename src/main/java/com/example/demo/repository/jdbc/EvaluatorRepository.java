@@ -245,6 +245,15 @@ public class EvaluatorRepository {
     }
     
     /**
+     * 删除评测者（通过ID）
+     * 
+     * @param id 评测者ID
+     */
+    public void deleteById(Long id) {
+        softDelete(id);
+    }
+    
+    /**
      * 检查指定ID的评测者是否存在
      *
      * @param id 评测者ID

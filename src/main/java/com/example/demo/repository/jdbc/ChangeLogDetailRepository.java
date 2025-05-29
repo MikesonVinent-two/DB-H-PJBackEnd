@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的变更日志详情仓库实�?
+ * 基于JDBC的变更日志详情仓库实?
  */
 @Repository
 public class ChangeLogDetailRepository {
@@ -56,7 +56,7 @@ public class ChangeLogDetailRepository {
      * 保存变更日志详情
      *
      * @param changeLogDetail 变更日志详情对象
-     * @return 带有ID的变更日志详情对�?
+     * @return 带有ID的变更日志详情对?
      */
     public ChangeLogDetail save(ChangeLogDetail changeLogDetail) {
         if (getId(changeLogDetail) == null) {
@@ -67,10 +67,10 @@ public class ChangeLogDetailRepository {
     }
 
     /**
-     * 插入新变更日志详�?
+     * 插入新变更日志详?
      *
      * @param changeLogDetail 变更日志详情对象
-     * @return 带有ID的变更日志详情对�?
+     * @return 带有ID的变更日志详情对?
      */
     private ChangeLogDetail insert(ChangeLogDetail changeLogDetail) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -135,7 +135,7 @@ public class ChangeLogDetailRepository {
     }
     
     /**
-     * 根据变更日志查找所有详�?
+     * 根据变更日志查找所有详?
      *
      * @param changeLog 变更日志对象
      * @return 变更日志详情列表
@@ -145,7 +145,7 @@ public class ChangeLogDetailRepository {
     }
 
     /**
-     * 查找所有变更日志详�?
+     * 查找所有变更日志详?
      *
      * @return 变更日志详情列表
      */
@@ -197,7 +197,7 @@ public class ChangeLogDetailRepository {
     }
     
     /**
-     * 通过反射获取id字段的�?
+     * 通过反射获取id字段的?
      */
     private Long getId(Object entity) {
         try {
@@ -210,7 +210,7 @@ public class ChangeLogDetailRepository {
     }
     
     /**
-     * 通过反射设置id字段的�?
+     * 通过反射设置id字段的?
      */
     private void setId(Object entity, Long id) {
         try {

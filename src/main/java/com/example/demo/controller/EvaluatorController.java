@@ -1,9 +1,9 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.User;
-import com.example.demo.repository.EvaluatorRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.EvaluatorRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

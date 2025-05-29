@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的原始问题标签仓库实�?
+ * 基于JDBC的原始问题标签仓库实?
  */
 @Repository
 public class RawQuestionTagRepository {
@@ -65,23 +65,23 @@ public class RawQuestionTagRepository {
      * 保存原始问题标签
      *
      * @param rawQuestionTag 原始问题标签对象
-     * @return 带有ID的原始问题标签对�?
+     * @return 带有ID的原始问题标签对?
      */
     public RawQuestionTag save(RawQuestionTag rawQuestionTag) {
         if (rawQuestionTag.getId() == null) {
             return insert(rawQuestionTag);
         } else {
-            // 由于原始问题标签是简单的关联实体，通常不需要更新，只需插入和删�?
+            // 由于原始问题标签是简单的关联实体，通常不需要更新，只需插入和删?
             // 如果有需要，可以实现update方法
             return rawQuestionTag;
         }
     }
 
     /**
-     * 插入新原始问题标�?
+     * 插入新原始问题标?
      *
      * @param rawQuestionTag 原始问题标签对象
-     * @return 带有ID的原始问题标签对�?
+     * @return 带有ID的原始问题标签对?
      */
     private RawQuestionTag insert(RawQuestionTag rawQuestionTag) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -182,7 +182,7 @@ public class RawQuestionTagRepository {
     }
 
     /**
-     * 根据原始问题和标签删除原始问题标�?
+     * 根据原始问题和标签删除原始问题标?
      *
      * @param rawQuestion 原始问题对象
      * @param tag 标签对象
@@ -196,7 +196,7 @@ public class RawQuestionTagRepository {
     }
 
     /**
-     * 检查原始问题和标签的关联是否存�?
+     * 检查原始问题和标签的关联是否存?
      *
      * @param rawQuestion 原始问题对象
      * @param tag 标签对象
@@ -213,9 +213,9 @@ public class RawQuestionTagRepository {
     }
 
     /**
-     * 查找所有原始问题标�?
+     * 查找所有原始问题标?
      *
-     * @return 所有原始问题标签列�?
+     * @return 所有原始问题标签列?
      */
     public List<RawQuestionTag> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new RawQuestionTagRowMapper());
@@ -259,7 +259,7 @@ public class RawQuestionTagRepository {
                 rawQuestionTag.setCreatedAt(createdAt.toLocalDateTime());
             }
             
-            // 设置创建者用�?
+            // 设置创建者用?
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 userRepository.findById(createdByUserId).ifPresent(user -> rawQuestionTag.setCreatedByUser(user));

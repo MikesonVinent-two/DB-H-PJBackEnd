@@ -83,9 +83,9 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 保存回答标签提示�?
+     * 保存回答标签提示?
      *
-     * @param prompt 回答标签提示词对�?
+     * @param prompt 回答标签提示词对?
      * @return 带有ID的回答标签提示词对象
      */
     public AnswerTagPrompt save(AnswerTagPrompt prompt) {
@@ -99,7 +99,7 @@ public class AnswerTagPromptRepository {
     /**
      * 插入新回答标签提示词
      *
-     * @param prompt 回答标签提示词对�?
+     * @param prompt 回答标签提示词对?
      * @return 带有ID的回答标签提示词对象
      */
     private AnswerTagPrompt insert(AnswerTagPrompt prompt) {
@@ -182,10 +182,10 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 更新回答标签提示�?
+     * 更新回答标签提示?
      *
-     * @param prompt 回答标签提示词对�?
-     * @return 更新后的回答标签提示词对�?
+     * @param prompt 回答标签提示词对?
+     * @return 更新后的回答标签提示词对?
      */
     private AnswerTagPrompt update(AnswerTagPrompt prompt) {
         jdbcTemplate.update(connection -> {
@@ -257,7 +257,7 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 根据ID查找回答标签提示�?
+     * 根据ID查找回答标签提示?
      *
      * @param id 回答标签提示词ID
      * @return 回答标签提示词对象（可选）
@@ -278,7 +278,7 @@ public class AnswerTagPromptRepository {
     /**
      * 查找所有回答标签提示词
      *
-     * @return 回答标签提示词列�?
+     * @return 回答标签提示词列?
      */
     public List<AnswerTagPrompt> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new AnswerTagPromptRowMapper());
@@ -288,7 +288,7 @@ public class AnswerTagPromptRepository {
      * 分页查找所有回答标签提示词
      *
      * @param pageable 分页参数
-     * @return 回答标签提示词分页结�?
+     * @return 回答标签提示词分页结?
      */
     public Page<AnswerTagPrompt> findAll(Pageable pageable) {
         List<AnswerTagPrompt> prompts = jdbcTemplate.query(
@@ -306,7 +306,7 @@ public class AnswerTagPromptRepository {
      * 查找指定标签的所有激活状态的提示词，按优先级排序
      *
      * @param tag 标签
-     * @return 回答标签提示词列�?
+     * @return 回答标签提示词列?
      */
     public List<AnswerTagPrompt> findByTagAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(Tag tag) {
         if (tag == null || tag.getId() == null) {
@@ -321,10 +321,10 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 按标签ID查询激活状态的提示�?
+     * 按标签ID查询激活状态的提示?
      *
      * @param tagId 标签ID
-     * @return 回答标签提示词列�?
+     * @return 回答标签提示词列?
      */
     public List<AnswerTagPrompt> findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(Long tagId) {
         return jdbcTemplate.query(
@@ -338,7 +338,7 @@ public class AnswerTagPromptRepository {
      * 按版本号查询特定标签的提示词
      *
      * @param tagId 标签ID
-     * @param version 版本�?
+     * @param version 版本?
      * @return 回答标签提示词对象（可选）
      */
     public Optional<AnswerTagPrompt> findByTagIdAndVersionAndDeletedAtIsNull(Long tagId, String version) {
@@ -357,7 +357,7 @@ public class AnswerTagPromptRepository {
     /**
      * 查找所有未删除的标签提示词
      *
-     * @return 回答标签提示词列�?
+     * @return 回答标签提示词列?
      */
     public List<AnswerTagPrompt> findByDeletedAtIsNull() {
         return jdbcTemplate.query(
@@ -367,10 +367,10 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 查找最新版本的标签提示�?
+     * 查找最新版本的标签提示?
      *
      * @param tagId 标签ID
-     * @return 回答标签提示词列�?
+     * @return 回答标签提示词列?
      */
     public List<AnswerTagPrompt> findLatestByTagId(Long tagId) {
         return jdbcTemplate.query(
@@ -381,12 +381,12 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 删除回答标签提示�?
+     * 删除回答标签提示?
      *
      * @param id 回答标签提示词ID
      */
     public void deleteById(Long id) {
-        // 实现软删�?
+        // 实现软删?
         jdbcTemplate.update(
             "UPDATE answer_tag_prompts SET deleted_at=? WHERE id=?",
             Timestamp.valueOf(LocalDateTime.now()),
@@ -395,7 +395,7 @@ public class AnswerTagPromptRepository {
     }
 
     /**
-     * 回答标签提示词行映射�?
+     * 回答标签提示词行映射?
      */
     private class AnswerTagPromptRowMapper implements RowMapper<AnswerTagPrompt> {
         @Override
@@ -411,7 +411,7 @@ public class AnswerTagPromptRepository {
                 tag.setId(tagId);
                 prompt.setTag(tag);
                 
-                // 可选：加载完整的标签信�?
+                // 可选：加载完整的标签信?
                 TagRepository.findById(tagId).ifPresent(prompt::setTag);
             }
             
@@ -439,7 +439,7 @@ public class AnswerTagPromptRepository {
                 user.setId(createdByUserId);
                 prompt.setCreatedByUser(user);
                 
-                // 可选：加载完整的用户信�?
+                // 可选：加载完整的用户信?
                 UserRepository.findById(createdByUserId).ifPresent(prompt::setCreatedByUser);
             }
             
@@ -450,7 +450,7 @@ public class AnswerTagPromptRepository {
                 parentPrompt.setId(parentPromptId);
                 prompt.setParentPrompt(parentPrompt);
                 
-                // 注意：这里不递归加载父提示词的完整信息，以避免无限循�?
+                // 注意：这里不递归加载父提示词的完整信息，以避免无限循?
             }
             
             // 设置创建变更日志

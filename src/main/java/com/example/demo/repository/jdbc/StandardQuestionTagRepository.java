@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的标准问题标签仓库实�?
+ * 基于JDBC的标准问题标签仓库实?
  */
 @Repository
 public class StandardQuestionTagRepository {
@@ -65,23 +65,23 @@ public class StandardQuestionTagRepository {
      * 保存标准问题标签
      *
      * @param standardQuestionTag 标准问题标签对象
-     * @return 带有ID的标准问题标签对�?
+     * @return 带有ID的标准问题标签对?
      */
     public StandardQuestionTag save(StandardQuestionTag standardQuestionTag) {
         if (standardQuestionTag.getId() == null) {
             return insert(standardQuestionTag);
         } else {
-            // 由于标准问题标签是简单的关联实体，通常不需要更新，只需插入和删�?
+            // 由于标准问题标签是简单的关联实体，通常不需要更新，只需插入和删?
             // 如果有需要，可以实现update方法
             return standardQuestionTag;
         }
     }
 
     /**
-     * 插入新标准问题标�?
+     * 插入新标准问题标?
      *
      * @param standardQuestionTag 标准问题标签对象
-     * @return 带有ID的标准问题标签对�?
+     * @return 带有ID的标准问题标签对?
      */
     private StandardQuestionTag insert(StandardQuestionTag standardQuestionTag) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -168,7 +168,7 @@ public class StandardQuestionTagRepository {
     }
 
     /**
-     * 根据标准问题和标签删除标准问题标�?
+     * 根据标准问题和标签删除标准问题标?
      *
      * @param standardQuestion 标准问题对象
      * @param tag 标签对象
@@ -182,7 +182,7 @@ public class StandardQuestionTagRepository {
     }
 
     /**
-     * 检查标准问题和标签的关联是否存�?
+     * 检查标准问题和标签的关联是否存?
      *
      * @param standardQuestion 标准问题对象
      * @param tag 标签对象
@@ -199,9 +199,9 @@ public class StandardQuestionTagRepository {
     }
 
     /**
-     * 查找所有标准问题标�?
+     * 查找所有标准问题标?
      *
-     * @return 所有标准问题标签列�?
+     * @return 所有标准问题标签列?
      */
     public List<StandardQuestionTag> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new StandardQuestionTagRowMapper());
@@ -245,7 +245,7 @@ public class StandardQuestionTagRepository {
                 standardQuestionTag.setCreatedAt(createdAt.toLocalDateTime());
             }
             
-            // 设置创建者用�?
+            // 设置创建者用?
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 userRepository.findById(createdByUserId).ifPresent(user -> standardQuestionTag.setCreatedByUser(user));

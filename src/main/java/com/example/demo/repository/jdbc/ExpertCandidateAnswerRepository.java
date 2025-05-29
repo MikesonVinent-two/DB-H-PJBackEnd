@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的专家候选答案仓库实�?
+ * 基于JDBC的专家候选答案仓库实?
  */
 @Repository
 public class ExpertCandidateAnswerRepository {
@@ -88,10 +88,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 保存专家候选答�?
+     * 保存专家候选答?
      *
-     * @param expertCandidateAnswer 专家候选答案对�?
-     * @return 带有ID的专家候选答案对�?
+     * @param expertCandidateAnswer 专家候选答案对?
+     * @return 带有ID的专家候选答案对?
      */
     public ExpertCandidateAnswer save(ExpertCandidateAnswer expertCandidateAnswer) {
         if (expertCandidateAnswer.getId() == null) {
@@ -102,10 +102,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 插入新专家候选答�?
+     * 插入新专家候选答?
      *
-     * @param expertCandidateAnswer 专家候选答案对�?
-     * @return 带有ID的专家候选答案对�?
+     * @param expertCandidateAnswer 专家候选答案对?
+     * @return 带有ID的专家候选答案对?
      */
     private ExpertCandidateAnswer insert(ExpertCandidateAnswer expertCandidateAnswer) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -124,7 +124,7 @@ public class ExpertCandidateAnswerRepository {
             // 设置用户ID
             ps.setLong(2, expertCandidateAnswer.getUser().getId());
             
-            // 设置候选答案文�?
+            // 设置候选答案文?
             ps.setString(3, expertCandidateAnswer.getCandidateAnswerText());
             
             // 设置提交时间
@@ -156,10 +156,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 更新专家候选答�?
+     * 更新专家候选答?
      *
-     * @param expertCandidateAnswer 专家候选答案对�?
-     * @return 更新后的专家候选答案对�?
+     * @param expertCandidateAnswer 专家候选答案对?
+     * @return 更新后的专家候选答案对?
      */
     private ExpertCandidateAnswer update(ExpertCandidateAnswer expertCandidateAnswer) {
         jdbcTemplate.update(connection -> {
@@ -171,7 +171,7 @@ public class ExpertCandidateAnswerRepository {
             // 设置用户ID
             ps.setLong(2, expertCandidateAnswer.getUser().getId());
             
-            // 设置候选答案文�?
+            // 设置候选答案文?
             ps.setString(3, expertCandidateAnswer.getCandidateAnswerText());
             
             // 设置提交时间
@@ -201,10 +201,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据ID查找专家候选答�?
+     * 根据ID查找专家候选答?
      *
      * @param id 专家候选答案ID
-     * @return 专家候选答案对�?
+     * @return 专家候选答案对?
      */
     public Optional<ExpertCandidateAnswer> findById(Long id) {
         try {
@@ -220,10 +220,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID查找专家候选答案列�?
+     * 根据标准问题ID查找专家候选答案列?
      *
      * @param standardQuestionId 标准问题ID
-     * @return 专家候选答案列�?
+     * @return 专家候选答案列?
      */
     public List<ExpertCandidateAnswer> findByStandardQuestionId(Long standardQuestionId) {
         try {
@@ -238,10 +238,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据用户ID查找专家候选答案列�?
+     * 根据用户ID查找专家候选答案列?
      *
      * @param userId 用户ID
-     * @return 专家候选答案列�?
+     * @return 专家候选答案列?
      */
     public List<ExpertCandidateAnswer> findByUserId(Long userId) {
         try {
@@ -256,11 +256,11 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID和用户ID查找专家候选答�?
+     * 根据标准问题ID和用户ID查找专家候选答?
      *
      * @param standardQuestionId 标准问题ID
      * @param userId 用户ID
-     * @return 专家候选答案对�?
+     * @return 专家候选答案对?
      */
     public Optional<ExpertCandidateAnswer> findByStandardQuestionIdAndUserId(Long standardQuestionId, Long userId) {
         try {
@@ -277,7 +277,7 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID分页查找专家候选答�?
+     * 根据标准问题ID分页查找专家候选答?
      *
      * @param standardQuestionId 标准问题ID
      * @param pageable 分页参数
@@ -304,7 +304,7 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 根据用户ID分页查找专家候选答�?
+     * 根据用户ID分页查找专家候选答?
      *
      * @param userId 用户ID
      * @param pageable 分页参数
@@ -331,10 +331,10 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 查找质量评分大于指定值的专家候选答�?
+     * 查找质量评分大于指定值的专家候选答?
      *
-     * @param score 质量评分阈�?
-     * @return 专家候选答案列�?
+     * @param score 质量评分阈?
+     * @return 专家候选答案列?
      */
     public List<ExpertCandidateAnswer> findByQualityScoreGreaterThan(Integer score) {
         try {
@@ -349,25 +349,25 @@ public class ExpertCandidateAnswerRepository {
     }
 
     /**
-     * 查找所有专家候选答�?
+     * 查找所有专家候选答?
      *
-     * @return 所有专家候选答案列�?
+     * @return 所有专家候选答案列?
      */
     public List<ExpertCandidateAnswer> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new ExpertCandidateAnswerRowMapper());
     }
 
     /**
-     * 删除专家候选答�?
+     * 删除专家候选答?
      *
-     * @param expertCandidateAnswer 专家候选答案对�?
+     * @param expertCandidateAnswer 专家候选答案对?
      */
     public void delete(ExpertCandidateAnswer expertCandidateAnswer) {
         jdbcTemplate.update(SQL_DELETE, expertCandidateAnswer.getId());
     }
 
     /**
-     * 专家候选答案行映射�?
+     * 专家候选答案行映射?
      */
     private class ExpertCandidateAnswerRowMapper implements RowMapper<ExpertCandidateAnswer> {
         @Override
@@ -391,7 +391,7 @@ public class ExpertCandidateAnswerRepository {
                     expertCandidateAnswer.setUser(user));
             }
             
-            // 设置候选答案文�?
+            // 设置候选答案文?
             expertCandidateAnswer.setCandidateAnswerText(rs.getString("CANDIDATE_ANSWER_TEXT"));
             
             // 设置提交时间

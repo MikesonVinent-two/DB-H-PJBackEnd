@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 基于JDBC的模型回答运行仓库实�?
+ * 基于JDBC的模型回答运行仓库实?
  */
 @Repository
 public class ModelAnswerRunRepository {
@@ -90,7 +90,7 @@ public class ModelAnswerRunRepository {
      * 保存模型回答运行
      *
      * @param modelAnswerRun 模型回答运行对象
-     * @return 带有ID的模型回答运行对�?
+     * @return 带有ID的模型回答运行对?
      */
     public ModelAnswerRun save(ModelAnswerRun modelAnswerRun) {
         if (modelAnswerRun.getId() == null) {
@@ -101,10 +101,10 @@ public class ModelAnswerRunRepository {
     }
 
     /**
-     * 插入新模型回答运�?
+     * 插入新模型回答运?
      *
      * @param modelAnswerRun 模型回答运行对象
-     * @return 带有ID的模型回答运行对�?
+     * @return 带有ID的模型回答运行对?
      */
     private ModelAnswerRun insert(ModelAnswerRun modelAnswerRun) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -141,13 +141,13 @@ public class ModelAnswerRunRepository {
             if (modelAnswerRun.getRunIndex() != null) {
                 ps.setInt(5, modelAnswerRun.getRunIndex());
             } else {
-                ps.setInt(5, 0); // 默认�?，表示第一次运�?
+                ps.setInt(5, 0); // 默认?，表示第一次运?
             }
             
-            // 设置状�?
+            // 设置状?
             ps.setString(6, modelAnswerRun.getStatus().name());
             
-            // 设置开始时�?
+            // 设置开始时?
             if (modelAnswerRun.getRunTime() != null) {
                 ps.setTimestamp(7, Timestamp.valueOf(modelAnswerRun.getRunTime()));
             } else {
@@ -175,21 +175,21 @@ public class ModelAnswerRunRepository {
                 ps.setNull(10, Types.BIGINT);
             }
             
-            // 设置上次处理的问题索�?
+            // 设置上次处理的问题索?
             if (modelAnswerRun.getLastProcessedQuestionIndex() != null) {
                 ps.setInt(11, modelAnswerRun.getLastProcessedQuestionIndex());
             } else {
                 ps.setNull(11, Types.INTEGER);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分?
             if (modelAnswerRun.getProgressPercentage() != null) {
                 ps.setBigDecimal(12, modelAnswerRun.getProgressPercentage());
             } else {
                 ps.setNull(12, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时?
             if (modelAnswerRun.getLastActivityTime() != null) {
                 ps.setTimestamp(13, Timestamp.valueOf(modelAnswerRun.getLastActivityTime()));
             } else {
@@ -295,10 +295,10 @@ public class ModelAnswerRunRepository {
             if (modelAnswerRun.getRunIndex() != null) {
                 ps.setInt(5, modelAnswerRun.getRunIndex());
             } else {
-                ps.setInt(5, 0); // 默认�?，表示第一次运�?
+                ps.setInt(5, 0); // 默认?，表示第一次运?
             }
             
-            // 设置状�?
+            // 设置状?
             ps.setString(6, modelAnswerRun.getStatus().name());
             
             // 设置运行时间
@@ -329,21 +329,21 @@ public class ModelAnswerRunRepository {
                 ps.setNull(10, Types.BIGINT);
             }
             
-            // 设置上次处理的问题索�?
+            // 设置上次处理的问题索?
             if (modelAnswerRun.getLastProcessedQuestionIndex() != null) {
                 ps.setInt(11, modelAnswerRun.getLastProcessedQuestionIndex());
             } else {
                 ps.setNull(11, Types.INTEGER);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分?
             if (modelAnswerRun.getProgressPercentage() != null) {
                 ps.setBigDecimal(12, modelAnswerRun.getProgressPercentage());
             } else {
                 ps.setNull(12, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时?
             if (modelAnswerRun.getLastActivityTime() != null) {
                 ps.setTimestamp(13, Timestamp.valueOf(modelAnswerRun.getLastActivityTime()));
             } else {
@@ -427,7 +427,7 @@ public class ModelAnswerRunRepository {
      * 根据批次ID查找运行
      * 
      * @param batchId 批次ID
-     * @return 该批次的所有运�?
+     * @return 该批次的所有运?
      */
     public List<ModelAnswerRun> findByAnswerGenerationBatchId(Long batchId) {
         return jdbcTemplate.query(SQL_FIND_BY_BATCH_ID, new ModelAnswerRunRowMapper(), batchId);
@@ -437,17 +437,17 @@ public class ModelAnswerRunRepository {
      * 根据模型ID查找运行
      * 
      * @param modelId 模型ID
-     * @return 该模型的所有运�?
+     * @return 该模型的所有运?
      */
     public List<ModelAnswerRun> findByLlmModelId(Long modelId) {
         return jdbcTemplate.query(SQL_FIND_BY_MODEL_ID, new ModelAnswerRunRowMapper(), modelId);
     }
     
     /**
-     * 根据状态查找运�?
+     * 根据状态查找运?
      * 
-     * @param status 运行状�?
-     * @return 指定状态的所有运�?
+     * @param status 运行状?
+     * @return 指定状态的所有运?
      */
     public List<ModelAnswerRun> findByStatus(RunStatus status) {
         return jdbcTemplate.query(SQL_FIND_BY_STATUS, new ModelAnswerRunRowMapper(), status.name());
@@ -458,18 +458,18 @@ public class ModelAnswerRunRepository {
      * 
      * @param batchId 批次ID
      * @param modelId 模型ID
-     * @return 匹配的运行列�?
+     * @return 匹配的运行列?
      */
     public List<ModelAnswerRun> findByAnswerGenerationBatchIdAndLlmModelId(Long batchId, Long modelId) {
         return jdbcTemplate.query(SQL_FIND_BY_BATCH_AND_MODEL, new ModelAnswerRunRowMapper(), batchId, modelId);
     }
     
     /**
-     * 根据批次ID和状态查找运�?
+     * 根据批次ID和状态查找运?
      * 
      * @param batchId 批次ID
-     * @param status 运行状�?
-     * @return 匹配的运行列�?
+     * @param status 运行状?
+     * @return 匹配的运行列?
      */
     public List<ModelAnswerRun> findByAnswerGenerationBatchIdAndStatus(Long batchId, RunStatus status) {
         return jdbcTemplate.query(SQL_FIND_BY_BATCH_AND_STATUS, new ModelAnswerRunRowMapper(), batchId, status.name());
@@ -479,20 +479,20 @@ public class ModelAnswerRunRepository {
      * 统计批次中各状态的运行数量
      * 
      * @param batchId 批次ID
-     * @param status 运行状�?
-     * @return 符合条件的运行数�?
+     * @param status 运行状?
+     * @return 符合条件的运行数?
      */
     public long countByAnswerGenerationBatchIdAndStatus(Long batchId, RunStatus status) {
         return jdbcTemplate.queryForObject(SQL_COUNT_BY_BATCH_AND_STATUS, Long.class, batchId, status.name());
     }
     
     /**
-     * 根据批次ID、模型ID和运行索引查找运�?
+     * 根据批次ID、模型ID和运行索引查找运?
      * 
      * @param batchId 批次ID
      * @param modelId 模型ID
      * @param runIndex 运行索引
-     * @return 匹配的运�?
+     * @return 匹配的运?
      */
     public ModelAnswerRun findByBatchModelAndRunIndex(Long batchId, Long modelId, Integer runIndex) {
         try {
@@ -510,7 +510,7 @@ public class ModelAnswerRunRepository {
      * 根据用户ID查找运行
      * 
      * @param userId 用户ID
-     * @return 该用户创建的批次的所有运�?
+     * @return 该用户创建的批次的所有运?
      */
     public List<ModelAnswerRun> findByUserId(Long userId) {
         return jdbcTemplate.query(SQL_FIND_BY_USER_ID, new ModelAnswerRunRowMapper(), userId);
@@ -526,7 +526,7 @@ public class ModelAnswerRunRepository {
     }
 
     /**
-     * 查找所有模型回答运�?
+     * 查找所有模型回答运?
      *
      * @return 模型回答运行列表
      */
@@ -563,7 +563,7 @@ public class ModelAnswerRunRepository {
                 modelAnswerRun.setRunIndex(runIndex);
             }
             
-            // 设置状�?
+            // 设置状?
             modelAnswerRun.setStatus(RunStatus.valueOf(rs.getString("status")));
             
             // 设置运行时间
@@ -604,7 +604,7 @@ public class ModelAnswerRunRepository {
                 modelAnswerRun.setFailedQuestionsCount(failedQuestionsCount);
             }
             
-            // 设置其他可能在ModelAnswerRun中但未在表中的字�?
+            // 设置其他可能在ModelAnswerRun中但未在表中的字?
             try {
                 LocalDateTime lastActivityTime = rs.getTimestamp("last_activity_time") != null ? 
                     rs.getTimestamp("last_activity_time").toLocalDateTime() : null;
@@ -612,7 +612,7 @@ public class ModelAnswerRunRepository {
                     modelAnswerRun.setLastActivityTime(lastActivityTime);
                 }
             } catch (SQLException e) {
-                // 忽略不存在的�?
+                // 忽略不存在的?
             }
             
             return modelAnswerRun;

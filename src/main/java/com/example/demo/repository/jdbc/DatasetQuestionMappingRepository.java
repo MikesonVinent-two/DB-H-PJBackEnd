@@ -80,9 +80,9 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 保存数据集问题映�?
+     * 保存数据集问题映?
      *
-     * @param datasetQuestionMapping 数据集问题映射对�?
+     * @param datasetQuestionMapping 数据集问题映射对?
      * @return 带有ID的数据集问题映射对象
      */
     public DatasetQuestionMapping save(DatasetQuestionMapping datasetQuestionMapping) {
@@ -96,7 +96,7 @@ public class DatasetQuestionMappingRepository {
     /**
      * 插入新数据集问题映射
      *
-     * @param datasetQuestionMapping 数据集问题映射对�?
+     * @param datasetQuestionMapping 数据集问题映射对?
      * @return 带有ID的数据集问题映射对象
      */
     private DatasetQuestionMapping insert(DatasetQuestionMapping datasetQuestionMapping) {
@@ -116,7 +116,7 @@ public class DatasetQuestionMappingRepository {
             // 设置标准问题ID
             ps.setLong(2, datasetQuestionMapping.getStandardQuestion().getId());
             
-            // 设置数据集中的顺�?
+            // 设置数据集中的顺?
             if (datasetQuestionMapping.getOrderInDataset() != null) {
                 ps.setInt(3, datasetQuestionMapping.getOrderInDataset());
             } else {
@@ -152,10 +152,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 更新数据集问题映�?
+     * 更新数据集问题映?
      *
-     * @param datasetQuestionMapping 数据集问题映射对�?
-     * @return 更新后的数据集问题映射对�?
+     * @param datasetQuestionMapping 数据集问题映射对?
+     * @return 更新后的数据集问题映射对?
      */
     private DatasetQuestionMapping update(DatasetQuestionMapping datasetQuestionMapping) {
         jdbcTemplate.update(connection -> {
@@ -167,7 +167,7 @@ public class DatasetQuestionMappingRepository {
             // 设置标准问题ID
             ps.setLong(2, datasetQuestionMapping.getStandardQuestion().getId());
             
-            // 设置数据集中的顺�?
+            // 设置数据集中的顺?
             if (datasetQuestionMapping.getOrderInDataset() != null) {
                 ps.setInt(3, datasetQuestionMapping.getOrderInDataset());
             } else {
@@ -201,10 +201,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据ID查找数据集问题映�?
+     * 根据ID查找数据集问题映?
      *
      * @param id 数据集问题映射ID
-     * @return 数据集问题映射对�?
+     * @return 数据集问题映射对?
      */
     public Optional<DatasetQuestionMapping> findById(Long id) {
         try {
@@ -220,10 +220,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据数据集版本查找所有问题映射，按顺序排�?
+     * 根据数据集版本查找所有问题映射，按顺序排?
      *
-     * @param datasetVersion 数据集版本对�?
-     * @return 数据集问题映射列�?
+     * @param datasetVersion 数据集版本对?
+     * @return 数据集问题映射列?
      */
     public List<DatasetQuestionMapping> findByDatasetVersionOrderByOrderInDataset(DatasetVersion datasetVersion) {
         return jdbcTemplate.query(
@@ -234,10 +234,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据数据集版本ID查找所有问题映射，按顺序排�?
+     * 根据数据集版本ID查找所有问题映射，按顺序排?
      *
      * @param datasetVersionId 数据集版本ID
-     * @return 数据集问题映射列�?
+     * @return 数据集问题映射列?
      */
     public List<DatasetQuestionMapping> findByDatasetVersionId(Long datasetVersionId) {
         return jdbcTemplate.query(
@@ -265,7 +265,7 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 获取数据集版本中的问题数�?
+     * 获取数据集版本中的问题数?
      *
      * @param datasetVersionId 数据集版本ID
      * @return 问题数量
@@ -303,26 +303,26 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 删除数据集问题映�?
+     * 删除数据集问题映?
      *
-     * @param datasetQuestionMapping 数据集问题映射对�?
+     * @param datasetQuestionMapping 数据集问题映射对?
      */
     public void delete(DatasetQuestionMapping datasetQuestionMapping) {
         jdbcTemplate.update(SQL_DELETE, datasetQuestionMapping.getId());
     }
 
     /**
-     * 数据集问题映射行映射�?
+     * 数据集问题映射行映射?
      */
     private class DatasetQuestionMappingRowMapper implements RowMapper<DatasetQuestionMapping> {
         @Override
         public DatasetQuestionMapping mapRow(ResultSet rs, int rowNum) throws SQLException {
             DatasetQuestionMapping datasetQuestionMapping = new DatasetQuestionMapping();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属?
             datasetQuestionMapping.setId(rs.getLong("ID"));
             
-            // 设置数据集中的顺�?
+            // 设置数据集中的顺?
             Integer orderInDataset = rs.getInt("ORDER_IN_DATASET");
             if (!rs.wasNull()) {
                 datasetQuestionMapping.setOrderInDataset(orderInDataset);
@@ -341,21 +341,21 @@ public class DatasetQuestionMappingRepository {
                     .ifPresent(datasetQuestionMapping::setDatasetVersion);
             }
             
-            // 获取并设置标准问�?
+            // 获取并设置标准问?
             Long standardQuestionId = rs.getLong("STANDARD_QUESTION_ID");
             if (!rs.wasNull()) {
                 standardQuestionRepository.findById(standardQuestionId)
                     .ifPresent(datasetQuestionMapping::setStandardQuestion);
             }
             
-            // 获取并设置创建者用�?
+            // 获取并设置创建者用?
             Long createdByUserId = rs.getLong("CREATED_BY_USER_ID");
             if (!rs.wasNull()) {
                 userRepository.findById(createdByUserId)
                     .ifPresent(datasetQuestionMapping::setCreatedByUser);
             }
             
-            // 获取并设置创建变更日�?
+            // 获取并设置创建变更日?
             Long createdChangeLogId = rs.getLong("CREATED_CHANGE_LOG_ID");
             if (!rs.wasNull()) {
                 changeLogRepository.findById(createdChangeLogId)

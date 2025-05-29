@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的原始回答仓库实�?
+ * 基于JDBC的原始回答仓库实?
  */
 @Repository
 public class RawAnswerRepository {
@@ -56,7 +56,7 @@ public class RawAnswerRepository {
      * 保存原始回答
      *
      * @param rawAnswer 原始回答对象
-     * @return 带有ID的原始回答对�?
+     * @return 带有ID的原始回答对?
      */
     public RawAnswer save(RawAnswer rawAnswer) {
         if (rawAnswer.getId() == null) {
@@ -67,10 +67,10 @@ public class RawAnswerRepository {
     }
 
     /**
-     * 插入新原始回�?
+     * 插入新原始回?
      *
      * @param rawAnswer 原始回答对象
-     * @return 带有ID的原始回答对�?
+     * @return 带有ID的原始回答对?
      */
     private RawAnswer insert(RawAnswer rawAnswer) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -143,7 +143,7 @@ public class RawAnswerRepository {
     }
     
     /**
-     * 根据原始问题ID查找所有原始回�?
+     * 根据原始问题ID查找所有原始回?
      *
      * @param rawQuestionId 原始问题ID
      * @return 原始回答列表
@@ -153,7 +153,7 @@ public class RawAnswerRepository {
     }
 
     /**
-     * 查找所有原始回�?
+     * 查找所有原始回?
      *
      * @return 原始回答列表
      */
@@ -192,7 +192,7 @@ public class RawAnswerRepository {
             rawAnswer.setIsAccepted(rs.getBoolean("is_accepted"));
             rawAnswer.setOtherMetadata(rs.getString("other_metadata"));
             
-            // 处理外键关联 - 这里我们只设置RawQuestion的ID，避免过度加�?
+            // 处理外键关联 - 这里我们只设置RawQuestion的ID，避免过度加?
             Long rawQuestionId = rs.getLong("raw_question_id");
             if (!rs.wasNull()) {
                 RawQuestion rawQuestion = new RawQuestion();

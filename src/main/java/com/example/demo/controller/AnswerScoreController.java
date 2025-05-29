@@ -1,6 +1,6 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.AnswerScore;
+import com.example.demo.entity.jdbc.AnswerScore;
 import com.example.demo.service.AnswerScoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

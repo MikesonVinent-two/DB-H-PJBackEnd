@@ -25,7 +25,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * 基于JDBC的原始问题仓库实�?
+ * 基于JDBC的原始问题仓库实?
  */
 @Repository
 public class RawQuestionRepository {
@@ -105,7 +105,7 @@ public class RawQuestionRepository {
      * 保存原始问题
      *
      * @param rawQuestion 原始问题对象
-     * @return 带有ID的原始问题对�?
+     * @return 带有ID的原始问题对?
      */
     public RawQuestion save(RawQuestion rawQuestion) {
         if (rawQuestion.getId() == null) {
@@ -116,10 +116,10 @@ public class RawQuestionRepository {
     }
 
     /**
-     * 插入新原始问�?
+     * 插入新原始问?
      *
      * @param rawQuestion 原始问题对象
-     * @return 带有ID的原始问题对�?
+     * @return 带有ID的原始问题对?
      */
     private RawQuestion insert(RawQuestion rawQuestion) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -162,7 +162,7 @@ public class RawQuestionRepository {
                 ps.setString(6, "[]");
             }
             
-            // 设置其他元数�?
+            // 设置其他元数?
             if (rawQuestion.getOtherMetadata() != null) {
                 ps.setString(7, rawQuestion.getOtherMetadata());
             } else {
@@ -220,7 +220,7 @@ public class RawQuestionRepository {
                 ps.setString(6, "[]");
             }
             
-            // 设置其他元数�?
+            // 设置其他元数?
             if (rawQuestion.getOtherMetadata() != null) {
                 ps.setString(7, rawQuestion.getOtherMetadata());
             } else {
@@ -256,7 +256,7 @@ public class RawQuestionRepository {
     }
 
     /**
-     * 检查是否存在指定来源URL的原始问�?
+     * 检查是否存在指定来源URL的原始问?
      *
      * @param sourceUrl 来源URL
      * @return 是否存在
@@ -321,7 +321,7 @@ public class RawQuestionRepository {
      */
     public Page<RawQuestion> findByIdNotInOrderByIdDesc(List<Long> ids, Pageable pageable) {
         if (ids.isEmpty()) {
-            // 如果ID列表为空，则查询所有记�?
+            // 如果ID列表为空，则查询所有记?
             return findAll(pageable);
         }
         
@@ -363,7 +363,7 @@ public class RawQuestionRepository {
      * @return 分页结果
      */
     public Page<RawQuestion> findBySourceSiteContainingIgnoreCase(String sourceSite, Pageable pageable) {
-        // 添加通配符用于模糊查�?
+        // 添加通配符用于模糊查?
         String likePattern = "%" + sourceSite + "%";
         
         // 查询总数
@@ -386,16 +386,16 @@ public class RawQuestionRepository {
     }
 
     /**
-     * 根据标题或内容模糊查�?
+     * 根据标题或内容模糊查?
      *
-     * @param titleKeyword 标题关键�?
-     * @param contentKeyword 内容关键�?
+     * @param titleKeyword 标题关键?
+     * @param contentKeyword 内容关键?
      * @param pageable 分页参数
      * @return 分页结果
      */
     public Page<RawQuestion> findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(
             String titleKeyword, String contentKeyword, Pageable pageable) {
-        // 添加通配符用于模糊查�?
+        // 添加通配符用于模糊查?
         String titleLikePattern = "%" + titleKeyword + "%";
         String contentLikePattern = "%" + contentKeyword + "%";
         
@@ -453,7 +453,7 @@ public class RawQuestionRepository {
                 countParams.toArray()
             );
         } catch (EmptyResultDataAccessException e) {
-            // 如果没有结果，则总数�?
+            // 如果没有结果，则总数?
         }
         
         // 查询数据
@@ -475,16 +475,16 @@ public class RawQuestionRepository {
     }
 
     /**
-     * 查找所有原始问�?
+     * 查找所有原始问?
      *
-     * @return 所有原始问题列�?
+     * @return 所有原始问题列?
      */
     public List<RawQuestion> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new RawQuestionRowMapper());
     }
 
     /**
-     * 分页查找所有原始问�?
+     * 分页查找所有原始问?
      *
      * @param pageable 分页参数
      * @return 分页结果
@@ -524,7 +524,7 @@ public class RawQuestionRepository {
         public RawQuestion mapRow(ResultSet rs, int rowNum) throws SQLException {
             RawQuestion rawQuestion = new RawQuestion();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属?
             rawQuestion.setId(rs.getLong("ID"));
             rawQuestion.setTitle(rs.getString("TITLE"));
             rawQuestion.setContent(rs.getString("CONTENT"));

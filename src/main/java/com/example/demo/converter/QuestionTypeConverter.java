@@ -1,6 +1,6 @@
 package com.example.demo.converter;
 
-import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.jdbc.QuestionType;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 

@@ -22,7 +22,7 @@ import java.util.Optional;
 import java.math.BigDecimal;
 
 /**
- * 基于JDBC的评测详情仓库实�?
+ * 基于JDBC的评测详情仓库实?
  */
 @Repository
 public class EvaluationDetailRepository {
@@ -70,7 +70,7 @@ public class EvaluationDetailRepository {
      * 保存评测详情
      *
      * @param detail 评测详情对象
-     * @return 带有ID的评测详情对�?
+     * @return 带有ID的评测详情对?
      */
     public EvaluationDetail save(EvaluationDetail detail) {
         if (detail.getId() == null) {
@@ -84,7 +84,7 @@ public class EvaluationDetailRepository {
      * 批量保存评测详情
      *
      * @param details 评测详情列表
-     * @return 带有ID的评测详情列�?
+     * @return 带有ID的评测详情列?
      */
     public List<EvaluationDetail> saveAll(List<EvaluationDetail> details) {
         for (int i = 0; i < details.size(); i++) {
@@ -94,10 +94,10 @@ public class EvaluationDetailRepository {
     }
 
     /**
-     * 插入新评测详�?
+     * 插入新评测详?
      *
      * @param detail 评测详情对象
-     * @return 带有ID的评测详情对�?
+     * @return 带有ID的评测详情对?
      */
     private EvaluationDetail insert(EvaluationDetail detail) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -230,7 +230,7 @@ public class EvaluationDetailRepository {
     }
 
     /**
-     * 查找所有评测详�?
+     * 查找所有评测详?
      *
      * @return 评测详情列表
      */
@@ -280,7 +280,7 @@ public class EvaluationDetailRepository {
     }
 
     /**
-     * 删除指定评测的所有评测详�?
+     * 删除指定评测的所有评测详?
      *
      * @param evaluationId 评测ID
      */
@@ -314,7 +314,7 @@ public class EvaluationDetailRepository {
                 evaluation.setId(evaluationId);
                 detail.setEvaluation(evaluation);
                 
-                // 可选：加载完整的评测信�?
+                // 可选：加载完整的评测信?
                 EvaluationRepository.findById(evaluationId).ifPresent(detail::setEvaluation);
             }
             
@@ -325,7 +325,7 @@ public class EvaluationDetailRepository {
                 criterion.setId(criterionId);
                 detail.setCriterion(criterion);
                 
-                // 可选：加载完整的评测标准信�?
+                // 可选：加载完整的评测标准信?
                 EvaluationCriterionRepository.findById(criterionId).ifPresent(detail::setCriterion);
             }
             

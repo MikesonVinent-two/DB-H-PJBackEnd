@@ -1,6 +1,6 @@
 package com.example.demo.converter;
 
-import com.example.demo.entity.DifficultyLevel;
+import com.example.demo.entity.jdbc.DifficultyLevel;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
 

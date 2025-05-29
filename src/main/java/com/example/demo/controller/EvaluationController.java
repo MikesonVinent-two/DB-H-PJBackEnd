@@ -1,13 +1,14 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.Evaluation;
-import com.example.demo.entity.LlmAnswer;
-import com.example.demo.entity.EvaluationRun;
-import com.example.demo.entity.EvaluationDetail;
-import com.example.demo.entity.EvaluationCriterion;
-import com.example.demo.entity.QuestionType;
+
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationDetail;
+import com.example.demo.entity.jdbc.EvaluationCriterion;
+import com.example.demo.entity.jdbc.QuestionType;
 import com.example.demo.dto.CreateEvaluationRunRequest;
-import com.example.demo.repository.LlmAnswerRepository;
+import com.example.demo.repository.jdbc.LlmAnswerRepository;
 import com.example.demo.service.EvaluationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的变更日志仓库实�?
+ * 基于JDBC的变更日志仓库实?
  */
 @Repository
 public class ChangeLogRepository {
@@ -62,7 +62,7 @@ public class ChangeLogRepository {
      * 保存变更日志
      *
      * @param changeLog 变更日志对象
-     * @return 带有ID的变更日志对�?
+     * @return 带有ID的变更日志对?
      */
     public ChangeLog save(ChangeLog changeLog) {
         if (changeLog.getId() == null) {
@@ -73,10 +73,10 @@ public class ChangeLogRepository {
     }
 
     /**
-     * 插入新变更日�?
+     * 插入新变更日?
      *
      * @param changeLog 变更日志对象
-     * @return 带有ID的变更日志对�?
+     * @return 带有ID的变更日志对?
      */
     private ChangeLog insert(ChangeLog changeLog) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -150,7 +150,7 @@ public class ChangeLogRepository {
     }
     
     /**
-     * 根据关联的标准问题查找变更日�?
+     * 根据关联的标准问题查找变更日?
      *
      * @param question 标准问题对象
      * @return 变更日志
@@ -166,7 +166,7 @@ public class ChangeLogRepository {
     }
 
     /**
-     * 查找所有变更日�?
+     * 查找所有变更日?
      *
      * @return 变更日志列表
      */
@@ -214,7 +214,7 @@ public class ChangeLogRepository {
                 UserRepository.findById(changedByUserId).ifPresent(changeLog::setChangedByUser);
             }
             
-            // 设置关联的标准问�?
+            // 设置关联的标准问?
             Long associatedStandardQuestionId = rs.getLong("associated_standard_question_id");
             if (!rs.wasNull()) {
                 StandardQuestion question = new StandardQuestion();
@@ -222,7 +222,7 @@ public class ChangeLogRepository {
                 changeLog.setAssociatedStandardQuestion(question);
             }
             
-            // 注意：这里没有加载关联的details和其他关联对�?
+            // 注意：这里没有加载关联的details和其他关联对?
             // 这些关联对象需要在服务层按需加载
             
             return changeLog;

@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.demo.dto.UserDTO;
 import com.example.demo.dto.UserDTO.LoginValidation;
 import com.example.demo.dto.UserDTO.RegisterValidation;
-import com.example.demo.entity.User;
+import com.example.demo.entity.jdbc.User;
 import com.example.demo.service.UserService;
 import com.example.demo.dto.UserProfileDTO;
 

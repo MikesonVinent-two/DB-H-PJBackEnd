@@ -4,10 +4,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
-import com.example.demo.entity.QuestionType;
-import com.example.demo.entity.DifficultyLevel;
-import com.example.demo.entity.EntityType;
-import com.example.demo.entity.ChangeType;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.DifficultyLevel;
+import com.example.demo.entity.jdbc.EntityType;
+import com.example.demo.entity.jdbc.ChangeType;
 import com.example.demo.exception.EnumDeserializationException;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.DeserializationFeature;
