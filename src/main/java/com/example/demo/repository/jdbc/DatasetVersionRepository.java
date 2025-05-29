@@ -93,9 +93,9 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 保存数据集版�?
+     * 保存数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
+     * @param datasetVersion 数据集版本对象
      * @return 带有ID的数据集版本对象
      */
     public DatasetVersion save(DatasetVersion datasetVersion) {
@@ -109,7 +109,7 @@ public class DatasetVersionRepository {
     /**
      * 插入新数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
+     * @param datasetVersion 数据集版本对象
      * @return 带有ID的数据集版本对象
      */
     private DatasetVersion insert(DatasetVersion datasetVersion) {
@@ -123,7 +123,7 @@ public class DatasetVersionRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS);
             
-            // 设置版本�?
+            // 设置版本号
             ps.setString(1, datasetVersion.getVersionNumber());
             
             // 设置名称
@@ -168,16 +168,16 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 更新数据集版�?
+     * 更新数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
-     * @return 更新后的数据集版本对�?
+     * @param datasetVersion 数据集版本对象
+     * @return 更新后的数据集版本对象
      */
     private DatasetVersion update(DatasetVersion datasetVersion) {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(SQL_UPDATE);
             
-            // 设置版本�?
+            // 设置版本号
             ps.setString(1, datasetVersion.getVersionNumber());
             
             // 设置名称
@@ -220,10 +220,10 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 根据ID查找数据集版�?
+     * 根据ID查找数据集版本
      *
      * @param id 数据集版本ID
-     * @return 数据集版本对�?
+     * @return 数据集版本对象
      */
     public Optional<DatasetVersion> findById(Long id) {
         try {
@@ -241,8 +241,8 @@ public class DatasetVersionRepository {
     /**
      * 根据版本号查找数据集版本
      *
-     * @param versionNumber 版本�?
-     * @return 数据集版本对�?
+     * @param versionNumber 版本号
+     * @return 数据集版本对象
      */
     public Optional<DatasetVersion> findByVersionNumber(String versionNumber) {
         try {
@@ -258,37 +258,22 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 根据名称模糊查询数据集版�?
+     * 根据名称模糊查询数据集版本
      *
-     * @param name 名称关键�?
-     * @param pageable 分页参数
-     * @return 分页结果
+     * @param name 名称关键字
+     * @return 数据集版本列表
      */
-    public Page<DatasetVersion> findByNameContainingIgnoreCase(String name, Pageable pageable) {
-        // 添加通配符用于模糊查�?
-        String likePattern = "%" + name + "%";
-        
-        // 查询总数
-        Integer total = jdbcTemplate.queryForObject(
-            SQL_COUNT_BY_NAME_CONTAINING,
-            Integer.class,
-            likePattern
+    public List<DatasetVersion> findByNameContaining(String name) {
+        String searchPattern = "%" + name + "%";
+        return jdbcTemplate.query(
+                SQL_FIND_BY_NAME_CONTAINING,
+                new Object[]{searchPattern, Integer.MAX_VALUE, 0},
+                new DatasetVersionRowMapper()
         );
-        
-        // 查询数据
-        List<DatasetVersion> content = jdbcTemplate.query(
-            SQL_FIND_BY_NAME_CONTAINING,
-            new DatasetVersionRowMapper(),
-            likePattern,
-            pageable.getPageSize(),
-            pageable.getOffset()
-        );
-        
-        return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
 
     /**
-     * 根据创建者用户ID查询数据集版�?
+     * 根据创建者用户ID查询数据集版本
      *
      * @param userId 用户ID
      * @param pageable 分页参数
@@ -339,7 +324,7 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 查询未删除的数据集版�?
+     * 查询未删除的数据集版本
      *
      * @param pageable 分页参数
      * @return 分页结果
@@ -365,7 +350,7 @@ public class DatasetVersionRepository {
     /**
      * 软删除数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
+     * @param datasetVersion 数据集版本对象
      */
     public void softDelete(DatasetVersion datasetVersion) {
         LocalDateTime now = LocalDateTime.now();
@@ -374,9 +359,9 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 恢复软删除的数据集版�?
+     * 恢复软删除的数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
+     * @param datasetVersion 数据集版本对象
      */
     public void restore(DatasetVersion datasetVersion) {
         datasetVersion.setDeletedAt(null);
@@ -384,23 +369,50 @@ public class DatasetVersionRepository {
     }
 
     /**
-     * 删除数据集版�?
+     * 删除数据集版本
      *
-     * @param datasetVersion 数据集版本对�?
+     * @param datasetVersion 数据集版本对象
      */
     public void delete(DatasetVersion datasetVersion) {
         jdbcTemplate.update(SQL_DELETE, datasetVersion.getId());
     }
 
     /**
-     * 数据集版本行映射�?
+     * 查找所有未删除的数据集版本
+     *
+     * @return 未删除的数据集版本列表
+     */
+    public List<DatasetVersion> findAllActiveVersions() {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_DELETED_AT_IS_NULL,
+                new Object[]{Integer.MAX_VALUE, 0},
+                new DatasetVersionRowMapper()
+        );
+    }
+
+    /**
+     * 检查版本号是否已存在
+     *
+     * @param versionNumber 版本号
+     * @return 是否存在
+     */
+    public boolean existsByVersionNumber(String versionNumber) {
+        try {
+            return findByVersionNumber(versionNumber).isPresent();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 数据集版本行映射器
      */
     private class DatasetVersionRowMapper implements RowMapper<DatasetVersion> {
         @Override
         public DatasetVersion mapRow(ResultSet rs, int rowNum) throws SQLException {
             DatasetVersion datasetVersion = new DatasetVersion();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属性
             datasetVersion.setId(rs.getLong("ID"));
             datasetVersion.setVersionNumber(rs.getString("VERSION_NUMBER"));
             datasetVersion.setName(rs.getString("NAME"));
@@ -418,7 +430,7 @@ public class DatasetVersionRepository {
                 datasetVersion.setDeletedAt(deletedAt.toLocalDateTime());
             }
             
-            // 获取创建者用�?
+            // 获取创建者用户
             Long createdByUserId = rs.getLong("CREATED_BY_USER_ID");
             userRepository.findById(createdByUserId).ifPresent(datasetVersion::setCreatedByUser);
             

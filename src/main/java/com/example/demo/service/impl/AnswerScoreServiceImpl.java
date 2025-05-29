@@ -1,10 +1,10 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.entity.AnswerScore;
-import com.example.demo.entity.LlmAnswer;
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.User;
-import com.example.demo.repository.AnswerScoreRepository;
+import com.example.demo.entity.jdbc.AnswerScore;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.AnswerScoreRepository;
 import com.example.demo.service.AnswerScoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

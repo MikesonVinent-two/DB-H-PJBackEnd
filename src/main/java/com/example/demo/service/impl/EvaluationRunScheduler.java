@@ -1,8 +1,8 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.entity.EvaluationRun;
-import com.example.demo.entity.EvaluationRun.RunStatus;
-import com.example.demo.repository.EvaluationRunRepository;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
+import com.example.demo.repository.jdbc.EvaluationRunRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

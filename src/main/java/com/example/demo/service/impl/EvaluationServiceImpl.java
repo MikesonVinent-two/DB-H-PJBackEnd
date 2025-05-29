@@ -1,44 +1,44 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.entity.Evaluation;
-import com.example.demo.entity.Evaluation.EvaluationStatus;
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.LlmAnswer;
-import com.example.demo.entity.QuestionType;
-import com.example.demo.entity.StandardObjectiveAnswer;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.StandardSimpleAnswer;
-import com.example.demo.entity.User;
-import com.example.demo.entity.EvaluationRun;
-import com.example.demo.entity.EvaluationRun.RunStatus;
-import com.example.demo.entity.ModelAnswerRun;
-import com.example.demo.entity.EvaluationDetail;
-import com.example.demo.entity.EvaluationCriterion;
-import com.example.demo.entity.LlmModel;
-import com.example.demo.entity.Tag;
-import com.example.demo.entity.EvaluationTagPrompt;
-import com.example.demo.entity.EvaluationPromptAssemblyConfig;
-import com.example.demo.entity.EvaluationSubjectivePrompt;
-import com.example.demo.entity.StandardSubjectiveAnswer;
-import com.example.demo.entity.EvaluationType;
-import com.example.demo.repository.EvaluationRepository;
-import com.example.demo.repository.EvaluatorRepository;
-import com.example.demo.repository.StandardObjectiveAnswerRepository;
-import com.example.demo.repository.StandardQuestionRepository;
-import com.example.demo.repository.StandardSimpleAnswerRepository;
-import com.example.demo.repository.UserRepository;
-import com.example.demo.repository.LlmAnswerRepository;
-import com.example.demo.repository.ModelAnswerRunRepository;
-import com.example.demo.repository.EvaluationRunRepository;
-import com.example.demo.repository.EvaluationDetailRepository;
-import com.example.demo.repository.EvaluationCriterionRepository;
-import com.example.demo.repository.EvaluationTagPromptRepository;
-import com.example.demo.repository.EvaluationPromptAssemblyConfigRepository;
-import com.example.demo.repository.EvaluationSubjectivePromptRepository;
-import com.example.demo.repository.StandardSubjectiveAnswerRepository;
-import com.example.demo.repository.AnswerScoreRepository;
-import com.example.demo.repository.LlmModelRepository;
-import com.example.demo.entity.AnswerScore;
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.Evaluation.EvaluationStatus;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.StandardObjectiveAnswer;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.StandardSimpleAnswer;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
+import com.example.demo.entity.jdbc.ModelAnswerRun;
+import com.example.demo.entity.jdbc.EvaluationDetail;
+import com.example.demo.entity.jdbc.EvaluationCriterion;
+import com.example.demo.entity.jdbc.LlmModel;
+import com.example.demo.entity.jdbc.Tag;
+import com.example.demo.entity.jdbc.EvaluationTagPrompt;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.EvaluationSubjectivePrompt;
+import com.example.demo.entity.jdbc.StandardSubjectiveAnswer;
+import com.example.demo.entity.jdbc.EvaluationType;
+import com.example.demo.repository.jdbc.EvaluationRepository;
+import com.example.demo.repository.jdbc.EvaluatorRepository;
+import com.example.demo.repository.jdbc.StandardObjectiveAnswerRepository;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
+import com.example.demo.repository.jdbc.StandardSimpleAnswerRepository;
+import com.example.demo.repository.jdbc.UserRepository;
+import com.example.demo.repository.jdbc.LlmAnswerRepository;
+import com.example.demo.repository.jdbc.ModelAnswerRunRepository;
+import com.example.demo.repository.jdbc.EvaluationRunRepository;
+import com.example.demo.repository.jdbc.EvaluationDetailRepository;
+import com.example.demo.repository.jdbc.EvaluationCriterionRepository;
+import com.example.demo.repository.jdbc.EvaluationTagPromptRepository;
+import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.EvaluationSubjectivePromptRepository;
+import com.example.demo.repository.jdbc.StandardSubjectiveAnswerRepository;
+import com.example.demo.repository.jdbc.AnswerScoreRepository;
+import com.example.demo.repository.jdbc.LlmModelRepository;
+import com.example.demo.entity.jdbc.AnswerScore;
 import com.example.demo.service.EvaluationService;
 import com.example.demo.dto.Option;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -2230,7 +2230,7 @@ public class EvaluationServiceImpl implements EvaluationService {
                     // 提前加载模型回答运行ID和评测者ID
                     final Long modelAnswerRunId = evaluationRun.getModelAnswerRunId();
                     final Long evaluatorId = evaluationRun.getEvaluatorId();
-                    final Long userId = evaluationRun.getCreatedByUserId();
+                    final Long userId = evaluationRun.getCreatedBy();
                     final Long lastProcessedAnswerId = evaluationRun.getLastProcessedAnswerId();
                     
                     // 4. 继续评测过程（在锁外异步执行）
@@ -2514,32 +2514,43 @@ public class EvaluationServiceImpl implements EvaluationService {
     
     @Override
     public List<EvaluationRun> getEvaluationRuns(Long modelAnswerRunId, Long evaluatorId, String status, int page, int size) {
-        logger.info("获取评测运行列表，模型回答运行ID: {}, 评测者ID: {}, 状态: {}, 页码: {}, 每页大小: {}", 
+        logger.info("获取评测运行列表，模型回答运行ID: {}, 评测者ID: {}, 状态: {}, 页码: {}, 大小: {}", 
                 modelAnswerRunId, evaluatorId, status, page, size);
         
         try {
             // 创建分页对象
-            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "creationTime"));
+            Pageable pageable = PageRequest.of(page, size);
             
-            // 构建查询条件
+            // 根据条件查询
             List<EvaluationRun> runs;
             if (modelAnswerRunId != null && evaluatorId != null && status != null) {
-                // 全条件查询
+                // 三个条件都有
                 runs = evaluationRunRepository.findByModelAnswerRunIdAndEvaluatorIdAndStatus(
                         modelAnswerRunId, evaluatorId, RunStatus.valueOf(status), pageable);
             } else if (modelAnswerRunId != null && evaluatorId != null) {
-                // 按模型回答运行ID和评测者ID查询
+                // 只有模型回答运行ID和评测者ID
                 runs = evaluationRunRepository.findByModelAnswerRunIdAndEvaluatorId(
                         modelAnswerRunId, evaluatorId, pageable);
+            } else if (modelAnswerRunId != null && status != null) {
+                // 只有模型回答运行ID和状态
+                runs = evaluationRunRepository.findByModelAnswerRunIdAndStatus(
+                        modelAnswerRunId, RunStatus.valueOf(status), pageable);
+            } else if (evaluatorId != null && status != null) {
+                // 只有评测者ID和状态
+                runs = evaluationRunRepository.findByEvaluatorIdAndStatus(
+                        evaluatorId, RunStatus.valueOf(status), pageable);
             } else if (modelAnswerRunId != null) {
-                // 按模型回答运行ID查询
+                // 只有模型回答运行ID
                 runs = evaluationRunRepository.findByModelAnswerRunId(modelAnswerRunId, pageable);
             } else if (evaluatorId != null) {
-                // 按评测者ID查询
+                // 只有评测者ID
                 runs = evaluationRunRepository.findByEvaluatorId(evaluatorId, pageable);
+            } else if (status != null) {
+                // 只有状态
+                runs = evaluationRunRepository.findByStatus(RunStatus.valueOf(status), pageable);
             } else {
                 // 无条件查询
-                runs = evaluationRunRepository.findAll(pageable).getContent();
+                runs = evaluationRunRepository.findAll(pageable);
             }
             
             logger.info("获取到{}条评测运行记录", runs.size());
@@ -3242,7 +3253,7 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluationRun.setEvaluatorId(evaluatorId);
         evaluationRun.setRunName("主观题批量评测-" + batchId);
         evaluationRun.setStatus(RunStatus.IN_PROGRESS);
-        evaluationRun.setCreatedByUserId(userId);
+        evaluationRun.setCreatedBy(userId);
         evaluationRun.setRunTime(LocalDateTime.now());
         evaluationRun.setLastActivityTime(LocalDateTime.now());
         evaluationRun.setBatchSize(50);

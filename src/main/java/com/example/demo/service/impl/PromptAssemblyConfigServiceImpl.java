@@ -2,15 +2,15 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.AnswerPromptAssemblyConfigDTO;
 import com.example.demo.dto.EvaluationPromptAssemblyConfigDTO;
-import com.example.demo.entity.AnswerPromptAssemblyConfig;
-import com.example.demo.entity.ChangeLog;
-import com.example.demo.entity.ChangeType;
-import com.example.demo.entity.EvaluationPromptAssemblyConfig;
-import com.example.demo.entity.User;
-import com.example.demo.repository.AnswerPromptAssemblyConfigRepository;
-import com.example.demo.repository.ChangeLogRepository;
-import com.example.demo.repository.EvaluationPromptAssemblyConfigRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.ChangeType;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.AnswerPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.ChangeLogRepository;
+import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.PromptAssemblyConfigService;
 
 import org.slf4j.Logger;

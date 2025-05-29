@@ -12,9 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.dto.UserDTO;
 import com.example.demo.dto.UserProfileDTO;
-import com.example.demo.entity.User;
-import com.example.demo.entity.UserRole;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.entity.jdbc.UserRole;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.UserService;
 
 @Service

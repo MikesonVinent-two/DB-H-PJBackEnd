@@ -1,7 +1,7 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.User;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.User;
 
 import java.util.List;
 import java.util.Optional;

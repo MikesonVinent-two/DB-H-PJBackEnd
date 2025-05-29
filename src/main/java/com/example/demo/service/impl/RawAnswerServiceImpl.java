@@ -6,10 +6,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.dto.RawAnswerDTO;
-import com.example.demo.entity.RawAnswer;
-import com.example.demo.entity.RawQuestion;
-import com.example.demo.repository.RawAnswerRepository;
-import com.example.demo.repository.RawQuestionRepository;
+import com.example.demo.entity.jdbc.RawAnswer;
+import com.example.demo.entity.jdbc.RawQuestion;
+import com.example.demo.repository.jdbc.RawAnswerRepository;
+import com.example.demo.repository.jdbc.RawQuestionRepository;
 import com.example.demo.service.RawAnswerService;
 import com.example.demo.util.MetadataUtils;
 

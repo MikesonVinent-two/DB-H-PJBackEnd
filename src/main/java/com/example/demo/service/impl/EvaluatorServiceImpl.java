@@ -1,11 +1,11 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.LlmModel;
-import com.example.demo.entity.User;
-import com.example.demo.repository.EvaluatorRepository;
-import com.example.demo.repository.LlmModelRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.LlmModel;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.EvaluatorRepository;
+import com.example.demo.repository.jdbc.LlmModelRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.EvaluatorService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -24,18 +24,18 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * JDBC实现的回答分数仓�?
+ * JDBC实现的回答分数仓库
  * 
- * @deprecated 此表已被废弃，ANSWER_SCORES表的字段已被合并到EVALUATIONS表中�?
+ * @deprecated 此表已被废弃，ANSWER_SCORES表的字段已被合并到EVALUATIONS表中。
  * 请使用{@link EvaluationRepository}代替，查看EVALUATIONS表中的RAW_SCORE, NORMALIZED_SCORE, 
- * WEIGHTED_SCORE, SCORE_TYPE, SCORING_METHOD等字段�?
+ * WEIGHTED_SCORE, SCORE_TYPE, SCORING_METHOD等字段。
  */
 @Deprecated
 @Repository
 public class AnswerScoreRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    private final UserRepository UserRepository;
+    private final UserRepository userRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO answer_scores (llm_answer_id, evaluator_id, raw_score, normalized_score, weighted_score, score_type, " +
@@ -92,17 +92,20 @@ public class AnswerScoreRepository {
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM answer_scores";
 
+    private static final String SQL_DELETE_BY_ID = 
+            "DELETE FROM answer_scores WHERE id=?";
+
     @Autowired
-    public AnswerScoreRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository) {
+    public AnswerScoreRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
         this.jdbcTemplate = jdbcTemplate;
-        this.UserRepository = UserRepository;
+        this.userRepository = userRepository;
     }
 
     /**
      * 保存回答分数
      *
      * @param answerScore 回答分数对象
-     * @return 带有ID的回答分数对�?
+     * @return 带有ID的回答分数对象
      */
     public AnswerScore save(AnswerScore answerScore) {
         if (answerScore.getId() == null) {
@@ -113,10 +116,10 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 插入新回答分�?
+     * 插入新回答分数
      *
      * @param answerScore 回答分数对象
-     * @return 带有ID的回答分数对�?
+     * @return 带有ID的回答分数对象
      */
     private AnswerScore insert(AnswerScore answerScore) {
         if (answerScore.getScoringTime() == null) {
@@ -137,7 +140,7 @@ public class AnswerScoreRepository {
             // 设置原始分数
             ps.setBigDecimal(3, answerScore.getRawScore());
             
-            // 设置标准化分�?
+            // 设置标准化分数
             if (answerScore.getNormalizedScore() != null) {
                 ps.setBigDecimal(4, answerScore.getNormalizedScore());
             } else {
@@ -250,7 +253,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据回答ID、评测者ID和分数类型查找分数记�?
+     * 根据回答ID、评测者ID和分数类型查找分数记录
      *
      * @param llmAnswerId 回答ID
      * @param evaluatorId 评测者ID
@@ -271,7 +274,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 检查指定回答、评测者和分数类型的分数记录是否存�?
+     * 检查指定回答、评测者和分数类型的分数记录是否存在
      *
      * @param llmAnswerId 回答ID
      * @param evaluatorId 评测者ID
@@ -288,7 +291,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据评测ID查找所有分数记�?
+     * 根据评测ID查找所有分数记录
      *
      * @param evaluationId 评测ID
      * @return 分数记录列表
@@ -302,7 +305,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据回答ID查找所有分数记�?
+     * 根据回答ID查找所有分数记录
      *
      * @param llmAnswerId 回答ID
      * @return 分数记录列表
@@ -316,7 +319,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据回答ID和分数类型查找所有分数记�?
+     * 根据回答ID和分数类型查找所有分数记录
      *
      * @param llmAnswerId 回答ID
      * @param scoreType 分数类型
@@ -331,7 +334,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 查询指定回答的平均分�?
+     * 查询指定回答的平均分数
      *
      * @param llmAnswerId 回答ID
      * @param scoreType 分数类型
@@ -346,11 +349,11 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 查询指定回答的最高分
+     * 查询指定回答的最高分数
      *
      * @param llmAnswerId 回答ID
      * @param scoreType 分数类型
-     * @return 最高分�?
+     * @return 最高分数
      */
     public Double findMaxScoreByLlmAnswerIdAndScoreType(Long llmAnswerId, String scoreType) {
         return jdbcTemplate.queryForObject(
@@ -361,11 +364,11 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 查询指定回答的最低分
+     * 查询指定回答的最低分数
      *
      * @param llmAnswerId 回答ID
      * @param scoreType 分数类型
-     * @return 最低分�?
+     * @return 最低分数
      */
     public Double findMinScoreByLlmAnswerIdAndScoreType(Long llmAnswerId, String scoreType) {
         return jdbcTemplate.queryForObject(
@@ -376,7 +379,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据分数类型查找所有分数记�?
+     * 根据分数类型查找所有分数记录
      *
      * @param scoreType 分数类型
      * @return 分数记录列表
@@ -390,7 +393,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据评测者ID查找所有分数记�?
+     * 根据评测者ID查找所有分数记录
      *
      * @param evaluatorId 评测者ID
      * @return 分数记录列表
@@ -404,7 +407,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据评测者ID和分数类型查找所有分数记�?
+     * 根据评测者ID和分数类型查找所有分数记录
      *
      * @param evaluatorId 评测者ID
      * @param scoreType 分数类型
@@ -419,7 +422,7 @@ public class AnswerScoreRepository {
     }
 
     /**
-     * 根据评测ID删除所有分数记�?
+     * 根据评测ID删除所有分数记录
      *
      * @param evaluationId 评测ID
      */
@@ -428,7 +431,7 @@ public class AnswerScoreRepository {
     }
     
     /**
-     * 查找所有分数记�?
+     * 查找所有分数记录
      *
      * @return 分数记录列表
      */
@@ -448,7 +451,7 @@ public class AnswerScoreRepository {
             // 设置原始分数
             answerScore.setRawScore(rs.getBigDecimal("raw_score"));
             
-            // 设置标准化分�?
+            // 设置标准化分数
             BigDecimal normalizedScore = rs.getBigDecimal("normalized_score");
             if (!rs.wasNull()) {
                 answerScore.setNormalizedScore(normalizedScore);
@@ -484,7 +487,7 @@ public class AnswerScoreRepository {
                 answerScore.setLlmAnswer(llmAnswer);
             }
             
-            // 设置评测�?
+            // 设置评测者
             Long evaluatorId = rs.getLong("evaluator_id");
             if (!rs.wasNull()) {
                 Evaluator evaluator = new Evaluator();
@@ -503,10 +506,40 @@ public class AnswerScoreRepository {
             // 设置创建用户
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
-                UserRepository.findById(createdByUserId).ifPresent(answerScore::setCreatedByUser);
+                userRepository.findById(createdByUserId).ifPresent(user -> answerScore.setCreatedByUser(user));
             }
             
             return answerScore;
         }
+    }
+
+    /**
+     * 批量保存回答分数
+     *
+     * @param answerScores 回答分数对象列表
+     * @return 带有ID的回答分数对象列表
+     */
+    public List<AnswerScore> saveAll(List<AnswerScore> answerScores) {
+        return answerScores.stream()
+                .map(this::save)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * 根据ID删除回答分数
+     *
+     * @param id 回答分数ID
+     */
+    public void deleteById(Long id) {
+        jdbcTemplate.update(SQL_DELETE_BY_ID, id);
+    }
+
+    /**
+     * 批量删除回答分数
+     *
+     * @param answerScores 回答分数对象列表
+     */
+    public void deleteAll(List<AnswerScore> answerScores) {
+        answerScores.forEach(answerScore -> deleteById(answerScore.getId()));
     }
 } 

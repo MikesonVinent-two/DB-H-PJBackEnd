@@ -13,7 +13,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.example.demo.config.RestTemplateConfig;
 import com.example.demo.service.LlmApiService;
-import com.example.demo.entity.LlmModel;
+import com.example.demo.entity.jdbc.LlmModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;

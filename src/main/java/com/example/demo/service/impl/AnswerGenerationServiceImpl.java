@@ -19,25 +19,25 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.ModelAnswerRunDTO;
 import com.example.demo.dto.WebSocketMessage.MessageType;
-import com.example.demo.entity.AnswerGenerationBatch;
-import com.example.demo.entity.AnswerGenerationBatch.BatchStatus;
-import com.example.demo.entity.AnswerPromptAssemblyConfig;
-import com.example.demo.entity.AnswerQuestionTypePrompt;
-import com.example.demo.entity.DatasetVersion;
-import com.example.demo.entity.EvaluationPromptAssemblyConfig;
-import com.example.demo.entity.LlmModel;
-import com.example.demo.entity.ModelAnswerRun;
-import com.example.demo.entity.ModelAnswerRun.RunStatus;
-import com.example.demo.entity.QuestionType;
-import com.example.demo.entity.User;
-import com.example.demo.repository.AnswerGenerationBatchRepository;
-import com.example.demo.repository.AnswerPromptAssemblyConfigRepository;
-import com.example.demo.repository.AnswerQuestionTypePromptRepository;
-import com.example.demo.repository.DatasetVersionRepository;
-import com.example.demo.repository.EvaluationPromptAssemblyConfigRepository;
-import com.example.demo.repository.LlmModelRepository;
-import com.example.demo.repository.ModelAnswerRunRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
+import com.example.demo.entity.jdbc.DatasetVersion;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.LlmModel;
+import com.example.demo.entity.jdbc.ModelAnswerRun;
+import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.AnswerGenerationBatchRepository;
+import com.example.demo.repository.jdbc.AnswerPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.AnswerQuestionTypePromptRepository;
+import com.example.demo.repository.jdbc.DatasetVersionRepository;
+import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.LlmModelRepository;
+import com.example.demo.repository.jdbc.ModelAnswerRunRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.AnswerGenerationService;
 import com.example.demo.service.WebSocketService;
 import com.example.demo.task.AnswerGenerationTask;
@@ -1287,7 +1287,32 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         dto.setDescription(batch.getDescription());
         dto.setDatasetVersionId(batch.getDatasetVersion().getId());
         dto.setDatasetVersionName(batch.getDatasetVersion().getName() + " " + batch.getDatasetVersion().getVersionNumber());
-        dto.setStatus(batch.getStatus());
+        
+        // 将jdbc包中的BatchStatus转换为entity包中的BatchStatus
+        switch (batch.getStatus()) {
+            case PENDING:
+                dto.setStatus(BatchStatus.PENDING);
+                break;
+            case GENERATING_ANSWERS:
+                dto.setStatus(BatchStatus.GENERATING_ANSWERS);
+                break;
+            case COMPLETED:
+                dto.setStatus(BatchStatus.COMPLETED);
+                break;
+            case FAILED:
+                dto.setStatus(BatchStatus.FAILED);
+                break;
+            case PAUSED:
+                dto.setStatus(BatchStatus.PAUSED);
+                break;
+            case RESUMING:
+                dto.setStatus(BatchStatus.RESUMING);
+                break;
+            default:
+                dto.setStatus(BatchStatus.PENDING);
+                break;
+        }
+        
         dto.setCreationTime(batch.getCreationTime());
         
         if (batch.getAnswerAssemblyConfig() != null) {

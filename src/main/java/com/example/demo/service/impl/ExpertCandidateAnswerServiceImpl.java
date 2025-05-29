@@ -10,12 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.example.demo.dto.ExpertCandidateAnswerDTO;
-import com.example.demo.entity.ExpertCandidateAnswer;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.User;
-import com.example.demo.repository.ExpertCandidateAnswerRepository;
-import com.example.demo.repository.StandardQuestionRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.ExpertCandidateAnswer;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.ExpertCandidateAnswerRepository;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.ExpertCandidateAnswerService;
 
 @Service

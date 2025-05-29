@@ -5,8 +5,8 @@ import org.springframework.stereotype.Service;
 
 import com.example.demo.dto.WebSocketMessage;
 import com.example.demo.dto.WebSocketMessage.MessageType;
-import com.example.demo.entity.AnswerGenerationBatch.BatchStatus;
-import com.example.demo.entity.ModelAnswerRun.RunStatus;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
 
 import java.util.HashMap;
 import java.util.Map;

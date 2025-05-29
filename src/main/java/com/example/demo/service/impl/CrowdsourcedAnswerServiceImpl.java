@@ -10,12 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import com.example.demo.dto.CrowdsourcedAnswerDTO;
-import com.example.demo.entity.CrowdsourcedAnswer;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.User;
-import com.example.demo.repository.CrowdsourcedAnswerRepository;
-import com.example.demo.repository.StandardQuestionRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.CrowdsourcedAnswer;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.CrowdsourcedAnswerRepository;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.CrowdsourcedAnswerService;
 
 import java.time.LocalDateTime;
@@ -129,7 +129,7 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         answer.setAnswerText(answerDTO.getAnswerText());
         answer.setSubmissionTime(answerDTO.getSubmissionTime() != null ? 
             answerDTO.getSubmissionTime() : java.time.LocalDateTime.now());
-        answer.setTaskBatchId(answerDTO.getTaskBatchId() != null ? answerDTO.getTaskBatchId().longValue() : null);
+        answer.setTaskBatchId(answerDTO.getTaskBatchId());
         answer.setQualityReviewStatus(CrowdsourcedAnswer.QualityReviewStatus.PENDING);
         
         // 保存并返回

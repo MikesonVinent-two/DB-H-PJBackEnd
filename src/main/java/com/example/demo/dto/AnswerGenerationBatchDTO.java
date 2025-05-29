@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-import com.example.demo.entity.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
 
 public class AnswerGenerationBatchDTO {
     

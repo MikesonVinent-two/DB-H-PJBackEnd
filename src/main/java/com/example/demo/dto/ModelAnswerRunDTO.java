@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-import com.example.demo.entity.ModelAnswerRun.RunStatus;
+import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
 
 public class ModelAnswerRunDTO {
     

@@ -4,11 +4,11 @@ import com.example.demo.dto.AnswerQuestionTypePromptDTO;
 import com.example.demo.dto.AnswerTagPromptDTO;
 import com.example.demo.dto.EvaluationSubjectivePromptDTO;
 import com.example.demo.dto.EvaluationTagPromptDTO;
-import com.example.demo.entity.AnswerQuestionTypePrompt;
-import com.example.demo.entity.AnswerTagPrompt;
-import com.example.demo.entity.EvaluationSubjectivePrompt;
-import com.example.demo.entity.EvaluationTagPrompt;
-import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
+import com.example.demo.entity.jdbc.AnswerTagPrompt;
+import com.example.demo.entity.jdbc.EvaluationSubjectivePrompt;
+import com.example.demo.entity.jdbc.EvaluationTagPrompt;
+import com.example.demo.entity.jdbc.QuestionType;
 
 import java.util.List;
 import java.util.Optional;

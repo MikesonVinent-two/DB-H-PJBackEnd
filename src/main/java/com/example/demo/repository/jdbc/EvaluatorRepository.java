@@ -22,13 +22,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 基于JDBC的评测者仓库实�?
+ * 基于JDBC的评测者仓库实现
  */
 @Repository
 public class EvaluatorRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    private final UserRepository UserRepository;
+    private final UserRepository userRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO evaluators (evaluator_type, user_id, llm_model_id, name, created_at, created_by_user_id, created_change_log_id, deleted_at) " +
@@ -55,18 +55,21 @@ public class EvaluatorRepository {
     
     private static final String SQL_SOFT_DELETE = 
             "UPDATE evaluators SET deleted_at=? WHERE id=?";
+            
+    private static final String SQL_EXISTS_BY_ID = 
+            "SELECT COUNT(*) FROM evaluators WHERE id=?";
 
     @Autowired
-    public EvaluatorRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository) {
+    public EvaluatorRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
         this.jdbcTemplate = jdbcTemplate;
-        this.UserRepository = UserRepository;
+        this.userRepository = userRepository;
     }
 
     /**
-     * 保存评测�?
+     * 保存评测者
      *
-     * @param evaluator 评测者对�?
-     * @return 带有ID的评测者对�?
+     * @param evaluator 评测者对象
+     * @return 带有ID的评测者对象
      */
     public Evaluator save(Evaluator evaluator) {
         if (evaluator.getId() == null) {
@@ -77,10 +80,10 @@ public class EvaluatorRepository {
     }
 
     /**
-     * 插入新评测�?
+     * 插入新评测者
      *
-     * @param evaluator 评测者对�?
-     * @return 带有ID的评测者对�?
+     * @param evaluator 评测者对象
+     * @return 带有ID的评测者对象
      */
     private Evaluator insert(Evaluator evaluator) {
         if (evaluator.getCreatedAt() == null) {
@@ -92,7 +95,7 @@ public class EvaluatorRepository {
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS);
             
-            // 设置评测者类�?
+            // 设置评测者类型
             ps.setString(1, evaluator.getEvaluatorType().name());
             
             // 设置用户ID
@@ -144,10 +147,10 @@ public class EvaluatorRepository {
     }
 
     /**
-     * 更新评测�?
+     * 更新评测者
      *
-     * @param evaluator 评测者对�?
-     * @return 更新后的评测者对�?
+     * @param evaluator 评测者对象
+     * @return 更新后的评测者对象
      */
     private Evaluator update(Evaluator evaluator) {
         jdbcTemplate.update(SQL_UPDATE,
@@ -164,7 +167,7 @@ public class EvaluatorRepository {
     }
 
     /**
-     * 根据ID查找评测�?
+     * 根据ID查找评测者
      *
      * @param id 评测者ID
      * @return 评测者的Optional包装
@@ -179,9 +182,9 @@ public class EvaluatorRepository {
     }
     
     /**
-     * 根据名称查找评测�?
+     * 根据名称查找评测者
      *
-     * @param name 评测者名�?
+     * @param name 评测者名称
      * @return 评测者的Optional包装
      */
     public Optional<Evaluator> findByName(String name) {
@@ -194,10 +197,10 @@ public class EvaluatorRepository {
     }
 
     /**
-     * 根据评测者类型查找评测�?
+     * 根据评测者类型查找评测者
      *
-     * @param evaluatorType 评测者类�?
-     * @return 评测者列�?
+     * @param evaluatorType 评测者类型
+     * @return 评测者列表
      */
     public List<Evaluator> findByEvaluatorType(Evaluator.EvaluatorType evaluatorType) {
         return jdbcTemplate.query(
@@ -208,10 +211,10 @@ public class EvaluatorRepository {
     }
 
     /**
-     * 根据评测者类型查找未删除的评测�?
+     * 根据评测者类型查找未删除的评测者
      *
-     * @param evaluatorType 评测者类�?
-     * @return 评测者列�?
+     * @param evaluatorType 评测者类型
+     * @return 评测者列表
      */
     public List<Evaluator> findByEvaluatorTypeAndDeletedAtIsNull(Evaluator.EvaluatorType evaluatorType) {
         return jdbcTemplate.query(
@@ -222,16 +225,16 @@ public class EvaluatorRepository {
     }
     
     /**
-     * 查找所有评测�?
+     * 查找所有评测者
      *
-     * @return 评测者列�?
+     * @return 评测者列表
      */
     public List<Evaluator> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new EvaluatorRowMapper());
     }
 
     /**
-     * 软删除评测�?
+     * 软删除评测者
      *
      * @param id 评测者ID
      * @return 是否成功
@@ -240,9 +243,20 @@ public class EvaluatorRepository {
         int affected = jdbcTemplate.update(SQL_SOFT_DELETE, Timestamp.valueOf(LocalDateTime.now()), id);
         return affected > 0;
     }
+    
+    /**
+     * 检查指定ID的评测者是否存在
+     *
+     * @param id 评测者ID
+     * @return 是否存在
+     */
+    public boolean existsById(Long id) {
+        Integer count = jdbcTemplate.queryForObject(SQL_EXISTS_BY_ID, Integer.class, id);
+        return count != null && count > 0;
+    }
 
     /**
-     * 评测者行映射�?
+     * 评测者行映射器
      */
     private class EvaluatorRowMapper implements RowMapper<Evaluator> {
         @Override
@@ -284,10 +298,10 @@ public class EvaluatorRepository {
                 evaluator.setLlmModel(llmModel);
             }
             
-            // 设置创建者用�?
+            // 设置创建者用户
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
-                UserRepository.findById(createdByUserId).ifPresent(user -> evaluator.setCreatedByUser(user));
+                userRepository.findById(createdByUserId).ifPresent(user -> evaluator.setCreatedByUser(user));
             }
             
             Long createdChangeLogId = rs.getLong("created_change_log_id");

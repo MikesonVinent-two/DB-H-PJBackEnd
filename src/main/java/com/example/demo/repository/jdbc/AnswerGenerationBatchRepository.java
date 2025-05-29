@@ -28,13 +28,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * 基于JDBC的答案生成批次仓库实�?
+ * 基于JDBC的答案生成批次仓库实现
  */
 @Repository
 public class AnswerGenerationBatchRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    private final UserRepository UserRepository;
+    private final UserRepository userRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO answer_generation_batches " +
@@ -78,16 +78,16 @@ public class AnswerGenerationBatchRepository {
             "DELETE FROM answer_generation_batches WHERE id=?";
 
     @Autowired
-    public AnswerGenerationBatchRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository) {
+    public AnswerGenerationBatchRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
         this.jdbcTemplate = jdbcTemplate;
-        this.UserRepository = UserRepository;
+        this.userRepository = userRepository;
     }
 
     /**
      * 保存答案生成批次
      *
      * @param batch 答案生成批次对象
-     * @return 带有ID的答案生成批次对�?
+     * @return 带有ID的答案生成批次对象
      */
     public AnswerGenerationBatch save(AnswerGenerationBatch batch) {
         if (batch.getId() == null) {
@@ -98,10 +98,10 @@ public class AnswerGenerationBatchRepository {
     }
 
     /**
-     * 插入新答案生成批�?
+     * 插入新答案生成批次
      *
      * @param batch 答案生成批次对象
-     * @return 带有ID的答案生成批次对�?
+     * @return 带有ID的答案生成批次对象
      */
     private AnswerGenerationBatch insert(AnswerGenerationBatch batch) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -133,7 +133,7 @@ public class AnswerGenerationBatchRepository {
                 ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
             }
             
-            // 设置状�?
+            // 设置状态
             ps.setString(5, batch.getStatus().name());
             
             // 设置回答组装配置ID
@@ -199,21 +199,21 @@ public class AnswerGenerationBatchRepository {
                 ps.setNull(14, Types.TIMESTAMP);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分比
             if (batch.getProgressPercentage() != null) {
                 ps.setBigDecimal(15, batch.getProgressPercentage());
             } else {
                 ps.setNull(15, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时间
             if (batch.getLastActivityTime() != null) {
                 ps.setTimestamp(16, Timestamp.valueOf(batch.getLastActivityTime()));
             } else {
                 ps.setNull(16, Types.TIMESTAMP);
             }
             
-            // 设置最后检查时�?
+            // 设置最后检查时间
             if (batch.getLastCheckTime() != null) {
                 ps.setTimestamp(17, Timestamp.valueOf(batch.getLastCheckTime()));
             } else {
@@ -245,7 +245,7 @@ public class AnswerGenerationBatchRepository {
             if (batch.getAnswerRepeatCount() != null) {
                 ps.setInt(21, batch.getAnswerRepeatCount());
             } else {
-                ps.setInt(21, 1); // 默认�?
+                ps.setInt(21, 1); // 默认值
             }
             
             // 设置错误信息
@@ -314,7 +314,7 @@ public class AnswerGenerationBatchRepository {
                 ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
             }
             
-            // 设置状�?
+            // 设置状态
             ps.setString(5, batch.getStatus().name());
             
             // 设置回答组装配置ID
@@ -380,21 +380,21 @@ public class AnswerGenerationBatchRepository {
                 ps.setNull(14, Types.TIMESTAMP);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分比
             if (batch.getProgressPercentage() != null) {
                 ps.setBigDecimal(15, batch.getProgressPercentage());
             } else {
                 ps.setNull(15, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时间
             if (batch.getLastActivityTime() != null) {
                 ps.setTimestamp(16, Timestamp.valueOf(batch.getLastActivityTime()));
             } else {
                 ps.setNull(16, Types.TIMESTAMP);
             }
             
-            // 设置最后检查时�?
+            // 设置最后检查时间
             if (batch.getLastCheckTime() != null) {
                 ps.setTimestamp(17, Timestamp.valueOf(batch.getLastCheckTime()));
             } else {
@@ -426,7 +426,7 @@ public class AnswerGenerationBatchRepository {
             if (batch.getAnswerRepeatCount() != null) {
                 ps.setInt(21, batch.getAnswerRepeatCount());
             } else {
-                ps.setInt(21, 1); // 默认�?
+                ps.setInt(21, 1); // 默认值
             }
             
             // 设置错误信息
@@ -479,9 +479,9 @@ public class AnswerGenerationBatchRepository {
     }
 
     /**
-     * 根据状态查找答案生成批�?
+     * 根据状态查找答案生成批次
      *
-     * @param status 状�?
+     * @param status 状态
      * @return 答案生成批次列表
      */
     public List<AnswerGenerationBatch> findByStatus(BatchStatus status) {
@@ -509,9 +509,9 @@ public class AnswerGenerationBatchRepository {
     }
 
     /**
-     * 按状态统计答案生成批次数�?
+     * 按状态统计答案生成批次数
      *
-     * @param status 状�?
+     * @param status 状态
      * @return 数量
      */
     public long countByStatus(BatchStatus status) {
@@ -519,9 +519,9 @@ public class AnswerGenerationBatchRepository {
     }
 
     /**
-     * 查找所有答案生成批�?
+     * 查找所有答案生成批次
      *
-     * @return 所有答案生成批次列�?
+     * @return 所有答案生成批次列表
      */
     public List<AnswerGenerationBatch> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new AnswerGenerationBatchRowMapper());
@@ -544,7 +544,7 @@ public class AnswerGenerationBatchRepository {
         public AnswerGenerationBatch mapRow(ResultSet rs, int rowNum) throws SQLException {
             AnswerGenerationBatch batch = new AnswerGenerationBatch();
             
-            // 设置ID和基本属�?
+            // 设置ID和基本属性
             batch.setId(rs.getLong("id"));
             batch.setName(rs.getString("name"));
             batch.setDescription(rs.getString("description"));
@@ -561,18 +561,18 @@ public class AnswerGenerationBatchRepository {
                 batch.setCompletedAt(completedAt.toLocalDateTime());
             }
             
-            // 设置创建�?
+            // 设置创建者
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 User user = new User();
                 user.setId(createdByUserId);
                 batch.setCreatedByUser(user);
                 
-                // 可选：通过UserRepository加载完整的用户对�?
+                // 可选：通过UserRepository加载完整的用户对象
                 // UserRepository.findById(createdByUserId).ifPresent(batch::setCreatedByUser);
             }
             
-            // 设置数据集版�?
+            // 设置数据集版本
             Long datasetVersionId = rs.getLong("dataset_version_id");
             if (!rs.wasNull()) {
                 DatasetVersion datasetVersion = new DatasetVersion();
@@ -597,5 +597,16 @@ public class AnswerGenerationBatchRepository {
             
             return batch;
         }
+    }
+
+    /**
+     * 保存答案生成批次并立即刷新
+     * 在JDBC实现中与save方法功能相同，但保持与JPA接口兼容
+     *
+     * @param batch 答案生成批次对象
+     * @return 带有ID的答案生成批次对象
+     */
+    public AnswerGenerationBatch saveAndFlush(AnswerGenerationBatch batch) {
+        return save(batch);
     }
 } 

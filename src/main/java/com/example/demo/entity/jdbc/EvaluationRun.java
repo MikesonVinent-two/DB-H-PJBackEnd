@@ -169,12 +169,12 @@ public class EvaluationRun {
         this.errorMessage = errorMessage;
     }
 
-    public Long getCreatedByUserId() {
+    public Long getCreatedBy() {
         return createdByUserId;
     }
 
-    public void setCreatedByUserId(Long createdByUserId) {
-        this.createdByUserId = createdByUserId;
+    public void setCreatedBy(Long userId) {
+        this.createdByUserId = userId;
     }
 
     public Long getLastProcessedAnswerId() {

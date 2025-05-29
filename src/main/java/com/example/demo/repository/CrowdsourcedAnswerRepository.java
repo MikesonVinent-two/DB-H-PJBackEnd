@@ -26,5 +26,5 @@ public interface CrowdsourcedAnswerRepository extends JpaRepository<Crowdsourced
         
     // 检查用户是否已经在特定任务批次中为特定问题提交回答
     boolean existsByStandardQuestionIdAndUserIdAndTaskBatchId(
-        Long standardQuestionId, Long userId, Integer taskBatchId);
+        Long standardQuestionId, Long userId, Long taskBatchId);
 } 

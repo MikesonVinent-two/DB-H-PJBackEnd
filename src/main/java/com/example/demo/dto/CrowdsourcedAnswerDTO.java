@@ -23,7 +23,7 @@ public class CrowdsourcedAnswerDTO {
     private String reviewFeedback;
     private String userUsername;  // 添加提交者的用户名
     private String reviewerUsername;  // 添加审核者的用户名
-    private Integer taskBatchId;  // 任务批次ID
+    private Long taskBatchId;  // 任务批次ID
 
     // Getters and Setters
     public Long getId() {
@@ -114,11 +114,11 @@ public class CrowdsourcedAnswerDTO {
         this.reviewerUsername = reviewerUsername;
     }
 
-    public Integer getTaskBatchId() {
+    public Long getTaskBatchId() {
         return taskBatchId;
     }
 
-    public void setTaskBatchId(Integer taskBatchId) {
+    public void setTaskBatchId(Long taskBatchId) {
         this.taskBatchId = taskBatchId;
     }
 } 

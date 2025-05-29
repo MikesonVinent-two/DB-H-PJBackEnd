@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.example.demo.dto.TagDTO;
-import com.example.demo.entity.Tag;
+import com.example.demo.entity.jdbc.Tag;
 
 public interface TagService {
     

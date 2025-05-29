@@ -1,6 +1,6 @@
 package com.example.demo.dto;
 
-import com.example.demo.entity.UserRole;
+import com.example.demo.entity.jdbc.UserRole;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

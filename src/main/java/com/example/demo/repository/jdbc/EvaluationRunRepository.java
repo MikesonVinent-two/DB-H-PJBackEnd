@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 基于JDBC的评测运行仓库实�?
+ * 基于JDBC的评测运行仓库实现
  */
 @Repository
 public class EvaluationRunRepository {
@@ -96,6 +96,9 @@ public class EvaluationRunRepository {
             "UPDATE evaluation_runs SET status=?, last_activity_time=CURRENT_TIMESTAMP, error_message=? " +
             "WHERE id=?";
 
+    private static final String SQL_FIND_ALL_PAGED = 
+            "SELECT * FROM evaluation_runs ORDER BY id LIMIT ? OFFSET ?";
+
     @Autowired
     public EvaluationRunRepository(JdbcTemplate jdbcTemplate, EvaluatorRepository EvaluatorRepository) {
         this.jdbcTemplate = jdbcTemplate;
@@ -106,7 +109,7 @@ public class EvaluationRunRepository {
      * 保存评测运行
      *
      * @param evaluationRun 评测运行对象
-     * @return 带有ID的评测运行对�?
+     * @return 带有ID的评测运行对象
      */
     public EvaluationRun save(EvaluationRun evaluationRun) {
         if (evaluationRun.getId() == null) {
@@ -117,10 +120,10 @@ public class EvaluationRunRepository {
     }
 
     /**
-     * 插入新评测运�?
+     * 插入新评测运行
      *
      * @param evaluationRun 评测运行对象
-     * @return 带有ID的评测运行对�?
+     * @return 带有ID的评测运行对象
      */
     private EvaluationRun insert(EvaluationRun evaluationRun) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -151,7 +154,7 @@ public class EvaluationRunRepository {
             
             // run_time 使用数据库的 CURRENT_TIMESTAMP 设置
             
-            // 设置开始时�?
+            // 设置开始时间
             ps.setTimestamp(5, evaluationRun.getStartTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getStartTime()) : null);
             
@@ -159,7 +162,7 @@ public class EvaluationRunRepository {
             ps.setTimestamp(6, evaluationRun.getCompletedAt() != null ? 
                     Timestamp.valueOf(evaluationRun.getCompletedAt()) : null);
             
-            // 设置状�?
+            // 设置状态
             ps.setString(7, evaluationRun.getStatus().name());
             
             // 设置参数
@@ -170,8 +173,8 @@ public class EvaluationRunRepository {
             ps.setString(9, evaluationRun.getErrorMessage());
             
             // 设置创建者用户ID
-            if (evaluationRun.getCreatedByUserId() != null) {
-                ps.setLong(10, evaluationRun.getCreatedByUserId());
+            if (evaluationRun.getCreatedBy() != null) {
+                ps.setLong(10, evaluationRun.getCreatedBy());
             } else {
                 ps.setNull(10, Types.BIGINT);
             }
@@ -183,14 +186,14 @@ public class EvaluationRunRepository {
                 ps.setNull(11, Types.BIGINT);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分比
             if (evaluationRun.getProgressPercentage() != null) {
                 ps.setBigDecimal(12, evaluationRun.getProgressPercentage());
             } else {
                 ps.setNull(12, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时间
             ps.setTimestamp(13, evaluationRun.getLastActivityTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastActivityTime()) : null);
             
@@ -208,7 +211,7 @@ public class EvaluationRunRepository {
                 ps.setNull(15, Types.INTEGER);
             }
             
-            // 设置失败项目�?
+            // 设置失败项目数
             if (evaluationRun.getFailedEvaluationsCount() != null) {
                 ps.setInt(16, evaluationRun.getFailedEvaluationsCount());
             } else {
@@ -261,7 +264,7 @@ public class EvaluationRunRepository {
             if (evaluationRun.getAutoCheckpointInterval() != null) {
                 ps.setInt(25, evaluationRun.getAutoCheckpointInterval());
             } else {
-                ps.setInt(25, 60); // 默认60�?
+                ps.setInt(25, 60); // 默认60分钟
             }
             
             // 设置当前批次起始ID
@@ -292,14 +295,14 @@ public class EvaluationRunRepository {
                 ps.setInt(29, 0);
             }
             
-            // 设置最大重试次�?
+            // 设置最大重试次数
             if (evaluationRun.getMaxRetries() != null) {
                 ps.setInt(30, evaluationRun.getMaxRetries());
             } else {
-                ps.setInt(30, 3); // 默认3�?
+                ps.setInt(30, 3); // 默认3次
             }
             
-            // 设置最后错误时�?
+            // 设置最后错误时间
             ps.setTimestamp(31, evaluationRun.getLastErrorTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastErrorTime()) : null);
             
@@ -310,7 +313,7 @@ public class EvaluationRunRepository {
                 ps.setInt(32, 0);
             }
             
-            // 设置最后更新时�?
+            // 设置最后更新时间
             ps.setTimestamp(33, evaluationRun.getLastUpdated() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastUpdated()) : null);
             
@@ -363,7 +366,7 @@ public class EvaluationRunRepository {
                 ps.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
             }
             
-            // 设置开始时�?
+            // 设置开始时间
             ps.setTimestamp(6, evaluationRun.getStartTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getStartTime()) : null);
             
@@ -371,7 +374,7 @@ public class EvaluationRunRepository {
             ps.setTimestamp(7, evaluationRun.getCompletedAt() != null ? 
                     Timestamp.valueOf(evaluationRun.getCompletedAt()) : null);
             
-            // 设置状�?
+            // 设置状态
             ps.setString(8, evaluationRun.getStatus().name());
             
             // 设置参数
@@ -382,8 +385,8 @@ public class EvaluationRunRepository {
             ps.setString(10, evaluationRun.getErrorMessage());
             
             // 设置创建者用户ID
-            if (evaluationRun.getCreatedByUserId() != null) {
-                ps.setLong(11, evaluationRun.getCreatedByUserId());
+            if (evaluationRun.getCreatedBy() != null) {
+                ps.setLong(11, evaluationRun.getCreatedBy());
             } else {
                 ps.setNull(11, Types.BIGINT);
             }
@@ -395,14 +398,14 @@ public class EvaluationRunRepository {
                 ps.setNull(12, Types.BIGINT);
             }
             
-            // 设置进度百分�?
+            // 设置进度百分比
             if (evaluationRun.getProgressPercentage() != null) {
                 ps.setBigDecimal(13, evaluationRun.getProgressPercentage());
             } else {
                 ps.setNull(13, Types.DECIMAL);
             }
             
-            // 设置最后活动时�?
+            // 设置最后活动时间
             ps.setTimestamp(14, evaluationRun.getLastActivityTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastActivityTime()) : null);
             
@@ -420,7 +423,7 @@ public class EvaluationRunRepository {
                 ps.setNull(16, Types.INTEGER);
             }
             
-            // 设置失败项目�?
+            // 设置失败项目数
             if (evaluationRun.getFailedEvaluationsCount() != null) {
                 ps.setInt(17, evaluationRun.getFailedEvaluationsCount());
             } else {
@@ -473,7 +476,7 @@ public class EvaluationRunRepository {
             if (evaluationRun.getAutoCheckpointInterval() != null) {
                 ps.setInt(26, evaluationRun.getAutoCheckpointInterval());
             } else {
-                ps.setInt(26, 60); // 默认60�?
+                ps.setInt(26, 60); // 默认60分钟
             }
             
             // 设置当前批次起始ID
@@ -504,14 +507,14 @@ public class EvaluationRunRepository {
                 ps.setInt(30, 0);
             }
             
-            // 设置最大重试次�?
+            // 设置最大重试次数
             if (evaluationRun.getMaxRetries() != null) {
                 ps.setInt(31, evaluationRun.getMaxRetries());
             } else {
-                ps.setInt(31, 3); // 默认3�?
+                ps.setInt(31, 3); // 默认3次
             }
             
-            // 设置最后错误时�?
+            // 设置最后错误时间
             ps.setTimestamp(32, evaluationRun.getLastErrorTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastErrorTime()) : null);
             
@@ -522,7 +525,7 @@ public class EvaluationRunRepository {
                 ps.setInt(33, 0);
             }
             
-            // 设置最后更新时�?
+            // 设置最后更新时间
             ps.setTimestamp(34, evaluationRun.getLastUpdated() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastUpdated()) : null);
             
@@ -585,9 +588,9 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据状态查询评测运�?
+     * 根据状态查询评测运行
      * 
-     * @param status 状�?
+     * @param status 状态
      * @param pageable 分页参数
      * @return 评测运行列表
      */
@@ -621,10 +624,10 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据模型回答运行ID和状态查询评测运�?
+     * 根据模型回答运行ID和状态查询评测运行
      * 
      * @param modelAnswerRunId 模型回答运行ID
-     * @param status 状�?
+     * @param status 状态
      * @param pageable 分页参数
      * @return 评测运行列表
      */
@@ -640,10 +643,10 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据评测者ID和状态查询评测运�?
+     * 根据评测者ID和状态查询评测运行
      * 
      * @param evaluatorId 评测者ID
-     * @param status 状�?
+     * @param status 状态
      * @param pageable 分页参数
      * @return 评测运行列表
      */
@@ -659,11 +662,11 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据模型回答运行ID、评测者ID和状态查询评测运�?
+     * 根据模型回答运行ID、评测者ID和状态查询评测运行
      * 
      * @param modelAnswerRunId 模型回答运行ID
      * @param evaluatorId 评测者ID
-     * @param status 状�?
+     * @param status 状态
      * @param pageable 分页参数
      * @return 评测运行列表
      */
@@ -681,11 +684,11 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据模型回答运行ID、评测者ID和非指定状态查询评测运�?
+     * 根据模型回答运行ID、评测者ID和非指定状态查询评测运行
      * 
      * @param modelAnswerRunId 模型回答运行ID
      * @param evaluatorId 评测者ID
-     * @param status 不包含的状�?
+     * @param status 不包含的状态
      * @return 评测运行列表
      */
     public List<EvaluationRun> findByModelAnswerRunIdAndEvaluatorIdAndStatusNot(
@@ -700,10 +703,10 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 根据状态和最后活动时间查询评测运�?
+     * 根据状态和最后活动时间查询评测运行
      * 
-     * @param status 状�?
-     * @param time 最后活动时�?
+     * @param status 状态
+     * @param time 最后活动时间
      * @return 评测运行列表
      */
     public List<EvaluationRun> findByStatusAndLastActivityTimeBefore(RunStatus status, LocalDateTime time) {
@@ -716,10 +719,10 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 查找适合自动恢复的过期运�?
+     * 查找适合自动恢复的过期运行
      * 
-     * @param status 状�?
-     * @param time 时间阈�?
+     * @param status 状态
+     * @param time 时间阈值
      * @return 评测运行列表
      */
     public List<EvaluationRun> findStaleRunsForAutoResume(RunStatus status, LocalDateTime time) {
@@ -734,8 +737,8 @@ public class EvaluationRunRepository {
     /**
      * 查找过期运行
      * 
-     * @param statuses 状态列�?
-     * @param time 时间阈�?
+     * @param statuses 状态列表
+     * @param time 时间阈值
      * @return 评测运行列表
      */
     public List<EvaluationRun> findStaleRuns(List<RunStatus> statuses, LocalDateTime time) {
@@ -759,10 +762,10 @@ public class EvaluationRunRepository {
     }
     
     /**
-     * 更新运行状�?
+     * 更新运行状态
      * 
      * @param runId 运行ID
-     * @param newStatus 新状�?
+     * @param newStatus 新状态
      * @param errorMessage 错误消息
      */
     public void updateRunStatus(Long runId, RunStatus newStatus, String errorMessage) {
@@ -784,12 +787,30 @@ public class EvaluationRunRepository {
     }
 
     /**
-     * 查找所有评测运�?
+     * 查找所有评测运行
      *
      * @return 评测运行列表
      */
     public List<EvaluationRun> findAll() {
         return jdbcTemplate.query("SELECT * FROM evaluation_runs", new EvaluationRunRowMapper());
+    }
+
+    /**
+     * 分页查询所有评测运行
+     *
+     * @param pageable 分页参数
+     * @return 评测运行列表
+     */
+    public List<EvaluationRun> findAll(Pageable pageable) {
+        int limit = pageable.getPageSize();
+        int offset = (int) pageable.getOffset();
+        
+        return jdbcTemplate.query(
+                SQL_FIND_ALL_PAGED,
+                new EvaluationRunRowMapper(),
+                limit,
+                offset
+        );
     }
 
     /**
@@ -809,13 +830,13 @@ public class EvaluationRunRepository {
                 evaluationRun.setModelAnswerRun(modelAnswerRun);
             }
             
-            // 设置评估�?
+            // 设置评估者
             Long evaluatorId = rs.getLong("evaluator_id");
             if (!rs.wasNull()) {
                 EvaluatorRepository.findById(evaluatorId).ifPresent(evaluator -> evaluationRun.setEvaluator(evaluator));
             }
             
-            // 设置状�?
+            // 设置状态
             evaluationRun.setStatus(RunStatus.valueOf(rs.getString("status")));
             
             // 设置时间字段

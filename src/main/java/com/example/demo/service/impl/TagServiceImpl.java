@@ -10,12 +10,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.dto.TagDTO;
-import com.example.demo.entity.Tag;
-import com.example.demo.entity.User;
-import com.example.demo.repository.AnswerTagPromptRepository;
-import com.example.demo.repository.EvaluationTagPromptRepository;
-import com.example.demo.repository.TagRepository;
-import com.example.demo.repository.UserRepository;
+import com.example.demo.entity.jdbc.Tag;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.AnswerTagPromptRepository;
+import com.example.demo.repository.jdbc.EvaluationTagPromptRepository;
+import com.example.demo.repository.jdbc.TagRepository;
+import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.TagService;
 
 import jakarta.persistence.EntityNotFoundException;

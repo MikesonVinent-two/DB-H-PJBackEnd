@@ -1,6 +1,6 @@
 package com.example.demo.dto;
 
-import com.example.demo.entity.UserRole;
+import com.example.demo.entity.jdbc.UserRole;
 
 public class LoginResponseDTO {
     private Long userId;

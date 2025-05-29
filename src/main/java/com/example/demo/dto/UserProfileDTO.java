@@ -1,7 +1,7 @@
 package com.example.demo.dto;
 
 import java.time.LocalDateTime;
-import com.example.demo.entity.UserRole;
+import com.example.demo.entity.jdbc.UserRole;
 
 public class UserProfileDTO {
     private Long id;

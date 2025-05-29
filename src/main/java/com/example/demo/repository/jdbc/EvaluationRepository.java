@@ -31,7 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 基于JDBC的评测仓库实�?
+ * 基于JDBC的评测仓库实现
  */
 @Repository
 public class EvaluationRepository {
@@ -53,6 +53,8 @@ public class EvaluationRepository {
             "raw_evaluator_response=?, created_by_user_id=?, created_change_log_id=?, creation_time=?, completion_time=?, " +
             "raw_score=?, normalized_score=?, weighted_score=?, score_type=?, scoring_method=? " +
             "WHERE id=?";
+    
+    private static final String SQL_DELETE = "DELETE FROM evaluations WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
             "SELECT * FROM evaluations WHERE id=?";
@@ -110,7 +112,7 @@ public class EvaluationRepository {
      * 保存评测
      *
      * @param evaluation 评测对象
-     * @return 带有ID的评测对�?
+     * @return 带有ID的评测对象
      */
     public Evaluation save(Evaluation evaluation) {
         if (evaluation.getId() == null) {
@@ -121,10 +123,10 @@ public class EvaluationRepository {
     }
 
     /**
-     * 插入新评�?
+     * 插入新评测
      *
      * @param evaluation 评测对象
-     * @return 带有ID的评测对�?
+     * @return 带有ID的评测对象
      */
     private Evaluation insert(Evaluation evaluation) {
         if (evaluation.getEvaluationTime() == null) {
@@ -162,7 +164,7 @@ public class EvaluationRepository {
             // 设置评测时间
             ps.setTimestamp(6, Timestamp.valueOf(evaluation.getEvaluationTime()));
             
-            // 设置评测状�?
+            // 设置评测状态
             ps.setString(7, evaluation.getStatus().name());
             
             // 设置错误消息
@@ -239,7 +241,7 @@ public class EvaluationRepository {
                 ps.setNull(17, Types.DECIMAL);
             }
             
-            // 设置标准化分�?
+            // 设置标准化分数
             if (evaluation.getNormalizedScore() != null) {
                 ps.setBigDecimal(18, evaluation.getNormalizedScore());
             } else {
@@ -420,10 +422,10 @@ public class EvaluationRepository {
     }
 
     /**
-     * 统计评测运行中已完成的评测数�?
+     * 统计评测运行中已完成的评测数量
      *
      * @param evaluationRunId 评测运行ID
-     * @return 已完成评测数�?
+     * @return 已完成评测数量
      */
     public int countCompletedByEvaluationRunId(Long evaluationRunId) {
         Integer count = jdbcTemplate.queryForObject(
@@ -450,7 +452,7 @@ public class EvaluationRepository {
     }
 
     /**
-     * 查找特定回答生成批次的所有评�?
+     * 查找特定回答生成批次的所有评测
      *
      * @param batchId 回答生成批次ID
      * @return 评测列表
@@ -464,10 +466,10 @@ public class EvaluationRepository {
     }
 
     /**
-     * 统计评测运行中的总评测数�?
+     * 统计评测运行中的总评测数量
      *
      * @param evaluationRunId 评测运行ID
-     * @return 总评测数�?
+     * @return 总评测数量
      */
     public int countByEvaluationRunId(Long evaluationRunId) {
         Integer count = jdbcTemplate.queryForObject(
@@ -479,7 +481,7 @@ public class EvaluationRepository {
     }
 
     /**
-     * 检查指定回答ID和评测者ID的评测是否存�?
+     * 检查指定回答ID和评测者ID的评测是否存在
      *
      * @param llmAnswerId 回答ID
      * @param evaluatorId 评测者ID
@@ -495,7 +497,7 @@ public class EvaluationRepository {
     }
 
     /**
-     * 检查指定回答ID和评测运行ID的评测是否存�?
+     * 检查指定回答ID和评测运行ID的评测是否存在
      *
      * @param llmAnswerId 回答ID
      * @param evaluationRunId 评测运行ID
@@ -526,7 +528,7 @@ public class EvaluationRepository {
     }
 
     /**
-     * 查找所有评�?
+     * 查找所有评测
      *
      * @return 评测列表
      */
@@ -551,7 +553,7 @@ public class EvaluationRepository {
                 evaluation.setLlmAnswer(llmAnswer);
             }
             
-            // 设置评测�?
+            // 设置评测者
             Long evaluatorId = rs.getLong("evaluator_id");
             if (!rs.wasNull()) {
                 Evaluator evaluator = new Evaluator();
@@ -582,7 +584,7 @@ public class EvaluationRepository {
                 evaluation.setEvaluationTime(evaluationTime.toLocalDateTime());
             }
             
-            // 设置评测状�?
+            // 设置评测状态
             String statusStr = rs.getString("evaluation_status");
             if (statusStr != null) {
                 evaluation.setStatus(Evaluation.EvaluationStatus.valueOf(statusStr));
@@ -640,16 +642,43 @@ public class EvaluationRepository {
                 evaluation.setCompletionTime(completionTime.toLocalDateTime());
             }
             
-            // 设置原始分数、标准化分数、加权分�?
+            // 设置原始分数、标准化分数、加权分数
             evaluation.setRawScore(rs.getBigDecimal("raw_score"));
             evaluation.setNormalizedScore(rs.getBigDecimal("normalized_score"));
             evaluation.setWeightedScore(rs.getBigDecimal("weighted_score"));
             
-            // 设置分数类型和打分方�?
+            // 设置分数类型和打分方法
             evaluation.setScoreType(rs.getString("score_type"));
             evaluation.setScoringMethod(rs.getString("scoring_method"));
             
             return evaluation;
         }
+    }
+
+    /**
+     * 批量删除评测记录
+     * 
+     * @param evaluations 要删除的评测列表
+     */
+    public void deleteAll(List<Evaluation> evaluations) {
+        if (evaluations == null || evaluations.isEmpty()) {
+            return;
+        }
+        
+        for (Evaluation evaluation : evaluations) {
+            if (evaluation.getId() != null) {
+                jdbcTemplate.update(SQL_DELETE, evaluation.getId());
+            }
+        }
+    }
+    
+    /**
+     * 刷新所有挂起的更改到数据库
+     * 在JDBC中这个方法不需要实际操作，因为JDBC没有缓存机制
+     * 但为了兼容性保留此方法
+     */
+    public void flush() {
+        // JDBC没有缓存机制，所有操作都是立即执行的，无需额外刷新
+        // 此方法仅为了兼容JPA接口而保留
     }
 } 

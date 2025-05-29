@@ -1,9 +1,9 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.AnswerScore;
-import com.example.demo.entity.LlmAnswer;
-import com.example.demo.entity.Evaluator;
-import com.example.demo.entity.User;
+import com.example.demo.entity.jdbc.AnswerScore;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.User;
 
 import java.math.BigDecimal;
 import java.util.List;

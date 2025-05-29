@@ -1,12 +1,12 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.Evaluation;
-import com.example.demo.entity.EvaluationCriterion;
-import com.example.demo.entity.EvaluationDetail;
-import com.example.demo.entity.EvaluationRun;
-import com.example.demo.entity.LlmAnswer;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.EvaluationCriterion;
+import com.example.demo.entity.jdbc.EvaluationDetail;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.QuestionType;
 
 import java.math.BigDecimal;
 import java.util.List;

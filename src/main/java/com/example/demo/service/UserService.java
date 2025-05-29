@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.example.demo.dto.UserDTO;
-import com.example.demo.entity.User;
+import com.example.demo.entity.jdbc.User;
 import com.example.demo.dto.UserProfileDTO;
 
 public interface UserService {

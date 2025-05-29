@@ -1,7 +1,7 @@
 package com.example.demo.service;
 
 import java.util.Map;
-import com.example.demo.entity.LlmModel;
+import com.example.demo.entity.jdbc.LlmModel;
 
 /**
  * LLM API服务接口

@@ -51,6 +51,9 @@ public class UserRepository {
     private static final String SQL_SOFT_DELETE = 
             "UPDATE users SET deleted_at=? WHERE id=?";
 
+    private static final String SQL_EXISTS_BY_ID = 
+            "SELECT COUNT(*) FROM users WHERE id=? AND deleted_at IS NULL";
+
     @Autowired
     public UserRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -182,6 +185,17 @@ public class UserRepository {
     public boolean softDelete(Long id) {
         int affected = jdbcTemplate.update(SQL_SOFT_DELETE, Timestamp.valueOf(LocalDateTime.now()), id);
         return affected > 0;
+    }
+
+    /**
+     * 检查指定ID的用户是否存在
+     *
+     * @param id 用户ID
+     * @return 是否存在
+     */
+    public boolean existsById(Long id) {
+        Integer count = jdbcTemplate.queryForObject(SQL_EXISTS_BY_ID, Integer.class, id);
+        return count != null && count > 0;
     }
 
     /**
