@@ -129,7 +129,7 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         answer.setAnswerText(answerDTO.getAnswerText());
         answer.setSubmissionTime(answerDTO.getSubmissionTime() != null ? 
             answerDTO.getSubmissionTime() : java.time.LocalDateTime.now());
-        answer.setTaskBatchId(answerDTO.getTaskBatchId());
+        answer.setTaskBatchId(answerDTO.getTaskBatchId() != null ? answerDTO.getTaskBatchId().longValue() : null);
         answer.setQualityReviewStatus(CrowdsourcedAnswer.QualityReviewStatus.PENDING);
         
         // 保存并返回

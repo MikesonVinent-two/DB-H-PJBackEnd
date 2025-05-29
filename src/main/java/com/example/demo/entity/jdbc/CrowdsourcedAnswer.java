@@ -1,59 +1,38 @@
-package com.example.demo.entity;
+package com.example.demo.entity.jdbc;
 
 import java.time.LocalDateTime;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-
-@Entity
-@Table(name = "crowdsourced_answers")
+/**
+ * 众包答案实体类 - JDBC版本
+ * 对应数据库表: crowdsourced_answers
+ */
 public class CrowdsourcedAnswer {
+    // 表名常量
+    public static final String TABLE_NAME = "crowdsourced_answers";
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // 列名常量
+    public static final String COLUMN_ID = "id";
+    public static final String COLUMN_STANDARD_QUESTION_ID = "standard_question_id";
+    public static final String COLUMN_USER_ID = "user_id";
+    public static final String COLUMN_ANSWER_TEXT = "answer_text";
+    public static final String COLUMN_SUBMISSION_TIME = "submission_time";
+    public static final String COLUMN_TASK_BATCH_ID = "task_batch_id";
+    public static final String COLUMN_QUALITY_REVIEW_STATUS = "quality_review_status";
+    public static final String COLUMN_REVIEWED_BY_USER_ID = "reviewed_by_user_id";
+    public static final String COLUMN_REVIEW_TIME = "review_time";
+    public static final String COLUMN_REVIEW_FEEDBACK = "review_feedback";
+    public static final String COLUMN_OTHER_METADATA = "other_metadata";
+    
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "standard_question_id", nullable = false)
     private StandardQuestion standardQuestion;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
     private User user;
-
-    @Column(name = "answer_text", nullable = false, columnDefinition = "TEXT")
     private String answerText;
-
-    @Column(name = "submission_time", nullable = false)
     private LocalDateTime submissionTime = LocalDateTime.now();
-
-    @Column(name = "task_batch_id")
     private Long taskBatchId;
-
-    @Column(name = "quality_review_status")
-    @Enumerated(EnumType.STRING)
     private QualityReviewStatus qualityReviewStatus = QualityReviewStatus.PENDING;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewed_by_user_id")
     private User reviewedByUser;
-
-    @Column(name = "review_time")
     private LocalDateTime reviewTime;
-
-    @Column(name = "review_feedback")
     private String reviewFeedback;
-
-    @Column(name = "other_metadata", columnDefinition = "json")
     private String otherMetadata;
 
     // 质量审核状态枚举

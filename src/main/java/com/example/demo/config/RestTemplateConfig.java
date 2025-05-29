@@ -43,7 +43,6 @@ public class RestTemplateConfig {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000); // 连接超时，单位毫秒
         factory.setReadTimeout(30000);   // 读取超时，单位毫秒
-        factory.setBufferRequestBody(false); // 对于大请求体不缓存
         return factory;
     }
     

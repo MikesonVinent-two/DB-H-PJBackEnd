@@ -1,46 +1,32 @@
-package com.example.demo.entity;
+package com.example.demo.entity.jdbc;
 
 import java.time.LocalDateTime;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-
-@Entity
-@Table(name = "tags")
+/**
+ * 标签实体类
+ */
 public class Tag {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // 表名
+    public static final String TABLE_NAME = "tags";
+    
+    // 列名
+    public static final String COLUMN_ID = "id";
+    public static final String COLUMN_TAG_NAME = "tag_name";
+    public static final String COLUMN_TAG_TYPE = "tag_type";
+    public static final String COLUMN_DESCRIPTION = "description";
+    public static final String COLUMN_CREATED_AT = "created_at";
+    public static final String COLUMN_CREATED_BY_USER_ID = "created_by_user_id";
+    public static final String COLUMN_CREATED_CHANGE_LOG_ID = "created_change_log_id";
+    public static final String COLUMN_DELETED_AT = "deleted_at";
+    
     private Long id;
-
-    @Column(name = "tag_name", unique = true, nullable = false)
     private String tagName;
-    
-    @Column(name = "tag_type")
     private String tagType;
-    
-    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
-    
-    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
-    
-    @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
     
     // 构造函数

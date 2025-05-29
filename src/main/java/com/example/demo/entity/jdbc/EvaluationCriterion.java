@@ -1,20 +1,36 @@
-package com.example.demo.entity;
+package com.example.demo.entity.jdbc;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 /**
  * 评测标准实体类
  */
-@Entity
-@Table(name = "evaluation_criteria")
 public class EvaluationCriterion {
+    
+    // 表名
+    public static final String TABLE_NAME = "evaluation_criteria";
+
+    // 列名
+    public static final String COLUMN_ID = "id";
+    public static final String COLUMN_NAME = "name";
+    public static final String COLUMN_VERSION = "version";
+    public static final String COLUMN_DESCRIPTION = "description";
+    public static final String COLUMN_QUESTION_TYPE = "question_type";
+    public static final String COLUMN_DATA_TYPE = "data_type";
+    public static final String COLUMN_SCORE_RANGE = "score_range";
+    public static final String COLUMN_APPLICABLE_QUESTION_TYPES = "applicable_question_types";
+    public static final String COLUMN_WEIGHT = "weight";
+    public static final String COLUMN_IS_REQUIRED = "is_required";
+    public static final String COLUMN_ORDER_INDEX = "order_index";
+    public static final String COLUMN_OPTIONS = "options";
+    public static final String COLUMN_CREATED_AT = "created_at";
+    public static final String COLUMN_CREATED_BY_USER_ID = "created_by_user_id";
+    public static final String COLUMN_PARENT_CRITERION_ID = "parent_criterion_id";
+    public static final String COLUMN_CREATED_CHANGE_LOG_ID = "created_change_log_id";
+    public static final String COLUMN_DELETED_AT = "deleted_at";
     
     /**
      * 评分数据类型
@@ -26,63 +42,22 @@ public class EvaluationCriterion {
         CATEGORICAL // 分类类型
     }
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(nullable = false)
     private String name;
-    
-    @Column(name = "version")
     private String version;
-
-    @Column(columnDefinition = "TEXT")
     private String description;
-
-    @Column(name = "question_type")
-    @Enumerated(EnumType.STRING)
     private QuestionType questionType;
-    
-    @Column(name = "data_type")
-    @Enumerated(EnumType.STRING)
     private DataType dataType;
-
-    @Column(name = "score_range")
     private String scoreRange;
-    
-    @Column(name = "applicable_question_types", columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
     private List<String> applicableQuestionTypes;
-
-    @Column(name = "weight")
     private BigDecimal weight;
-    
-    @Column(name = "is_required", nullable = false)
     private Boolean isRequired = true;
-    
-    @Column(name = "order_index")
     private Integer orderIndex;
-    
-    @Column(name = "options", columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> options;
-
-    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
     private User createdByUser;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_criterion_id")
     private EvaluationCriterion parentCriterion;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_change_log_id")
     private ChangeLog createdChangeLog;
-
-    @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
     // Getters and Setters
