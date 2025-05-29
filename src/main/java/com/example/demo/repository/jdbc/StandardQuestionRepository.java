@@ -1,0 +1,485 @@
+package com.example.demo.repository.jdbc;
+
+import com.example.demo.entity.jdbc.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * 基于JDBC的标准问题仓库实现
+ */
+@Repository
+public class StandardQuestionRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final UserRepository userRepository;
+
+    private static final String SQL_INSERT = 
+            "INSERT INTO standard_questions (original_raw_question_id, question_text, question_type, difficulty, " +
+            "creation_time, created_by_user_id, parent_standard_question_id, created_change_log_id, deleted_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    
+    private static final String SQL_UPDATE = 
+            "UPDATE standard_questions SET original_raw_question_id=?, question_text=?, question_type=?, difficulty=?, " +
+            "created_by_user_id=?, parent_standard_question_id=?, created_change_log_id=?, deleted_at=? " +
+            "WHERE id=?";
+    
+    private static final String SQL_FIND_BY_ID = 
+            "SELECT * FROM standard_questions WHERE id=? AND deleted_at IS NULL";
+    
+    private static final String SQL_FIND_ALL = 
+            "SELECT * FROM standard_questions WHERE deleted_at IS NULL";
+    
+    private static final String SQL_FIND_ALL_PAGEABLE = 
+            "SELECT * FROM standard_questions WHERE deleted_at IS NULL LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_ALL = 
+            "SELECT COUNT(*) FROM standard_questions WHERE deleted_at IS NULL";
+    
+    private static final String SQL_SOFT_DELETE = 
+            "UPDATE standard_questions SET deleted_at=? WHERE id=?";
+    
+    private static final String SQL_FIND_DISTINCT_ORIGINAL_RAW_QUESTION_IDS = 
+            "SELECT DISTINCT original_raw_question_id FROM standard_questions " +
+            "WHERE original_raw_question_id IS NOT NULL AND deleted_at IS NULL";
+    
+    private static final String SQL_FIND_FIRST_BY_ORIGINAL_RAW_QUESTION_ID_ORDER_BY_CREATION_TIME_DESC = 
+            "SELECT * FROM standard_questions " +
+            "WHERE original_raw_question_id=? AND deleted_at IS NULL " +
+            "ORDER BY creation_time DESC LIMIT 1";
+    
+    private static final String SQL_FIND_BY_PARENT_STANDARD_QUESTION_ID = 
+            "SELECT * FROM standard_questions " +
+            "WHERE parent_standard_question_id=? AND deleted_at IS NULL";
+    
+    private static final String SQL_FIND_BY_ORIGINAL_RAW_QUESTION_ID = 
+            "SELECT * FROM standard_questions " +
+            "WHERE original_raw_question_id=? AND deleted_at IS NULL";
+    
+    private static final String SQL_FIND_BY_DATASET_VERSION_ID = 
+            "SELECT sq.* FROM standard_questions sq " +
+            "JOIN dataset_question_mapping dqm ON sq.id = dqm.standard_question_id " +
+            "WHERE dqm.dataset_version_id=? AND sq.deleted_at IS NULL";
+    
+    private static final String SQL_FIND_BY_DATASET_VERSION_ID_WITH_TAGS = 
+            "SELECT DISTINCT sq.* FROM standard_questions sq " +
+            "JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id " +
+            "JOIN tags t ON sqt.tag_id = t.id " +
+            "JOIN dataset_question_mapping dqm ON sq.id = dqm.standard_question_id " +
+            "WHERE dqm.dataset_version_id=? AND sq.deleted_at IS NULL";
+    
+    private static final String SQL_FIND_BY_QUESTION_TEXT_CONTAINING = 
+            "SELECT * FROM standard_questions " +
+            "WHERE question_text LIKE ? AND deleted_at IS NULL";
+    
+    private static final String SQL_FIND_LATEST_VERSIONS = 
+            "SELECT sq.* FROM standard_questions sq " +
+            "WHERE NOT EXISTS (" +
+            "  SELECT 1 FROM standard_questions child " +
+            "  WHERE child.parent_standard_question_id = sq.id AND child.deleted_at IS NULL" +
+            ") AND sq.deleted_at IS NULL " +
+            "LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_LATEST_VERSIONS = 
+            "SELECT COUNT(*) FROM standard_questions sq " +
+            "WHERE NOT EXISTS (" +
+            "  SELECT 1 FROM standard_questions child " +
+            "  WHERE child.parent_standard_question_id = sq.id AND child.deleted_at IS NULL" +
+            ") AND sq.deleted_at IS NULL";
+    
+    private static final String SQL_FIND_BY_IDS_WITH_DATASET_MAPPINGS = 
+            "SELECT DISTINCT sq.* FROM standard_questions sq " +
+            "JOIN dataset_question_mapping dqm ON sq.id = dqm.standard_question_id " +
+            "WHERE sq.id IN (%s) AND sq.deleted_at IS NULL";
+
+    @Autowired
+    public StandardQuestionRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * 保存标准问题
+     *
+     * @param question 标准问题对象
+     * @return 带有ID的标准问题对象
+     */
+    public StandardQuestion save(StandardQuestion question) {
+        if (question.getId() == null) {
+            return insert(question);
+        } else {
+            return update(question);
+        }
+    }
+
+    /**
+     * 插入新标准问题
+     *
+     * @param question 标准问题对象
+     * @return 带有ID的标准问题对象
+     */
+    private StandardQuestion insert(StandardQuestion question) {
+        LocalDateTime now = LocalDateTime.now();
+        if (question.getCreationTime() == null) {
+            question.setCreationTime(now);
+        }
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS);
+            
+            // 设置原始原始问题ID
+            if (question.getOriginalRawQuestion() != null && question.getOriginalRawQuestion().getId() != null) {
+                ps.setLong(1, question.getOriginalRawQuestion().getId());
+            } else {
+                ps.setNull(1, java.sql.Types.BIGINT);
+            }
+            
+            ps.setString(2, question.getQuestionText());
+            ps.setString(3, question.getQuestionType().name());
+            
+            if (question.getDifficulty() != null) {
+                ps.setString(4, question.getDifficulty().name());
+            } else {
+                ps.setNull(4, java.sql.Types.VARCHAR);
+            }
+            
+            ps.setTimestamp(5, Timestamp.valueOf(question.getCreationTime()));
+            
+            // 设置创建用户ID
+            if (question.getCreatedByUser() != null && question.getCreatedByUser().getId() != null) {
+                ps.setLong(6, question.getCreatedByUser().getId());
+            } else {
+                ps.setNull(6, java.sql.Types.BIGINT);
+            }
+            
+            // 设置父标准问题ID
+            if (question.getParentStandardQuestion() != null && question.getParentStandardQuestion().getId() != null) {
+                ps.setLong(7, question.getParentStandardQuestion().getId());
+            } else {
+                ps.setNull(7, java.sql.Types.BIGINT);
+            }
+            
+            // 设置创建变更日志ID
+            if (question.getCreatedChangeLog() != null && question.getCreatedChangeLog().getId() != null) {
+                ps.setLong(8, question.getCreatedChangeLog().getId());
+            } else {
+                ps.setNull(8, java.sql.Types.BIGINT);
+            }
+            
+            // 设置删除时间
+            if (question.getDeletedAt() != null) {
+                ps.setTimestamp(9, Timestamp.valueOf(question.getDeletedAt()));
+            } else {
+                ps.setNull(9, java.sql.Types.TIMESTAMP);
+            }
+            
+            return ps;
+        }, keyHolder);
+
+        Number key = keyHolder.getKey();
+        if (key != null) {
+            question.setId(key.longValue());
+        }
+        return question;
+    }
+
+    /**
+     * 更新标准问题
+     *
+     * @param question 标准问题对象
+     * @return 更新后的标准问题对象
+     */
+    private StandardQuestion update(StandardQuestion question) {
+        jdbcTemplate.update(SQL_UPDATE,
+                question.getOriginalRawQuestion() != null ? question.getOriginalRawQuestion().getId() : null,
+                question.getQuestionText(),
+                question.getQuestionType().name(),
+                question.getDifficulty() != null ? question.getDifficulty().name() : null,
+                question.getCreatedByUser() != null ? question.getCreatedByUser().getId() : null,
+                question.getParentStandardQuestion() != null ? question.getParentStandardQuestion().getId() : null,
+                question.getCreatedChangeLog() != null ? question.getCreatedChangeLog().getId() : null,
+                question.getDeletedAt(),
+                question.getId());
+
+        return question;
+    }
+
+    /**
+     * 根据ID查找标准问题
+     *
+     * @param id 标准问题ID
+     * @return 标准问题的Optional包装
+     */
+    public Optional<StandardQuestion> findById(Long id) {
+        try {
+            StandardQuestion question = jdbcTemplate.queryForObject(SQL_FIND_BY_ID, new Object[]{id}, new StandardQuestionRowMapper());
+            return Optional.ofNullable(question);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+    
+    /**
+     * 查找所有标准问题
+     *
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findAll() {
+        return jdbcTemplate.query(SQL_FIND_ALL, new StandardQuestionRowMapper());
+    }
+    
+    /**
+     * 分页查找标准问题
+     *
+     * @param pageable 分页对象
+     * @return 分页标准问题列表
+     */
+    public Page<StandardQuestion> findAll(Pageable pageable) {
+        List<StandardQuestion> questions = jdbcTemplate.query(
+                SQL_FIND_ALL_PAGEABLE,
+                new Object[]{pageable.getPageSize(), pageable.getOffset()},
+                new StandardQuestionRowMapper()
+        );
+        
+        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_ALL, Integer.class);
+        return new PageImpl<>(questions, pageable, count != null ? count : 0);
+    }
+    
+    /**
+     * 软删除标准问题
+     *
+     * @param id 标准问题ID
+     * @return 是否成功
+     */
+    public boolean softDelete(Long id) {
+        int affected = jdbcTemplate.update(SQL_SOFT_DELETE, Timestamp.valueOf(LocalDateTime.now()), id);
+        return affected > 0;
+    }
+    
+    /**
+     * 获取所有已标准化的原始问题ID
+     *
+     * @return 原始问题ID列表
+     */
+    public List<Long> findDistinctOriginalRawQuestionIds() {
+        return jdbcTemplate.queryForList(SQL_FIND_DISTINCT_ORIGINAL_RAW_QUESTION_IDS, Long.class);
+    }
+    
+    /**
+     * 根据原始问题ID查找最新的标准问题
+     *
+     * @param rawQuestionId 原始问题ID
+     * @return 标准问题的Optional包装
+     */
+    public Optional<StandardQuestion> findFirstByOriginalRawQuestionIdOrderByCreationTimeDesc(Long rawQuestionId) {
+        try {
+            StandardQuestion question = jdbcTemplate.queryForObject(
+                    SQL_FIND_FIRST_BY_ORIGINAL_RAW_QUESTION_ID_ORDER_BY_CREATION_TIME_DESC,
+                    new Object[]{rawQuestionId},
+                    new StandardQuestionRowMapper()
+            );
+            return Optional.ofNullable(question);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+    
+    /**
+     * 根据父标准问题ID查找标准问题
+     *
+     * @param parentId 父标准问题ID
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByParentStandardQuestionId(Long parentId) {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_PARENT_STANDARD_QUESTION_ID,
+                new Object[]{parentId},
+                new StandardQuestionRowMapper()
+        );
+    }
+    
+    /**
+     * 根据原始问题ID查找所有关联的标准问题
+     *
+     * @param rawQuestionId 原始问题ID
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByOriginalRawQuestionId(Long rawQuestionId) {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_ORIGINAL_RAW_QUESTION_ID,
+                new Object[]{rawQuestionId},
+                new StandardQuestionRowMapper()
+        );
+    }
+    
+    /**
+     * 根据数据集版本ID查找标准问题
+     *
+     * @param datasetVersionId 数据集版本ID
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByDatasetVersionId(Long datasetVersionId) {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_DATASET_VERSION_ID,
+                new Object[]{datasetVersionId},
+                new StandardQuestionRowMapper()
+        );
+    }
+    
+    /**
+     * 预加载标签的数据集版本问题查询
+     *
+     * @param datasetVersionId 数据集版本ID
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByDatasetVersionIdWithTags(Long datasetVersionId) {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_DATASET_VERSION_ID_WITH_TAGS,
+                new Object[]{datasetVersionId},
+                new StandardQuestionRowMapper()
+        );
+    }
+    
+    /**
+     * 根据问题文本内容查找标准问题
+     *
+     * @param questionText 问题文本
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByQuestionTextContaining(String questionText) {
+        return jdbcTemplate.query(
+                SQL_FIND_BY_QUESTION_TEXT_CONTAINING,
+                new Object[]{"%" + questionText + "%"},
+                new StandardQuestionRowMapper()
+        );
+    }
+    
+    /**
+     * 查找所有最新版本的标准问题（没有子问题的问题，即版本树的叶子节点）
+     *
+     * @param pageable 分页对象
+     * @return 分页标准问题列表
+     */
+    public Page<StandardQuestion> findLatestVersions(Pageable pageable) {
+        List<StandardQuestion> questions = jdbcTemplate.query(
+                SQL_FIND_LATEST_VERSIONS,
+                new Object[]{pageable.getPageSize(), pageable.getOffset()},
+                new StandardQuestionRowMapper()
+        );
+        
+        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_LATEST_VERSIONS, Integer.class);
+        return new PageImpl<>(questions, pageable, count != null ? count : 0);
+    }
+    
+    /**
+     * 预加载数据集映射的查询
+     *
+     * @param questionIds 问题ID列表
+     * @return 标准问题列表
+     */
+    public List<StandardQuestion> findByIdsWithDatasetMappings(List<Long> questionIds) {
+        if (questionIds == null || questionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // 构建 IN 语句所需的问号占位符
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < questionIds.size(); i++) {
+            if (i > 0) {
+                placeholders.append(",");
+            }
+            placeholders.append("?");
+        }
+        
+        String sql = String.format(SQL_FIND_BY_IDS_WITH_DATASET_MAPPINGS, placeholders.toString());
+        return jdbcTemplate.query(sql, questionIds.toArray(), new StandardQuestionRowMapper());
+    }
+
+    /**
+     * 标准问题行映射器
+     */
+    private class StandardQuestionRowMapper implements RowMapper<StandardQuestion> {
+        @Override
+        public StandardQuestion mapRow(ResultSet rs, int rowNum) throws SQLException {
+            StandardQuestion question = new StandardQuestion();
+            question.setId(rs.getLong("id"));
+            question.setQuestionText(rs.getString("question_text"));
+            
+            // 解析枚举
+            String questionTypeStr = rs.getString("question_type");
+            if (questionTypeStr != null) {
+                question.setQuestionType(QuestionType.valueOf(questionTypeStr));
+            }
+            
+            String difficultyStr = rs.getString("difficulty");
+            if (difficultyStr != null) {
+                question.setDifficulty(DifficultyLevel.valueOf(difficultyStr));
+            }
+            
+            // 设置时间
+            Timestamp creationTime = rs.getTimestamp("creation_time");
+            if (creationTime != null) {
+                question.setCreationTime(creationTime.toLocalDateTime());
+            }
+            
+            Timestamp deletedAt = rs.getTimestamp("deleted_at");
+            if (deletedAt != null) {
+                question.setDeletedAt(deletedAt.toLocalDateTime());
+            }
+            
+            // 处理外键关联 - 这里简化处理，大部分只设置ID，避免过度加载
+            Long originalRawQuestionId = rs.getLong("original_raw_question_id");
+            if (!rs.wasNull()) {
+                RawQuestion rawQuestion = new RawQuestion();
+                rawQuestion.setId(originalRawQuestionId);
+                question.setOriginalRawQuestion(rawQuestion);
+            }
+            
+            // 设置创建者用户
+            Long createdByUserId = rs.getLong("created_by_user_id");
+            if (!rs.wasNull()) {
+                userRepository.findById(createdByUserId).ifPresent(user -> question.setCreatedByUser(user));
+            }
+            
+            Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
+            if (!rs.wasNull()) {
+                StandardQuestion parentQuestion = new StandardQuestion();
+                parentQuestion.setId(parentStandardQuestionId);
+                question.setParentStandardQuestion(parentQuestion);
+            }
+            
+            Long createdChangeLogId = rs.getLong("created_change_log_id");
+            if (!rs.wasNull()) {
+                ChangeLog changeLog = new ChangeLog();
+                changeLog.setId(createdChangeLogId);
+                question.setCreatedChangeLog(changeLog);
+            }
+            
+            // 注意：这里没有加载关联的标签、数据集映射和答案等
+            // 这些关联对象需要在服务层按需加载
+            
+            return question;
+        }
+    }
+} 
