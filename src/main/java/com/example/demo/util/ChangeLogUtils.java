@@ -7,10 +7,10 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.example.demo.entity.ChangeLog;
-import com.example.demo.entity.ChangeLogDetail;
-import com.example.demo.entity.EntityType;
-import com.example.demo.repository.ChangeLogDetailRepository;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.ChangeLogDetail;
+import com.example.demo.entity.jdbc.EntityType;
+import com.example.demo.repository.jdbc.ChangeLogDetailRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.BeanWrapper;

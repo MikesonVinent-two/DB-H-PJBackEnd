@@ -231,6 +231,39 @@ public class RawQuestionTagRepository {
     }
 
     /**
+     * 批量保存原始问题标签
+     *
+     * @param questionTags 原始问题标签对象列表
+     * @return 保存后的原始问题标签列表
+     */
+    public List<RawQuestionTag> saveAll(List<RawQuestionTag> questionTags) {
+        if (questionTags == null || questionTags.isEmpty()) {
+            return questionTags;
+        }
+        
+        for (int i = 0; i < questionTags.size(); i++) {
+            questionTags.set(i, save(questionTags.get(i)));
+        }
+        
+        return questionTags;
+    }
+    
+    /**
+     * 批量删除原始问题标签
+     *
+     * @param questionTags 原始问题标签对象列表
+     */
+    public void deleteAll(List<RawQuestionTag> questionTags) {
+        if (questionTags == null || questionTags.isEmpty()) {
+            return;
+        }
+        
+        for (RawQuestionTag tag : questionTags) {
+            delete(tag);
+        }
+    }
+
+    /**
      * 原始问题标签行映射器
      */
     private class RawQuestionTagRowMapper implements RowMapper<RawQuestionTag> {

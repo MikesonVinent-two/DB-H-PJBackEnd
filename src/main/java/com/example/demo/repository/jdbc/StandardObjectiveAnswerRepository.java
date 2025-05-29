@@ -62,9 +62,9 @@ public class StandardObjectiveAnswerRepository {
     }
 
     /**
-     * 保存标准客观题答�?
+     * 保存标准客观题答?
      *
-     * @param answer 标准客观题答案对�?
+     * @param answer 标准客观题答案对?
      * @return 带有ID的标准客观题答案对象
      */
     public StandardObjectiveAnswer save(StandardObjectiveAnswer answer) {
@@ -78,7 +78,7 @@ public class StandardObjectiveAnswerRepository {
     /**
      * 插入新标准客观题答案
      *
-     * @param answer 标准客观题答案对�?
+     * @param answer 标准客观题答案对?
      * @return 带有ID的标准客观题答案对象
      */
     private StandardObjectiveAnswer insert(StandardObjectiveAnswer answer) {
@@ -139,10 +139,10 @@ public class StandardObjectiveAnswerRepository {
     }
 
     /**
-     * 更新标准客观题答�?
+     * 更新标准客观题答?
      *
-     * @param answer 标准客观题答案对�?
-     * @return 更新后的标准客观题答案对�?
+     * @param answer 标准客观题答案对?
+     * @return 更新后的标准客观题答案对?
      */
     private StandardObjectiveAnswer update(StandardObjectiveAnswer answer) {
         jdbcTemplate.update(SQL_UPDATE,
@@ -159,7 +159,7 @@ public class StandardObjectiveAnswerRepository {
     }
 
     /**
-     * 根据ID查找标准客观题答�?
+     * 根据ID查找标准客观题答?
      *
      * @param id 标准客观题答案ID
      * @return 标准客观题答案的Optional包装
@@ -174,7 +174,7 @@ public class StandardObjectiveAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID查找标准客观题答�?
+     * 根据标准问题ID查找标准客观题答?
      *
      * @param standardQuestionId 标准问题ID
      * @return 标准客观题答案的Optional包装
@@ -193,7 +193,7 @@ public class StandardObjectiveAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID查找未删除的客观题答�?
+     * 根据标准问题ID查找未删除的客观题答?
      *
      * @param standardQuestionId 标准问题ID
      * @return 未删除的客观题答案的Optional包装
@@ -225,14 +225,14 @@ public class StandardObjectiveAnswerRepository {
     /**
      * 查找所有标准客观题答案
      *
-     * @return 标准客观题答案列�?
+     * @return 标准客观题答案列?
      */
     public List<StandardObjectiveAnswer> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new StandardObjectiveAnswerRowMapper());
     }
 
     /**
-     * 标准客观题答案行映射�?
+     * 标准客观题答案行映射?
      */
     private class StandardObjectiveAnswerRowMapper implements RowMapper<StandardObjectiveAnswer> {
         @Override
@@ -264,7 +264,7 @@ public class StandardObjectiveAnswerRepository {
                 answer.setDeletedAt(deletedAt.toLocalDateTime());
             }
             
-            // 设置确定�?
+            // 设置确定?
             Long determinedByUserId = rs.getLong("determined_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(determinedByUserId).ifPresent(user -> answer.setDeterminedByUser(user));

@@ -1,7 +1,7 @@
 package com.example.demo.util;
 
 import com.example.demo.dto.StandardAnswerDTO;
-import com.example.demo.entity.QuestionType;
+import com.example.demo.entity.jdbc.QuestionType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;

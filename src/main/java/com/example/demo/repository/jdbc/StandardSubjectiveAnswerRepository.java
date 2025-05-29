@@ -62,9 +62,9 @@ public class StandardSubjectiveAnswerRepository {
     }
 
     /**
-     * 保存标准主观题答�?
+     * 保存标准主观题答?
      *
-     * @param answer 标准主观题答案对�?
+     * @param answer 标准主观题答案对?
      * @return 带有ID的标准主观题答案对象
      */
     public StandardSubjectiveAnswer save(StandardSubjectiveAnswer answer) {
@@ -78,7 +78,7 @@ public class StandardSubjectiveAnswerRepository {
     /**
      * 插入新标准主观题答案
      *
-     * @param answer 标准主观题答案对�?
+     * @param answer 标准主观题答案对?
      * @return 带有ID的标准主观题答案对象
      */
     private StandardSubjectiveAnswer insert(StandardSubjectiveAnswer answer) {
@@ -135,10 +135,10 @@ public class StandardSubjectiveAnswerRepository {
     }
 
     /**
-     * 更新标准主观题答�?
+     * 更新标准主观题答?
      *
-     * @param answer 标准主观题答案对�?
-     * @return 更新后的标准主观题答案对�?
+     * @param answer 标准主观题答案对?
+     * @return 更新后的标准主观题答案对?
      */
     private StandardSubjectiveAnswer update(StandardSubjectiveAnswer answer) {
         jdbcTemplate.update(SQL_UPDATE,
@@ -155,7 +155,7 @@ public class StandardSubjectiveAnswerRepository {
     }
 
     /**
-     * 根据ID查找标准主观题答�?
+     * 根据ID查找标准主观题答?
      *
      * @param id 标准主观题答案ID
      * @return 标准主观题答案的Optional包装
@@ -170,7 +170,7 @@ public class StandardSubjectiveAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID查找主观题答�?
+     * 根据标准问题ID查找主观题答?
      *
      * @param standardQuestionId 标准问题ID
      * @return 主观题答案的Optional包装
@@ -189,10 +189,10 @@ public class StandardSubjectiveAnswerRepository {
     }
 
     /**
-     * 根据标准问题ID查找未删除的主观题答�?
+     * 根据标准问题ID查找未删除的主观题答?
      *
      * @param standardQuestionId 标准问题ID
-     * @return 未删除的主观题答�?
+     * @return 未删除的主观题答?
      */
     public StandardSubjectiveAnswer findByStandardQuestionIdAndDeletedAtIsNull(Long standardQuestionId) {
         try {
@@ -220,14 +220,14 @@ public class StandardSubjectiveAnswerRepository {
     /**
      * 查找所有标准主观题答案
      *
-     * @return 标准主观题答案列�?
+     * @return 标准主观题答案列?
      */
     public List<StandardSubjectiveAnswer> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new StandardSubjectiveAnswerRowMapper());
     }
 
     /**
-     * 标准主观题答案行映射�?
+     * 标准主观题答案行映射?
      */
     private class StandardSubjectiveAnswerRowMapper implements RowMapper<StandardSubjectiveAnswer> {
         @Override
@@ -261,7 +261,7 @@ public class StandardSubjectiveAnswerRepository {
                 answer.setDeletedAt(deletedAt.toLocalDateTime());
             }
             
-            // 设置确定�?
+            // 设置确定?
             Long determinedByUserId = rs.getLong("determined_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(determinedByUserId).ifPresent(user -> answer.setDeterminedByUser(user));

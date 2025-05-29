@@ -40,14 +40,14 @@ public class ModelAnswerRunRepository {
             "run_index, status, run_time, error_message, parameters, last_processed_question_id, " +
             "last_processed_question_index, progress_percentage, last_activity_time, resume_count, " +
             "pause_time, pause_reason, total_questions_count, completed_questions_count, failed_questions_count, failed_questions_ids) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::json, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::json)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE model_answer_runs SET answer_generation_batch_id=?, llm_model_id=?, run_name=?, run_description=?, " +
-            "run_index=?, status=?, run_time=?, error_message=?, parameters=?::json, last_processed_question_id=?, " +
+            "run_index=?, status=?, run_time=?, error_message=?, parameters=?, last_processed_question_id=?, " +
             "last_processed_question_index=?, progress_percentage=?, last_activity_time=?, resume_count=?, " +
             "pause_time=?, pause_reason=?, total_questions_count=?, completed_questions_count=?, " +
-            "failed_questions_count=?, failed_questions_ids=?::json " +
+            "failed_questions_count=?, failed_questions_ids=? " +
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
@@ -101,10 +101,21 @@ public class ModelAnswerRunRepository {
     }
 
     /**
-     * 插入新模型回答运?
+     * 保存模型回答运行并立即刷新事务
      *
      * @param modelAnswerRun 模型回答运行对象
-     * @return 带有ID的模型回答运行对?
+     * @return 带有ID的模型回答运行对象
+     */
+    public ModelAnswerRun saveAndFlush(ModelAnswerRun modelAnswerRun) {
+        // 在JDBC实现中，save操作已经立即执行到数据库，无需额外刷新
+        return save(modelAnswerRun);
+    }
+
+    /**
+     * 插入新模型回答运行
+     *
+     * @param modelAnswerRun 模型回答运行对象
+     * @return 带有ID的模型回答运行对象
      */
     private ModelAnswerRun insert(ModelAnswerRun modelAnswerRun) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -163,7 +174,12 @@ public class ModelAnswerRunRepository {
             
             // 设置配置
             if (modelAnswerRun.getParameters() != null) {
-                ps.setString(9, modelAnswerRun.getParameters().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(9, objectMapper.writeValueAsString(modelAnswerRun.getParameters()));
+                } catch (Exception e) {
+                    ps.setString(9, "{}");
+                }
             } else {
                 ps.setString(9, "{}");
             }
@@ -240,7 +256,12 @@ public class ModelAnswerRunRepository {
             
             // 设置失败问题ID列表
             if (modelAnswerRun.getFailedQuestionsIds() != null) {
-                ps.setString(20, modelAnswerRun.getFailedQuestionsIds().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(20, objectMapper.writeValueAsString(modelAnswerRun.getFailedQuestionsIds()));
+                } catch (Exception e) {
+                    ps.setString(20, "[]");
+                }
             } else {
                 ps.setString(20, "[]");
             }
@@ -317,7 +338,12 @@ public class ModelAnswerRunRepository {
             
             // 设置配置
             if (modelAnswerRun.getParameters() != null) {
-                ps.setString(9, modelAnswerRun.getParameters().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(9, objectMapper.writeValueAsString(modelAnswerRun.getParameters()));
+                } catch (Exception e) {
+                    ps.setString(9, "{}");
+                }
             } else {
                 ps.setString(9, "{}");
             }
@@ -394,7 +420,12 @@ public class ModelAnswerRunRepository {
             
             // 设置失败问题ID列表
             if (modelAnswerRun.getFailedQuestionsIds() != null) {
-                ps.setString(20, modelAnswerRun.getFailedQuestionsIds().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(20, objectMapper.writeValueAsString(modelAnswerRun.getFailedQuestionsIds()));
+                } catch (Exception e) {
+                    ps.setString(20, "[]");
+                }
             } else {
                 ps.setString(20, "[]");
             }

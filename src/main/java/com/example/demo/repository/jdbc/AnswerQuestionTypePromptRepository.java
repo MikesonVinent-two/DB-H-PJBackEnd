@@ -31,7 +31,7 @@ import java.util.Optional;
 public class AnswerQuestionTypePromptRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    private final UserRepository UserRepository;
+    private final UserRepository userRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO answer_question_type_prompts (name, question_type, prompt_template, description, is_active, " +
@@ -447,7 +447,7 @@ public class AnswerQuestionTypePromptRepository {
                 prompt.setCreatedByUser(user);
                 
                 // 可选：加载完整的用户信?
-                UserRepository.findById(createdByUserId).ifPresent(prompt::setCreatedByUser);
+                userRepository.findById(createdByUserId).ifPresent(prompt::setCreatedByUser);
             }
             
             // 设置父提示词

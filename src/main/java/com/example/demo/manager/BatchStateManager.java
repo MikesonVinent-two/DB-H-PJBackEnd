@@ -1,6 +1,6 @@
 package com.example.demo.manager;
 
-import com.example.demo.entity.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;

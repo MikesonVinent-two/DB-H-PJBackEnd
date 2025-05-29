@@ -149,7 +149,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void deleteUser(Long id) {
         logger.debug("开始删除用户 - ID: {}", id);
-        userRepository.deleteById(id);
+        userRepository.softDelete(id);
         logger.debug("成功删除用户 - ID: {}", id);
     }
 

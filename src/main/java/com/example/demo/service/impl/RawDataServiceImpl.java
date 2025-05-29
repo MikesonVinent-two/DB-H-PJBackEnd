@@ -31,8 +31,8 @@ import com.example.demo.service.RawDataService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.demo.dto.RawQuestionDisplayDTO;
-import com.example.demo.entity.StandardQuestion;
-import com.example.demo.repository.StandardQuestionRepository;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
 
 @Service
 public class RawDataServiceImpl implements RawDataService {

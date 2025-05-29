@@ -171,6 +171,34 @@ public class RawAnswerRepository {
         int affected = jdbcTemplate.update(SQL_DELETE, id);
         return affected > 0;
     }
+    
+    /**
+     * 删除原始回答
+     *
+     * @param rawAnswer 原始回答对象
+     * @return 是否成功
+     */
+    public boolean delete(RawAnswer rawAnswer) {
+        if (rawAnswer == null || rawAnswer.getId() == null) {
+            return false;
+        }
+        return delete(rawAnswer.getId());
+    }
+    
+    /**
+     * 批量删除原始回答
+     *
+     * @param answers 原始回答对象列表
+     */
+    public void deleteAll(List<RawAnswer> answers) {
+        if (answers == null || answers.isEmpty()) {
+            return;
+        }
+        
+        for (RawAnswer answer : answers) {
+            delete(answer);
+        }
+    }
 
     /**
      * 原始回答行映射器

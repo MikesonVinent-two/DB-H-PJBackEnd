@@ -44,14 +44,14 @@ public class AnswerGenerationBatchRepository {
             "global_parameters, created_by_user_id, completed_at, progress_percentage, " +
             "last_activity_time, last_check_time, resume_count, pause_time, pause_reason, " +
             "answer_repeat_count, error_message, processing_instance, last_processed_run_id) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::json, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE answer_generation_batches SET " +
             "name=?, description=?, dataset_version_id=?, creation_time=?, status=?, " +
             "answer_assembly_config_id=?, evaluation_assembly_config_id=?, single_choice_prompt_id=?, " +
             "multiple_choice_prompt_id=?, simple_fact_prompt_id=?, subjective_prompt_id=?, " +
-            "global_parameters=?::json, created_by_user_id=?, completed_at=?, progress_percentage=?, " +
+            "global_parameters=?, created_by_user_id=?, completed_at=?, progress_percentage=?, " +
             "last_activity_time=?, last_check_time=?, resume_count=?, pause_time=?, pause_reason=?, " +
             "answer_repeat_count=?, error_message=?, processing_instance=?, last_processed_run_id=? " +
             "WHERE id=?";
@@ -180,7 +180,12 @@ public class AnswerGenerationBatchRepository {
             
             // 设置全局参数
             if (batch.getGlobalParameters() != null) {
-                ps.setString(12, batch.getGlobalParameters().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(12, objectMapper.writeValueAsString(batch.getGlobalParameters()));
+                } catch (Exception e) {
+                    ps.setString(12, "{}");
+                }
             } else {
                 ps.setString(12, "{}");
             }
@@ -361,7 +366,12 @@ public class AnswerGenerationBatchRepository {
             
             // 设置全局参数
             if (batch.getGlobalParameters() != null) {
-                ps.setString(12, batch.getGlobalParameters().toString());
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(12, objectMapper.writeValueAsString(batch.getGlobalParameters()));
+                } catch (Exception e) {
+                    ps.setString(12, "{}");
+                }
             } else {
                 ps.setString(12, "{}");
             }

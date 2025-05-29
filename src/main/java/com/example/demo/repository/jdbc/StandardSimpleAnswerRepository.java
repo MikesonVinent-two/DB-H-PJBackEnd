@@ -262,7 +262,7 @@ public class StandardSimpleAnswerRepository {
                 answer.setDeletedAt(deletedAt.toLocalDateTime());
             }
             
-            // 设置确定�?
+            // 设置确定?
             Long determinedByUserId = rs.getLong("determined_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(determinedByUserId).ifPresent(user -> answer.setDeterminedByUser(user));

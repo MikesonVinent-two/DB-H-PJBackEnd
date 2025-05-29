@@ -217,6 +217,39 @@ public class StandardQuestionTagRepository {
     }
 
     /**
+     * 批量保存标准问题标签
+     *
+     * @param questionTags 标准问题标签对象列表
+     * @return 保存后的标准问题标签列表
+     */
+    public List<StandardQuestionTag> saveAll(List<StandardQuestionTag> questionTags) {
+        if (questionTags == null || questionTags.isEmpty()) {
+            return questionTags;
+        }
+        
+        for (int i = 0; i < questionTags.size(); i++) {
+            questionTags.set(i, save(questionTags.get(i)));
+        }
+        
+        return questionTags;
+    }
+    
+    /**
+     * 批量删除标准问题标签
+     *
+     * @param questionTags 标准问题标签对象列表
+     */
+    public void deleteAll(List<StandardQuestionTag> questionTags) {
+        if (questionTags == null || questionTags.isEmpty()) {
+            return;
+        }
+        
+        for (StandardQuestionTag tag : questionTags) {
+            delete(tag);
+        }
+    }
+
+    /**
      * 标准问题标签行映射器
      */
     private class StandardQuestionTagRowMapper implements RowMapper<StandardQuestionTag> {
