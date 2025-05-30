@@ -2,7 +2,10 @@ package com.example.demo.repository.jdbc;
 
 import com.example.demo.entity.jdbc.AnswerGenerationBatch;
 import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
 import com.example.demo.entity.jdbc.DatasetVersion;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -23,9 +26,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.HashMap;
+import java.math.BigDecimal;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 基于JDBC的答案生成批次仓库实现
@@ -35,6 +41,7 @@ public class AnswerGenerationBatchRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final UserRepository userRepository;
+    private static final Logger logger = LoggerFactory.getLogger(AnswerGenerationBatchRepository.class);
 
     private static final String SQL_INSERT = 
             "INSERT INTO answer_generation_batches " +
@@ -587,7 +594,210 @@ public class AnswerGenerationBatchRepository {
             if (!rs.wasNull()) {
                 DatasetVersion datasetVersion = new DatasetVersion();
                 datasetVersion.setId(datasetVersionId);
+                
+                // 改进版本信息加载方式
+                try {
+                    String versionQuery = "SELECT name, version_number FROM dataset_versions WHERE id = ?";
+                    List<DatasetVersion> versions = jdbcTemplate.query(
+                        versionQuery, 
+                        new Object[]{datasetVersionId}, 
+                        (ResultSet vrs, int rowIndex) -> {
+                            DatasetVersion version = new DatasetVersion();
+                            version.setId(datasetVersionId);
+                            version.setName(vrs.getString("name"));
+                            version.setVersionNumber(vrs.getString("version_number"));
+                            return version;
+                        }
+                    );
+                    
+                    if (!versions.isEmpty()) {
+                        // 使用查询到的完整对象替换原来只有ID的对象
+                        datasetVersion = versions.get(0);
+                    } else {
+                        logger.warn("批次{}的数据集版本(ID={})在dataset_versions表中不存在", batch.getId(), datasetVersionId);
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的完整数据集版本信息失败: {}", batch.getId(), e.getMessage(), e);
+                }
+                
                 batch.setDatasetVersion(datasetVersion);
+                logger.debug("批次{}设置了数据集版本: ID={}, 名称={}", 
+                    batch.getId(), datasetVersion.getId(), datasetVersion.getName());
+            } else {
+                logger.warn("批次{}的数据集版本ID为NULL", batch.getId());
+                // 创建一个空的数据集版本对象，避免NPE
+                DatasetVersion emptyVersion = new DatasetVersion();
+                emptyVersion.setId(-1L); // 使用一个特殊值表示这是空对象
+                emptyVersion.setName("未知数据集");
+                emptyVersion.setVersionNumber("未知版本");
+                batch.setDatasetVersion(emptyVersion);
+            }
+            
+            // 设置回答prompt组装配置
+            Long answerConfigId = rs.getLong("answer_assembly_config_id");
+            if (!rs.wasNull()) {
+                try {
+                    String configQuery = "SELECT name, base_system_prompt, tag_prompts_section_header, question_type_section_header, tag_prompt_separator, section_separator, final_instruction FROM answer_prompt_assembly_configs WHERE id = ?";
+                    List<AnswerPromptAssemblyConfig> configs = jdbcTemplate.query(
+                        configQuery, 
+                        new Object[]{answerConfigId}, 
+                        (ResultSet crs, int cRowIndex) -> {
+                            AnswerPromptAssemblyConfig config = new AnswerPromptAssemblyConfig();
+                            config.setId(answerConfigId);
+                            config.setName(crs.getString("name"));
+                            config.setBaseSystemPrompt(crs.getString("base_system_prompt"));
+                            config.setTagPromptsSectionHeader(crs.getString("tag_prompts_section_header"));
+                            config.setQuestionTypeSectionHeader(crs.getString("question_type_section_header"));
+                            config.setTagPromptSeparator(crs.getString("tag_prompt_separator"));
+                            config.setSectionSeparator(crs.getString("section_separator"));
+                            config.setFinalInstruction(crs.getString("final_instruction"));
+                            return config;
+                        }
+                    );
+                    
+                    if (!configs.isEmpty()) {
+                        batch.setAnswerAssemblyConfig(configs.get(0));
+                        logger.debug("批次{}设置了回答Prompt组装配置: ID={}, 名称={}", 
+                            batch.getId(), configs.get(0).getId(), configs.get(0).getName());
+                    } else {
+                        logger.warn("批次{}的回答Prompt组装配置(ID={})在answer_prompt_assembly_configs表中不存在", 
+                            batch.getId(), answerConfigId);
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的回答Prompt组装配置失败: {}", batch.getId(), e.getMessage(), e);
+                }
+            } else {
+                logger.warn("批次{}的回答Prompt组装配置ID为NULL", batch.getId());
+            }
+            
+            // 设置评测prompt组装配置
+            Long evalConfigId = rs.getLong("evaluation_assembly_config_id");
+            if (!rs.wasNull()) {
+                try {
+                    EvaluationPromptAssemblyConfig config = new EvaluationPromptAssemblyConfig();
+                    config.setId(evalConfigId);
+                    // 如果需要可以像数据集版本那样加载完整信息
+                    batch.setEvaluationAssemblyConfig(config);
+                } catch (Exception e) {
+                    logger.error("加载批次{}的评测Prompt组装配置失败: {}", batch.getId(), e.getMessage(), e);
+                }
+            }
+            
+            // 加载题型相关的提示词配置
+            // 1. 单选题提示词
+            Long singleChoicePromptId = rs.getLong("single_choice_prompt_id");
+            if (!rs.wasNull()) {
+                try {
+                    String promptQuery = "SELECT name, prompt_template, response_format_instruction, response_example FROM answer_question_type_prompts WHERE id = ?";
+                    List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
+                        promptQuery, 
+                        new Object[]{singleChoicePromptId}, 
+                        (ResultSet prs, int pRowIndex) -> {
+                            AnswerQuestionTypePrompt prompt = new AnswerQuestionTypePrompt();
+                            prompt.setId(singleChoicePromptId);
+                            prompt.setName(prs.getString("name"));
+                            prompt.setPromptTemplate(prs.getString("prompt_template"));
+                            prompt.setResponseFormatInstruction(prs.getString("response_format_instruction"));
+                            prompt.setResponseExample(prs.getString("response_example"));
+                            return prompt;
+                        }
+                    );
+                    
+                    if (!prompts.isEmpty()) {
+                        batch.setSingleChoicePrompt(prompts.get(0));
+                        logger.debug("批次{}设置了单选题提示词: ID={}, 名称={}", 
+                            batch.getId(), prompts.get(0).getId(), prompts.get(0).getName());
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的单选题提示词失败: {}", batch.getId(), e.getMessage(), e);
+                }
+            }
+            
+            // 2. 多选题提示词
+            Long multipleChoicePromptId = rs.getLong("multiple_choice_prompt_id");
+            if (!rs.wasNull()) {
+                try {
+                    String promptQuery = "SELECT name, prompt_template, response_format_instruction, response_example FROM answer_question_type_prompts WHERE id = ?";
+                    List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
+                        promptQuery, 
+                        new Object[]{multipleChoicePromptId}, 
+                        (ResultSet prs, int pRowIndex) -> {
+                            AnswerQuestionTypePrompt prompt = new AnswerQuestionTypePrompt();
+                            prompt.setId(multipleChoicePromptId);
+                            prompt.setName(prs.getString("name"));
+                            prompt.setPromptTemplate(prs.getString("prompt_template"));
+                            prompt.setResponseFormatInstruction(prs.getString("response_format_instruction"));
+                            prompt.setResponseExample(prs.getString("response_example"));
+                            return prompt;
+                        }
+                    );
+                    
+                    if (!prompts.isEmpty()) {
+                        batch.setMultipleChoicePrompt(prompts.get(0));
+                        logger.debug("批次{}设置了多选题提示词: ID={}, 名称={}", 
+                            batch.getId(), prompts.get(0).getId(), prompts.get(0).getName());
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的多选题提示词失败: {}", batch.getId(), e.getMessage(), e);
+                }
+            }
+            
+            // 3. 简单事实题提示词
+            Long simpleFactPromptId = rs.getLong("simple_fact_prompt_id");
+            if (!rs.wasNull()) {
+                try {
+                    String promptQuery = "SELECT name, prompt_template, response_format_instruction, response_example FROM answer_question_type_prompts WHERE id = ?";
+                    List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
+                        promptQuery, 
+                        new Object[]{simpleFactPromptId}, 
+                        (ResultSet prs, int pRowIndex) -> {
+                            AnswerQuestionTypePrompt prompt = new AnswerQuestionTypePrompt();
+                            prompt.setId(simpleFactPromptId);
+                            prompt.setName(prs.getString("name"));
+                            prompt.setPromptTemplate(prs.getString("prompt_template"));
+                            prompt.setResponseFormatInstruction(prs.getString("response_format_instruction"));
+                            prompt.setResponseExample(prs.getString("response_example"));
+                            return prompt;
+                        }
+                    );
+                    
+                    if (!prompts.isEmpty()) {
+                        batch.setSimpleFactPrompt(prompts.get(0));
+                        logger.debug("批次{}设置了简单事实题提示词: ID={}, 名称={}", 
+                            batch.getId(), prompts.get(0).getId(), prompts.get(0).getName());
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的简单事实题提示词失败: {}", batch.getId(), e.getMessage(), e);
+                }
+            }
+            
+            // 4. 主观题提示词
+            Long subjectivePromptId = rs.getLong("subjective_prompt_id");
+            if (!rs.wasNull()) {
+                try {
+                    String promptQuery = "SELECT name, prompt_template, response_format_instruction, response_example FROM answer_question_type_prompts WHERE id = ?";
+                    List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
+                        promptQuery, 
+                        new Object[]{subjectivePromptId}, 
+                        (ResultSet prs, int pRowIndex) -> {
+                            AnswerQuestionTypePrompt prompt = new AnswerQuestionTypePrompt();
+                            prompt.setId(subjectivePromptId);
+                            prompt.setName(prs.getString("name"));
+                            prompt.setPromptTemplate(prs.getString("prompt_template"));
+                            prompt.setResponseFormatInstruction(prs.getString("response_format_instruction"));
+                            prompt.setResponseExample(prs.getString("response_example"));
+                            return prompt;
+                        }
+                    );
+                    
+                    if (!prompts.isEmpty()) {
+                        batch.setSubjectivePrompt(prompts.get(0));
+                        logger.debug("批次{}设置了主观题提示词: ID={}, 名称={}", 
+                            batch.getId(), prompts.get(0).getId(), prompts.get(0).getName());
+                    }
+                } catch (Exception e) {
+                    logger.error("加载批次{}的主观题提示词失败: {}", batch.getId(), e.getMessage(), e);
+                }
             }
             
             // 设置配置
@@ -603,6 +813,50 @@ public class AnswerGenerationBatchRepository {
                     Map<String, Object> emptyMap = new HashMap<>();
                     batch.setGlobalParameters(emptyMap);
                 }
+            }
+            
+            // 加载其他必要字段
+            batch.setErrorMessage(rs.getString("error_message"));
+            batch.setPauseReason(rs.getString("pause_reason"));
+            batch.setProcessingInstance(rs.getString("processing_instance"));
+            
+            // 加载数值字段
+            batch.setAnswerRepeatCount(rs.getInt("answer_repeat_count"));
+            if (rs.wasNull()) {
+                batch.setAnswerRepeatCount(1); // 默认值
+            }
+            
+            batch.setResumeCount(rs.getInt("resume_count"));
+            if (rs.wasNull()) {
+                batch.setResumeCount(0);
+            }
+            
+            // 加载最后处理的运行ID
+            Long lastProcessedRunId = rs.getLong("last_processed_run_id");
+            if (!rs.wasNull()) {
+                batch.setLastProcessedRunId(lastProcessedRunId);
+            }
+            
+            // 加载进度百分比
+            BigDecimal progressPercentage = rs.getBigDecimal("progress_percentage");
+            if (progressPercentage != null) {
+                batch.setProgressPercentage(progressPercentage);
+            }
+            
+            // 加载其他时间戳
+            Timestamp lastActivityTime = rs.getTimestamp("last_activity_time");
+            if (lastActivityTime != null) {
+                batch.setLastActivityTime(lastActivityTime.toLocalDateTime());
+            }
+            
+            Timestamp lastCheckTime = rs.getTimestamp("last_check_time");
+            if (lastCheckTime != null) {
+                batch.setLastCheckTime(lastCheckTime.toLocalDateTime());
+            }
+            
+            Timestamp pauseTime = rs.getTimestamp("pause_time");
+            if (pauseTime != null) {
+                batch.setPauseTime(pauseTime.toLocalDateTime());
             }
             
             return batch;

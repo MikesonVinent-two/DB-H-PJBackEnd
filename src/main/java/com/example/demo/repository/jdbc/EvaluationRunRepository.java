@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * 基于JDBC的评测运行仓库实现
  */
@@ -42,12 +44,12 @@ public class EvaluationRunRepository {
             "pause_reason, pause_time, paused_by_user_id, timeout_seconds, is_auto_resume, " +
             "auto_checkpoint_interval, current_batch_start_id, current_batch_end_id, batch_size, " +
             "retry_count, max_retries, last_error_time, consecutive_errors, last_updated) " +
-            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?::json, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
+            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
             "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE evaluation_runs SET model_answer_run_id=?, evaluator_id=?, run_name=?, run_description=?, " +
-            "run_time=?, start_time=?, end_time=?, status=?, parameters=?::json, error_message=?, created_by_user_id=?, " +
+            "run_time=?, start_time=?, end_time=?, status=?, parameters=?, error_message=?, created_by_user_id=?, " +
             "last_processed_answer_id=?, progress_percentage=?, last_activity_time=?, completed_answers_count=?, " +
             "total_answers_count=?, failed_evaluations_count=?, resume_count=?, completed_at=?, last_checkpoint_id=?, " +
             "pause_reason=?, pause_time=?, paused_by_user_id=?, timeout_seconds=?, is_auto_resume=?, " +
@@ -166,8 +168,16 @@ public class EvaluationRunRepository {
             ps.setString(7, evaluationRun.getStatus().name());
             
             // 设置参数
-            ps.setString(8, evaluationRun.getParameters() != null ? 
-                    evaluationRun.getParameters().toString() : "{}");
+            if (evaluationRun.getParameters() != null) {
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(8, objectMapper.writeValueAsString(evaluationRun.getParameters()));
+                } catch (Exception e) {
+                    ps.setString(8, "{}");
+                }
+            } else {
+                ps.setString(8, "{}");
+            }
             
             // 设置错误消息
             ps.setString(9, evaluationRun.getErrorMessage());
@@ -378,8 +388,16 @@ public class EvaluationRunRepository {
             ps.setString(8, evaluationRun.getStatus().name());
             
             // 设置参数
-            ps.setString(9, evaluationRun.getParameters() != null ? 
-                    evaluationRun.getParameters().toString() : "{}");
+            if (evaluationRun.getParameters() != null) {
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ps.setString(9, objectMapper.writeValueAsString(evaluationRun.getParameters()));
+                } catch (Exception e) {
+                    ps.setString(9, "{}");
+                }
+            } else {
+                ps.setString(9, "{}");
+            }
             
             // 设置错误消息
             ps.setString(10, evaluationRun.getErrorMessage());

@@ -17,7 +17,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -32,11 +34,11 @@ public class LlmAnswerRepository {
     private static final String SQL_INSERT = 
             "INSERT INTO llm_answers (model_answer_run_id, dataset_question_mapping_id, answer_text, " +
             "generation_status, error_message, generation_time, prompt_used, raw_model_response, other_metadata, repeat_index) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::json, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE llm_answers SET model_answer_run_id=?, dataset_question_mapping_id=?, answer_text=?, " +
-            "generation_status=?, error_message=?, generation_time=?, prompt_used=?, raw_model_response=?, other_metadata=?::json, repeat_index=? " +
+            "generation_status=?, error_message=?, generation_time=?, prompt_used=?, raw_model_response=?, other_metadata=?, repeat_index=? " +
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
@@ -46,15 +48,19 @@ public class LlmAnswerRepository {
             "SELECT * FROM llm_answers WHERE model_answer_run_id=?";
     
     private static final String SQL_FIND_BY_ID_WITH_QUESTION = 
-            "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id " +
+            "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id, " +
+            "sq.question_text, sq.question_type " +
             "FROM llm_answers a " +
-            "JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "LEFT JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
             "WHERE a.id=?";
     
     private static final String SQL_FIND_BY_MODEL_ANSWER_RUN_ID_WITH_QUESTIONS = 
-            "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id " +
+            "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id, " +
+            "sq.question_text, sq.question_type " +
             "FROM llm_answers a " +
-            "JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "LEFT JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
             "WHERE a.model_answer_run_id=?";
     
     private static final String SQL_FIND_BY_DATASET_QUESTION_MAPPING_ID = 
@@ -223,10 +229,22 @@ public class LlmAnswerRepository {
      * @return 回答的Optional包装，包含预加载的问题
      */
     public Optional<LlmAnswer> findByIdWithQuestion(Long id) {
+        System.out.println("执行findByIdWithQuestion查询，id=" + id + ", SQL=" + SQL_FIND_BY_ID_WITH_QUESTION);
+        
         try {
-            LlmAnswer llmAnswer = jdbcTemplate.queryForObject(SQL_FIND_BY_ID_WITH_QUESTION, new Object[]{id}, new LlmAnswerWithQuestionRowMapper());
+            LlmAnswer llmAnswer = jdbcTemplate.queryForObject(SQL_FIND_BY_ID_WITH_QUESTION, new Object[]{id}, new LlmAnswerWithFullQuestionRowMapper());
+            
+            if (llmAnswer != null) {
+                if (llmAnswer.getDatasetQuestionMapping() == null) {
+                    System.out.println("回答ID: " + llmAnswer.getId() + " 的dataset_question_mapping为null");
+                } else if (llmAnswer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                    System.out.println("回答ID: " + llmAnswer.getId() + " 的standard_question为null");
+                }
+            }
+            
             return Optional.ofNullable(llmAnswer);
         } catch (EmptyResultDataAccessException e) {
+            System.out.println("回答ID: " + id + " 未找到");
             return Optional.empty();
         }
     }
@@ -252,11 +270,24 @@ public class LlmAnswerRepository {
      * @return 回答列表，包含预加载的问题
      */
     public List<LlmAnswer> findByModelAnswerRunIdWithQuestions(Long modelAnswerRunId) {
-        return jdbcTemplate.query(
+        System.out.println("执行findByModelAnswerRunIdWithQuestions查询，modelAnswerRunId=" + modelAnswerRunId + ", SQL=" + SQL_FIND_BY_MODEL_ANSWER_RUN_ID_WITH_QUESTIONS);
+        
+        List<LlmAnswer> answers = jdbcTemplate.query(
                 SQL_FIND_BY_MODEL_ANSWER_RUN_ID_WITH_QUESTIONS,
                 new Object[]{modelAnswerRunId},
-                new LlmAnswerWithQuestionRowMapper()
+                new LlmAnswerWithFullQuestionRowMapper()
         );
+        
+        // 记录找到的回答和它们的问题状态
+        for (LlmAnswer answer : answers) {
+            if (answer.getDatasetQuestionMapping() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的dataset_question_mapping为null");
+            } else if (answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的standard_question为null");
+            }
+        }
+        
+        return answers;
     }
     
     /**
@@ -337,6 +368,41 @@ public class LlmAnswerRepository {
                 new LlmAnswerRowMapper()
         );
     }
+
+    /**
+     * 按批次ID查找所有回答，同时预加载问题
+     *
+     * @param batchId 批次ID
+     * @return 回答列表，包含预加载的问题
+     */
+    public List<LlmAnswer> findByBatchIdWithQuestions(Long batchId) {
+        String sql = "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id, " +
+                     "sq.question_text, sq.question_type " +
+                     "FROM llm_answers a " +
+                     "JOIN model_answer_runs mar ON a.model_answer_run_id = mar.id " +
+                     "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+                     "LEFT JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                     "WHERE mar.answer_generation_batch_id=?";
+        
+        System.out.println("执行findByBatchIdWithQuestions查询，batchId=" + batchId + ", SQL=" + sql);
+        
+        List<LlmAnswer> answers = jdbcTemplate.query(
+                sql,
+                new Object[]{batchId},
+                new LlmAnswerWithFullQuestionRowMapper()
+        );
+        
+        // 记录找到的回答和它们的问题状态
+        for (LlmAnswer answer : answers) {
+            if (answer.getDatasetQuestionMapping() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的dataset_question_mapping为null");
+            } else if (answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的standard_question为null");
+            }
+        }
+        
+        return answers;
+    }
     
     /**
      * 根据模型回答运行ID和回答ID查询大于指定ID的回答列表
@@ -385,6 +451,50 @@ public class LlmAnswerRepository {
         Object[] params = ids.toArray();
         
         return jdbcTemplate.query(sql, params, new LlmAnswerRowMapper());
+    }
+
+    /**
+     * 根据ID列表查找LLM回答，同时预加载问题信息
+     *
+     * @param ids LLM回答ID列表
+     * @return LLM回答列表，包含完整的问题信息
+     */
+    public List<LlmAnswer> findAllByIdWithQuestions(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        
+        // 构建IN子句的占位符
+        String placeholders = String.join(",", ids.stream()
+                .map(id -> "?")
+                .collect(Collectors.toList()));
+        
+        // 构建完整的SQL查询，使用LEFT JOIN标准问题表
+        String sql = String.format(
+            "SELECT a.*, dqm.id as dqm_id, dqm.standard_question_id as sq_id, " +
+            "sq.question_text, sq.question_type " +
+            "FROM llm_answers a " +
+            "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "LEFT JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE a.id IN (%s)", placeholders);
+        
+        System.out.println("执行findAllByIdWithQuestions查询，ids=" + ids + ", SQL=" + sql);
+        
+        // 将ID列表转换为Object数组
+        Object[] params = ids.toArray();
+        
+        List<LlmAnswer> answers = jdbcTemplate.query(sql, params, new LlmAnswerWithFullQuestionRowMapper());
+        
+        // 记录找到的回答和它们的问题状态
+        for (LlmAnswer answer : answers) {
+            if (answer.getDatasetQuestionMapping() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的dataset_question_mapping为null");
+            } else if (answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                System.out.println("回答ID: " + answer.getId() + " 的standard_question为null");
+            }
+        }
+        
+        return answers;
     }
 
     /**
@@ -471,6 +581,130 @@ public class LlmAnswerRepository {
             }
             
             return llmAnswer;
+        }
+    }
+    
+    /**
+     * 带完整问题信息的LLM回答行映射器
+     */
+    private class LlmAnswerWithFullQuestionRowMapper extends LlmAnswerRowMapper {
+        @Override
+        public LlmAnswer mapRow(ResultSet rs, int rowNum) throws SQLException {
+            // 首先获取基本的LLM回答对象
+            LlmAnswer llmAnswer = super.mapRow(rs, rowNum);
+            
+            try {
+                // 检查dqm_id是否为空
+                Long dqmId = rs.getLong("dqm_id");
+                if (rs.wasNull()) {
+                    System.out.println("回答ID: " + llmAnswer.getId() + ", dqm_id为空");
+                    return llmAnswer; // 如果dataset_question_mapping_id为空，直接返回
+                }
+                
+                // 检查sq_id是否为空
+                Long sqId = rs.getLong("sq_id");
+                if (rs.wasNull()) {
+                    System.out.println("回答ID: " + llmAnswer.getId() + ", sq_id为空");
+                    // 创建DatasetQuestionMapping，但不包含StandardQuestion
+                    DatasetQuestionMapping dqm = new DatasetQuestionMapping();
+                    dqm.setId(dqmId);
+                    llmAnswer.setDatasetQuestionMapping(dqm);
+                    return llmAnswer;
+                }
+                
+                // 都不为空时，创建并填充完整的对象
+                DatasetQuestionMapping dqm = new DatasetQuestionMapping();
+                dqm.setId(dqmId);
+                
+                // 创建并填充StandardQuestion对象
+                com.example.demo.entity.jdbc.StandardQuestion sq = new com.example.demo.entity.jdbc.StandardQuestion();
+                sq.setId(sqId);
+                
+                // 获取问题文本
+                String questionText = rs.getString("question_text");
+                if (questionText != null) {
+                    sq.setQuestionText(questionText);
+                } else {
+                    System.out.println("回答ID: " + llmAnswer.getId() + ", question_text为空");
+                }
+                
+                // 处理问题类型
+                String questionTypeStr = rs.getString("question_type");
+                if (questionTypeStr != null) {
+                    try {
+                        sq.setQuestionType(com.example.demo.entity.jdbc.QuestionType.valueOf(questionTypeStr));
+                    } catch (IllegalArgumentException e) {
+                        System.out.println("回答ID: " + llmAnswer.getId() + ", 问题类型转换错误: " + questionTypeStr);
+                        // 如果问题类型无效，设置为默认类型
+                        sq.setQuestionType(com.example.demo.entity.jdbc.QuestionType.SUBJECTIVE);
+                    }
+                } else {
+                    System.out.println("回答ID: " + llmAnswer.getId() + ", question_type为空");
+                    sq.setQuestionType(com.example.demo.entity.jdbc.QuestionType.SUBJECTIVE);
+                }
+                
+                // 将StandardQuestion设置到DatasetQuestionMapping中
+                dqm.setStandardQuestion(sq);
+                
+                // 将DatasetQuestionMapping设置到LlmAnswer中
+                llmAnswer.setDatasetQuestionMapping(dqm);
+                
+            } catch (SQLException e) {
+                // 如果查询中没有这些列，记录异常但不中断处理
+                System.err.println("回答ID: " + llmAnswer.getId() + ", 加载完整问题信息时出错: " + e.getMessage());
+            }
+            
+            return llmAnswer;
+        }
+    }
+
+    /**
+     * 查找数据关联不完整的回答记录
+     * 
+     * @return 关联不完整的回答列表
+     */
+    public List<Map<String, Object>> findIncompleteAnswers() {
+        String sql = 
+            "SELECT a.id, a.model_answer_run_id, a.dataset_question_mapping_id, " +
+            "a.answer_text, a.generation_status, " +
+            "EXISTS(SELECT 1 FROM dataset_question_mapping dqm WHERE dqm.id = a.dataset_question_mapping_id) as dqm_exists, " +
+            "dqm.standard_question_id, " +
+            "EXISTS(SELECT 1 FROM standard_questions sq WHERE sq.id = dqm.standard_question_id) as sq_exists " +
+            "FROM llm_answers a " +
+            "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "WHERE a.dataset_question_mapping_id IS NULL " +
+            "   OR dqm.id IS NULL " +
+            "   OR dqm.standard_question_id IS NULL " +
+            "   OR NOT EXISTS(SELECT 1 FROM standard_questions sq WHERE sq.id = dqm.standard_question_id)";
+            
+        System.out.println("执行findIncompleteAnswers查询，SQL=" + sql);
+        
+        return jdbcTemplate.queryForList(sql);
+    }
+    
+    /**
+     * 查找指定ID的回答记录的关联情况
+     * 
+     * @param answerId 回答ID
+     * @return 关联信息
+     */
+    public Map<String, Object> checkAnswerRelations(Long answerId) {
+        String sql = 
+            "SELECT a.id, a.model_answer_run_id, a.dataset_question_mapping_id, " +
+            "a.answer_text, a.generation_status, " +
+            "EXISTS(SELECT 1 FROM dataset_question_mapping dqm WHERE dqm.id = a.dataset_question_mapping_id) as dqm_exists, " +
+            "dqm.standard_question_id, " +
+            "EXISTS(SELECT 1 FROM standard_questions sq WHERE sq.id = dqm.standard_question_id) as sq_exists " +
+            "FROM llm_answers a " +
+            "LEFT JOIN dataset_question_mapping dqm ON a.dataset_question_mapping_id = dqm.id " +
+            "WHERE a.id = ?";
+            
+        System.out.println("执行checkAnswerRelations查询，answerId=" + answerId + ", SQL=" + sql);
+        
+        try {
+            return jdbcTemplate.queryForMap(sql, answerId);
+        } catch (EmptyResultDataAccessException e) {
+            return Collections.emptyMap();
         }
     }
 } 

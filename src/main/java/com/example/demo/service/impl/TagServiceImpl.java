@@ -17,8 +17,7 @@ import com.example.demo.repository.jdbc.EvaluationTagPromptRepository;
 import com.example.demo.repository.jdbc.TagRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.TagService;
-
-import jakarta.persistence.EntityNotFoundException;
+import com.example.demo.exception.EntityNotFoundException;
 
 @Service
 public class TagServiceImpl implements TagService {

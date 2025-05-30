@@ -1,6 +1,10 @@
 package com.example.demo.repository.jdbc;
 
 import com.example.demo.entity.jdbc.AnswerGenerationBatch;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.LlmModel;
 import com.example.demo.entity.jdbc.ModelAnswerRun;
 import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
@@ -19,12 +23,16 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 基于JDBC的模型回答运行仓库实?
@@ -569,6 +577,41 @@ public class ModelAnswerRunRepository {
      * 模型回答运行行映射器
      */
     private class ModelAnswerRunRowMapper implements RowMapper<ModelAnswerRun> {
+        
+        /**
+         * 辅助方法：加载题型提示词
+         */
+        private void loadQuestionTypePrompt(ResultSet brs, String columnName, Consumer<AnswerQuestionTypePrompt> setter) throws SQLException {
+            try {
+                Long promptId = brs.getLong(columnName);
+                if (!brs.wasNull()) {
+                    String promptQuery = "SELECT name, prompt_template, response_format_instruction, response_example FROM answer_question_type_prompts WHERE id = ?";
+                    List<AnswerQuestionTypePrompt> prompts = jdbcTemplate.query(
+                        promptQuery, 
+                        new Object[]{promptId}, 
+                        new RowMapper<AnswerQuestionTypePrompt>() {
+                            @Override
+                            public AnswerQuestionTypePrompt mapRow(ResultSet prs, int pRowNum) throws SQLException {
+                                AnswerQuestionTypePrompt prompt = new AnswerQuestionTypePrompt();
+                                prompt.setId(promptId);
+                                prompt.setName(prs.getString("name"));
+                                prompt.setPromptTemplate(prs.getString("prompt_template"));
+                                prompt.setResponseFormatInstruction(prs.getString("response_format_instruction"));
+                                prompt.setResponseExample(prs.getString("response_example"));
+                                return prompt;
+                            }
+                        }
+                    );
+                    
+                    if (!prompts.isEmpty()) {
+                        setter.accept(prompts.get(0));
+                    }
+                }
+            } catch (Exception e) {
+                // 忽略加载提示词时的错误
+            }
+        }
+        
         @Override
         public ModelAnswerRun mapRow(ResultSet rs, int rowNum) throws SQLException {
             ModelAnswerRun modelAnswerRun = new ModelAnswerRun();
@@ -577,9 +620,80 @@ public class ModelAnswerRunRepository {
             // 设置批次
             Long batchId = rs.getLong("answer_generation_batch_id");
             if (!rs.wasNull()) {
+                // 修改为加载完整批次对象
+                try {
+                    String batchQuery = "SELECT * FROM answer_generation_batches WHERE id = ?";
+                    List<AnswerGenerationBatch> batches = jdbcTemplate.query(
+                        batchQuery,
+                        new Object[]{batchId},
+                        new RowMapper<AnswerGenerationBatch>() {
+                            @Override
+                            public AnswerGenerationBatch mapRow(ResultSet brs, int bRowNum) throws SQLException {
+                                // 使用一个简单的行映射器加载基本批次信息
+                                AnswerGenerationBatch batch = new AnswerGenerationBatch();
+                                batch.setId(brs.getLong("id"));
+                                batch.setName(brs.getString("name"));
+                                batch.setDescription(brs.getString("description"));
+                                
+                                // 加载配置ID
+                                Long answerConfigId = brs.getLong("answer_assembly_config_id");
+                                if (!brs.wasNull()) {
+                                    // 加载配置对象
+                                    try {
+                                        String configQuery = "SELECT * FROM answer_prompt_assembly_configs WHERE id = ?";
+                                        List<AnswerPromptAssemblyConfig> configs = jdbcTemplate.query(
+                                            configQuery,
+                                            new Object[]{answerConfigId},
+                                            new RowMapper<AnswerPromptAssemblyConfig>() {
+                                                @Override
+                                                public AnswerPromptAssemblyConfig mapRow(ResultSet crs, int cRowNum) throws SQLException {
+                                                    AnswerPromptAssemblyConfig config = new AnswerPromptAssemblyConfig();
+                                                    config.setId(answerConfigId);
+                                                    config.setName(crs.getString("name"));
+                                                    config.setBaseSystemPrompt(crs.getString("base_system_prompt"));
+                                                    config.setTagPromptsSectionHeader(crs.getString("tag_prompts_section_header"));
+                                                    config.setQuestionTypeSectionHeader(crs.getString("question_type_section_header"));
+                                                    config.setTagPromptSeparator(crs.getString("tag_prompt_separator"));
+                                                    config.setSectionSeparator(crs.getString("section_separator"));
+                                                    config.setFinalInstruction(crs.getString("final_instruction"));
+                                                    return config;
+                                                }
+                                            }
+                                        );
+                                        
+                                        if (!configs.isEmpty()) {
+                                            batch.setAnswerAssemblyConfig(configs.get(0));
+                                        }
+                                    } catch (Exception e) {
+                                        // 忽略加载配置时的错误
+                                    }
+                                }
+                                
+                                // 加载题型提示词
+                                loadQuestionTypePrompt(brs, "single_choice_prompt_id", batch::setSingleChoicePrompt);
+                                loadQuestionTypePrompt(brs, "multiple_choice_prompt_id", batch::setMultipleChoicePrompt);
+                                loadQuestionTypePrompt(brs, "simple_fact_prompt_id", batch::setSimpleFactPrompt);
+                                loadQuestionTypePrompt(brs, "subjective_prompt_id", batch::setSubjectivePrompt);
+                                
+                                return batch;
+                            }
+                        }
+                    );
+                    
+                    if (!batches.isEmpty()) {
+                        modelAnswerRun.setAnswerGenerationBatch(batches.get(0));
+                    } else {
+                        // 如果找不到批次，回退到只设置ID的方案
+                        AnswerGenerationBatch batch = new AnswerGenerationBatch();
+                        batch.setId(batchId);
+                        modelAnswerRun.setAnswerGenerationBatch(batch);
+                    }
+                } catch (Exception e) {
+                    // 如果加载批次失败，使用默认回退方案
                 AnswerGenerationBatch batch = new AnswerGenerationBatch();
                 batch.setId(batchId);
                 modelAnswerRun.setAnswerGenerationBatch(batch);
+                }
             }
             
             // 设置LLM模型

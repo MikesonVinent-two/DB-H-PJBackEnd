@@ -1,29 +1,33 @@
 package com.example.demo.converter;
 
 import com.example.demo.entity.jdbc.DifficultyLevel;
-import jakarta.persistence.AttributeConverter;
-import jakarta.persistence.Converter;
+import org.springframework.stereotype.Component;
 
 /**
  * DifficultyLevel枚举与数据库字符串之间的自动转换器
  * 用于解决数据库存储小写枚举值而Java代码使用大写枚举的问题
  */
-@Converter(autoApply = true)
-public class DifficultyLevelConverter implements AttributeConverter<DifficultyLevel, String> {
+@Component
+public class DifficultyLevelConverter {
 
-    @Override
-    public String convertToDatabaseColumn(DifficultyLevel attribute) {
-        if (attribute == null) {
-            return null;
-        }
-        return attribute.name().toLowerCase(); // 存储为小写
-    }
-
-    @Override
+    // 从数据库值转换到枚举
     public DifficultyLevel convertToEntityAttribute(String dbData) {
         if (dbData == null) {
             return null;
         }
-        return DifficultyLevel.fromString(dbData); // 使用我们新增的方法转换
+        return DifficultyLevel.valueOf(dbData.toUpperCase());
+    }
+    
+    // 从枚举转换到数据库值
+    public String convertToDatabaseColumn(DifficultyLevel attribute) {
+        if (attribute == null) {
+            return null;
+        }
+        return attribute.name().toLowerCase();
+    }
+    
+    // 为RowMapper提供方便的转换方法
+    public DifficultyLevel fromString(String value) {
+        return convertToEntityAttribute(value);
     }
 } 

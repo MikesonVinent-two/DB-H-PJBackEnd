@@ -33,10 +33,10 @@ public class StandardObjectiveAnswerRepository {
     private static final String SQL_INSERT = 
             "INSERT INTO standard_objective_answers (standard_question_id, options, correct_ids, " +
             "determined_by_user_id, determined_time, created_change_log_id, deleted_at) " +
-            "VALUES (?, ?::json, ?::json, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
-            "UPDATE standard_objective_answers SET standard_question_id=?, options=?::json, correct_ids=?::json, " +
+            "UPDATE standard_objective_answers SET standard_question_id=?, options=?, correct_ids=?, " +
             "determined_by_user_id=?, determined_time=?, created_change_log_id=?, deleted_at=? " +
             "WHERE id=?";
     

@@ -33,10 +33,10 @@ public class StandardSimpleAnswerRepository {
     private static final String SQL_INSERT = 
             "INSERT INTO standard_simple_answers (standard_question_id, answer_text, alternative_answers, " +
             "determined_by_user_id, determined_time, created_change_log_id, deleted_at) " +
-            "VALUES (?, ?, ?::json, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
-            "UPDATE standard_simple_answers SET standard_question_id=?, answer_text=?, alternative_answers=?::json, " +
+            "UPDATE standard_simple_answers SET standard_question_id=?, answer_text=?, alternative_answers=?, " +
             "determined_by_user_id=?, determined_time=?, created_change_log_id=?, deleted_at=? " +
             "WHERE id=?";
     

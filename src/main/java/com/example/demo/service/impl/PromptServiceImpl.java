@@ -7,7 +7,7 @@ import com.example.demo.dto.EvaluationTagPromptDTO;
 import com.example.demo.entity.jdbc.*;
 import com.example.demo.repository.jdbc.*;
 import com.example.demo.service.PromptService;
-import jakarta.persistence.EntityNotFoundException;
+import com.example.demo.exception.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

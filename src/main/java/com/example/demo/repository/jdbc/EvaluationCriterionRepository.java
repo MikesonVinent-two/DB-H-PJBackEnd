@@ -43,11 +43,11 @@ public class EvaluationCriterionRepository {
             "INSERT INTO evaluation_criteria (name, version, description, question_type, data_type, score_range, " +
             "applicable_question_types, weight, is_required, order_index, options, created_at, created_by_user_id, " +
             "parent_criterion_id, created_change_log_id, deleted_at) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?::json, ?, ?, ?, ?::json, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE evaluation_criteria SET name=?, version=?, description=?, question_type=?, data_type=?, " +
-            "score_range=?, applicable_question_types=?::json, weight=?, is_required=?, order_index=?, options=?::json, created_at=?, " +
+            "score_range=?, applicable_question_types=?, weight=?, is_required=?, order_index=?, options=?, created_at=?, " +
             "created_by_user_id=?, parent_criterion_id=?, created_change_log_id=?, deleted_at=? WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 

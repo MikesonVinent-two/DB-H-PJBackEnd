@@ -3,6 +3,7 @@ package com.example.demo.task;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.example.demo.dto.WebSocketMessage.MessageType;
 import com.example.demo.entity.jdbc.AnswerGenerationBatch;
@@ -28,6 +33,7 @@ import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
 import com.example.demo.entity.jdbc.AnswerTagPrompt;
 import com.example.demo.entity.jdbc.DatasetQuestionMapping;
+import com.example.demo.entity.jdbc.DatasetVersion;
 import com.example.demo.entity.jdbc.LlmAnswer;
 import com.example.demo.entity.jdbc.LlmModel;
 import com.example.demo.entity.jdbc.ModelAnswerRun;
@@ -45,11 +51,11 @@ import com.example.demo.repository.jdbc.StandardQuestionRepository;
 import com.example.demo.service.LlmApiService;
 import com.example.demo.service.WebSocketService;
 import com.example.demo.utils.TextPreprocessor;
+import com.example.demo.exception.EntityNotFoundException;
+import com.example.demo.repository.jdbc.StandardQuestionTagsRepository;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityNotFoundException;
 
 
 
@@ -61,9 +67,6 @@ public class AnswerGenerationTask {
     
     private static final Logger logger = LoggerFactory.getLogger(AnswerGenerationTask.class);
     
-    @Autowired
-    private EntityManager entityManager;
-    
     private final AnswerGenerationBatchRepository batchRepository;
     private final ModelAnswerRunRepository runRepository;
     private final StandardQuestionRepository questionRepository;
@@ -72,8 +75,11 @@ public class AnswerGenerationTask {
     private final LlmApiService llmApiService;
     private final AnswerTagPromptRepository answerTagPromptRepository;
     private final AnswerQuestionTypePromptRepository answerQuestionTypePromptRepository;
+    private final StandardQuestionTagsRepository standardQuestionTagsRepository;
     private final JdbcTemplate jdbcTemplate;
     private BatchStateManager batchStateManager;
+    // 添加事务管理器
+    private final PlatformTransactionManager transactionManager;
     
     // 添加中断控制器
     private final ConcurrentHashMap<Long, AtomicBoolean> interruptionFlags = new ConcurrentHashMap<>();
@@ -92,7 +98,9 @@ public class AnswerGenerationTask {
             LlmApiService llmApiService,
             AnswerTagPromptRepository answerTagPromptRepository,
             AnswerQuestionTypePromptRepository answerQuestionTypePromptRepository,
-            JdbcTemplate jdbcTemplate) {
+            StandardQuestionTagsRepository standardQuestionTagsRepository,
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager) {
         this.batchRepository = batchRepository;
         this.runRepository = runRepository;
         this.questionRepository = questionRepository;
@@ -101,7 +109,9 @@ public class AnswerGenerationTask {
         this.llmApiService = llmApiService;
         this.answerTagPromptRepository = answerTagPromptRepository;
         this.answerQuestionTypePromptRepository = answerQuestionTypePromptRepository;
+        this.standardQuestionTagsRepository = standardQuestionTagsRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.transactionManager = transactionManager;
     }
     
     @Autowired
@@ -647,7 +657,6 @@ public class AnswerGenerationTask {
     /**
      * 处理单个问题
      */
-    @Transactional
     public boolean processQuestion(ModelAnswerRun run, StandardQuestion question, int repeatIndex) {
         Long runId = run.getId();
         Long questionId = question.getId();
@@ -663,10 +672,16 @@ public class AnswerGenerationTask {
         
         logger.debug("处理问题: 运行={}, 问题={}, 重复索引={}", runId, questionId, repeatIndex);
         
+        // 创建事务定义
+        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
+        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        TransactionStatus status = transactionManager.getTransaction(def);
+        
         try {
             // 在问题处理过程中定期检查中断标志
             if (shouldInterrupt(batchId)) {
                 logger.info("问题处理前检测到批次{}的中断信号，中止处理", batchId);
+                transactionManager.rollback(status);
                 return false;
             }
             
@@ -690,6 +705,7 @@ public class AnswerGenerationTask {
                 jdbcTemplate.update(
                     "UPDATE model_answer_runs SET status = 'PAUSED', last_activity_time = ? WHERE id = ?",
                     LocalDateTime.now(), runId);
+                transactionManager.rollback(status);
                 return false;
             }
             
@@ -724,8 +740,13 @@ public class AnswerGenerationTask {
             sendQuestionCompletedNotification(run, question, repeatIndex);
             logger.debug("问题处理完成通知已发送: 运行={}, 问题ID={}", runId, questionId);
             
+            // 提交事务
+            transactionManager.commit(status);
             return true;
         } catch (Exception e) {
+            // 回滚事务
+            transactionManager.rollback(status);
+            
             logger.error("处理问题失败: 运行={}, 问题={}, 错误={}", runId, questionId, e.getMessage(), e);
             
             // 记录失败信息
@@ -745,128 +766,139 @@ public class AnswerGenerationTask {
         StringBuilder promptBuilder = new StringBuilder();
         
         // 获取回答Prompt组装配置
-        AnswerPromptAssemblyConfig config = run.getAnswerGenerationBatch().getAnswerAssemblyConfig();
-        
-        if (config != null) {
-            // 添加基础系统提示
-            if (config.getBaseSystemPrompt() != null) {
-                promptBuilder.append(config.getBaseSystemPrompt());
-                promptBuilder.append(config.getSectionSeparator());
-            }
-            
-            // 预先查询标签，解决懒加载问题
-            List<Tag> tags = new ArrayList<>();
-            try {
-                // 使用JPA查询获取标签，避免使用懒加载关系
-                List<Tag> fetchedTags = entityManager.createQuery(
-                    "SELECT t FROM Tag t JOIN StandardQuestionTag sqt ON t.id = sqt.tag.id " +
-                    "WHERE sqt.standardQuestion.id = :questionId AND t.deletedAt IS NULL",
-                    Tag.class)
-                    .setParameter("questionId", question.getId())
-                    .getResultList();
-                    
-                tags.addAll(fetchedTags);
-                logger.debug("为问题ID{}成功加载了{}个标签", question.getId(), tags.size());
-            } catch (Exception e) {
-                logger.warn("加载问题标签时出错，问题ID: {}", question.getId(), e);
-                // 使用空列表继续处理
-            }
-            
-            // 添加标签提示（如果问题有标签）
-            if (!tags.isEmpty() && config.getTagPromptsSectionHeader() != null) {
-                
-                // 先收集有效的标签提示词，如果没有任何有效提示词则跳过整个标签部分
-                boolean hasAnyTagPrompt = false;
-                
-                StringBuilder tagPromptsBuilder = new StringBuilder();
-                
-                for (Tag tag : tags) {
-                    try {
-                        // 跳过没有初始化的标签
-                        if (tag == null || tag.getTagName() == null) {
-                            logger.warn("标签未初始化或标签名为空");
-                            continue;
-                        }
-                        
-                        // 获取该标签的激活状态提示词
-                        List<AnswerTagPrompt> tagPrompts = answerTagPromptRepository
-                            .findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
-                        
-                        if (!tagPrompts.isEmpty()) {
-                            // 使用优先级最高的提示词（列表已按优先级排序）
-                            AnswerTagPrompt prompt = tagPrompts.get(0);
-                            tagPromptsBuilder.append("【").append(tag.getTagName()).append("】: ");
-                            tagPromptsBuilder.append(prompt.getPromptTemplate());
-                            tagPromptsBuilder.append(config.getTagPromptSeparator());
-                            hasAnyTagPrompt = true;
-                        }
-                        // 如果标签没有提示词，则跳过该标签，不添加到prompt中
-                    } catch (Exception e) {
-                        // 捕获并记录错误，但不中断处理
-                        logger.warn("获取标签提示词失败，标签ID: {}，继续处理其他标签", 
-                                    tag != null ? tag.getId() : "未知", e);
-                    }
-                }
-                
-                // 只有当至少有一个标签有提示词时，才添加标签部分
-                if (hasAnyTagPrompt) {
-                    promptBuilder.append(config.getTagPromptsSectionHeader());
-                    promptBuilder.append("\n");
-                    promptBuilder.append(tagPromptsBuilder);
-                    promptBuilder.append(config.getSectionSeparator());
-                }
-            }
-            
-            // 添加问题类型要求
-            if (config.getQuestionTypeSectionHeader() != null) {
-                promptBuilder.append(config.getQuestionTypeSectionHeader());
-                promptBuilder.append("\n");
-                
-                // 根据问题类型添加特定要求
-                QuestionType questionType = question.getQuestionType();
-                if (questionType != null) {
-                    try {
-                        // 获取该问题类型的激活状态提示词
-                        List<AnswerQuestionTypePrompt> typePrompts = answerQuestionTypePromptRepository
-                            .findByQuestionTypeAndIsActiveTrueAndDeletedAtIsNull(questionType);
-                        
-                        if (!typePrompts.isEmpty()) {
-                            // 使用最新创建的提示词（假设列表已按创建时间排序）
-                            AnswerQuestionTypePrompt prompt = typePrompts.get(0);
-                            promptBuilder.append(prompt.getPromptTemplate());
-                            
-                            // 添加回答格式要求（如果有）
-                            if (prompt.getResponseFormatInstruction() != null && !prompt.getResponseFormatInstruction().isEmpty()) {
-                                promptBuilder.append("\n\n回答格式要求:\n");
-                                promptBuilder.append(prompt.getResponseFormatInstruction());
-                            }
-                            
-                            // 添加回答示例（如果有）
-                            if (prompt.getResponseExample() != null && !prompt.getResponseExample().isEmpty()) {
-                                promptBuilder.append("\n\n回答示例:\n");
-                                promptBuilder.append(prompt.getResponseExample());
-                            }
-                        }
-                    } catch (Exception e) {
-                        logger.warn("获取问题类型提示词失败，问题类型: {}", questionType, e);
-                    }
-                }
-                
-                promptBuilder.append(config.getSectionSeparator());
-            }
-            
-            // 添加最终指示
-            if (config.getFinalInstruction() != null) {
-                promptBuilder.append(config.getFinalInstruction());
-                promptBuilder.append(config.getSectionSeparator());
-            }
+        AnswerGenerationBatch batch = run.getAnswerGenerationBatch();
+        if (batch == null) {
+            logger.error("ModelAnswerRun {}的关联批次为null，无法组装prompt", run.getId());
+            return "Error: 无法找到批次配置";
         }
         
-        // 添加问题内容
-        promptBuilder.append("问题: ");
-        promptBuilder.append(question.getQuestionText());
+        AnswerPromptAssemblyConfig config = batch.getAnswerAssemblyConfig();
         
-        return promptBuilder.toString();
+        // 详细记录批次和配置信息
+        logger.info("组装prompt - 批次ID：{}，名称：{}，关联配置ID：{}", 
+            batch.getId(), batch.getName(), 
+            batch.getAnswerAssemblyConfig() != null ? batch.getAnswerAssemblyConfig().getId() : "null");
+        
+        if (config == null) {
+            logger.warn("未找到Prompt组装配置，尝试使用默认系统提示词");
+            // 使用一个默认的系统提示词
+            promptBuilder.append("你是一个专业的医学AI助手，请基于专业医学知识回答以下问题：\n\n");
+            promptBuilder.append(question.getQuestionText());
+            
+            logger.warn("使用默认提示词：{}", promptBuilder.toString());
+            return promptBuilder.toString();
+        }
+        
+        logger.debug("使用配置：名称={}，系统提示词={}", config.getName(), config.getBaseSystemPrompt());
+        
+        // 添加系统提示词
+        if (config.getBaseSystemPrompt() != null && !config.getBaseSystemPrompt().trim().isEmpty()) {
+            promptBuilder.append(config.getBaseSystemPrompt()).append("\n\n");
+        } else {
+            logger.debug("系统提示词为空，跳过添加");
+        }
+        
+        // 获取问题的标签
+        List<Tag> tags = standardQuestionTagsRepository.findTagsByQuestionId(question.getId());
+        logger.debug("问题ID={}关联标签数量：{}", question.getId(), tags.size());
+        
+        // 只有存在标签时才添加标签提示词部分
+        if (!tags.isEmpty()) {
+            // 添加标签提示词部分标题
+            if (config.getTagPromptsSectionHeader() != null) {
+                promptBuilder.append(config.getTagPromptsSectionHeader()).append("\n");
+            }
+            
+            StringBuilder tagPromptsBuilder = new StringBuilder();
+            List<AnswerTagPrompt> tagPrompts = new ArrayList<>();
+            
+            // 收集标签相关的prompt
+            for (Tag tag : tags) {
+                List<AnswerTagPrompt> prompts = answerTagPromptRepository.findActivePromptsByTagId(tag.getId());
+                if (!prompts.isEmpty()) {
+                    logger.debug("标签「{}」(ID={})找到{}个提示词", tag.getTagName(), tag.getId(), prompts.size());
+                    tagPrompts.addAll(prompts);
+                } else {
+                    logger.debug("标签「{}」(ID={})无相关提示词", tag.getTagName(), tag.getId());
+                }
+            }
+            
+            // 按优先级排序
+            tagPrompts.sort(Comparator.comparing(AnswerTagPrompt::getPromptPriority));
+            
+            // 添加标签prompt
+            boolean isFirst = true;
+            for (AnswerTagPrompt tagPrompt : tagPrompts) {
+                if (!isFirst) {
+                    // 使用配置的分隔符或默认分隔符
+                    tagPromptsBuilder.append(
+                        config.getTagPromptSeparator() != null ? 
+                        config.getTagPromptSeparator() : "\n\n"
+                    );
+                }
+                tagPromptsBuilder.append(tagPrompt.getPromptTemplate());
+                isFirst = false;
+                
+                logger.debug("添加标签提示词：ID={}, 名称={}", tagPrompt.getId(), tagPrompt.getName());
+            }
+            
+            if (tagPromptsBuilder.length() > 0) {
+                promptBuilder.append(tagPromptsBuilder);
+                
+                // 添加部分分隔符
+                promptBuilder.append(
+                    config.getSectionSeparator() != null ? 
+                    config.getSectionSeparator() : "\n\n"
+                );
+            } else {
+                logger.debug("所有标签均无可用提示词，跳过添加标签提示部分");
+            }
+        } else {
+            logger.debug("问题无关联标签，跳过添加标签提示部分");
+        }
+        
+        // 添加题型提示词部分
+        AnswerQuestionTypePrompt questionTypePrompt = getQuestionTypePrompt(batch, question.getQuestionType());
+        
+        if (questionTypePrompt != null) {
+            if (config.getQuestionTypeSectionHeader() != null) {
+                promptBuilder.append(config.getQuestionTypeSectionHeader()).append("\n");
+            }
+            
+            promptBuilder.append(questionTypePrompt.getPromptTemplate());
+            
+            // 添加格式说明
+            if (questionTypePrompt.getResponseFormatInstruction() != null && 
+                !questionTypePrompt.getResponseFormatInstruction().trim().isEmpty()) {
+                promptBuilder.append("\n\n").append(questionTypePrompt.getResponseFormatInstruction());
+            }
+            
+            // 添加示例（可选）
+            if (questionTypePrompt.getResponseExample() != null && 
+                !questionTypePrompt.getResponseExample().trim().isEmpty()) {
+                promptBuilder.append("\n例如：").append(questionTypePrompt.getResponseExample());
+            }
+            
+            logger.debug("添加题型提示词：题型={}，提示词ID={}", 
+                question.getQuestionType(), questionTypePrompt.getId());
+        } else {
+            logger.warn("找不到题型={}的提示词", question.getQuestionType());
+        }
+        
+        // 添加最终指令和问题
+        if (config.getFinalInstruction() != null && !config.getFinalInstruction().trim().isEmpty()) {
+            promptBuilder.append("\n\n").append(config.getFinalInstruction());
+        }
+        
+        // 添加问题文本
+        promptBuilder.append("\n\n问题：").append(question.getQuestionText());
+        
+        // 记录完整的prompt
+        String fullPrompt = promptBuilder.toString();
+        logger.info("组装完成，问题ID={}的prompt长度：{}", question.getId(), fullPrompt.length());
+        logger.debug("完整prompt内容：{}", fullPrompt);
+        
+        return fullPrompt;
     }
     
     /**
@@ -922,58 +954,146 @@ public class AnswerGenerationTask {
     /**
      * 保存模型回答
      */
-    @Transactional
     public void saveModelAnswer(ModelAnswerRun run, StandardQuestion question, String answerText, int repeatIndex) {
-        LlmAnswer answer = new LlmAnswer();
-        answer.setModelAnswerRun(run);
+        // 创建事务模板
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
         
-        try {
-            // 需要从StandardQuestion获取对应的DatasetQuestionMapping
-            // 直接通过ID查询，避免使用懒加载的集合
-            Long datasetVersionId = run.getAnswerGenerationBatch().getDatasetVersion().getId();
-            
-            // 使用EntityManager直接查询，确保在当前事务中
-            DatasetQuestionMapping mapping = entityManager.createQuery(
-                "SELECT dqm FROM DatasetQuestionMapping dqm " +
-                "WHERE dqm.standardQuestion.id = :questionId " +
-                "AND dqm.datasetVersion.id = :versionId", 
-                DatasetQuestionMapping.class)
-                .setParameter("questionId", question.getId())
-                .setParameter("versionId", datasetVersionId)
-                .getSingleResult();
-            
-            answer.setDatasetQuestionMapping(mapping);
-            answer.setAnswerText(answerText);
-            answer.setRepeatIndex(repeatIndex);
-            answer.setGenerationTime(LocalDateTime.now());
-            answer.setGenerationStatus(LlmAnswer.GenerationStatus.SUCCESS);
-            
-            // 可以添加其他字段
-            answer.setPromptUsed(assemblePrompt(run, question));
-            
-            answerRepository.save(answer);
-        } catch (Exception e) {
-            logger.error("保存模型回答失败: questionId={}, runId={}", question.getId(), run.getId(), e);
-            throw e;
-        }
+        txTemplate.execute(status -> {
+            try {
+                // 先记录原始批次信息用于调试
+                logger.debug("原始批次信息: runId={}, batchId={}", 
+                    run.getId(),
+                    run.getAnswerGenerationBatch() != null ? run.getAnswerGenerationBatch().getId() : "NULL");
+                
+                // 强制重新加载批次对象，避免使用可能部分加载的引用
+                Long originalBatchId = run.getAnswerGenerationBatch().getId();
+                AnswerGenerationBatch freshBatch = batchRepository.findById(originalBatchId)
+                    .orElseThrow(() -> new IllegalStateException("找不到ID为" + originalBatchId + "的批次"));
+                
+                // 用新加载的批次替换运行对象中的引用
+                run.setAnswerGenerationBatch(freshBatch);
+                logger.debug("重新加载的批次信息: id={}, name={}", 
+                    freshBatch.getId(), freshBatch.getName());
+                
+                // 确保数据集版本已正确加载
+                if (freshBatch.getDatasetVersion() == null) {
+                    // 尝试直接从数据库查询数据集版本ID
+                    Long datasetVersionId = jdbcTemplate.queryForObject(
+                        "SELECT dataset_version_id FROM answer_generation_batches WHERE id = ?", 
+                        Long.class, freshBatch.getId());
+                    
+                    if (datasetVersionId != null) {
+                        // 从数据库加载完整的数据集版本
+                        DatasetVersion version = jdbcTemplate.queryForObject(
+                            "SELECT * FROM dataset_versions WHERE id = ?",
+                            (rs, rowNum) -> {
+                                DatasetVersion dv = new DatasetVersion();
+                                dv.setId(rs.getLong("id"));
+                                dv.setName(rs.getString("name"));
+                                dv.setVersionNumber(rs.getString("version_number"));
+                                return dv;
+                            },
+                            datasetVersionId);
+                            
+                        if (version != null) {
+                            freshBatch.setDatasetVersion(version);
+                            logger.info("从数据库直接加载数据集版本成功: versionId={}, name={}", 
+                                version.getId(), version.getName());
+                        }
+                    }
+                }
+                
+                LlmAnswer answer = new LlmAnswer();
+                answer.setModelAnswerRun(run);
+                
+                // 检查批次的数据集版本是否为空
+                if (run.getAnswerGenerationBatch() == null) {
+                    logger.info("批次为空: runId={}, questionId={}", run.getId(), question.getId());
+                    throw new IllegalStateException("批次为空，无法保存回答");
+                }
+
+                logger.debug("批次信息: id={}, name={}", 
+                    run.getAnswerGenerationBatch().getId(),
+                    run.getAnswerGenerationBatch().getName());
+
+                if (run.getAnswerGenerationBatch().getDatasetVersion() == null) {
+                    logger.info("数据集版本为空: runId={}, questionId={}, batchId={}", 
+                        run.getId(), question.getId(), run.getAnswerGenerationBatch().getId());
+                    throw new IllegalStateException("批次的数据集版本为空，无法保存回答");
+                }
+
+                logger.debug("数据集版本信息: id={}, name={}, version={}", 
+                    run.getAnswerGenerationBatch().getDatasetVersion().getId(),
+                    run.getAnswerGenerationBatch().getDatasetVersion().getName(),
+                    run.getAnswerGenerationBatch().getDatasetVersion().getVersionNumber());
+                
+                // 需要从StandardQuestion获取对应的DatasetQuestionMapping
+                // 直接通过ID查询，避免使用懒加载的集合
+                Long datasetVersionId = run.getAnswerGenerationBatch().getDatasetVersion().getId();
+                
+                // 使用JDBC直接查询，替代EntityManager查询
+                Map<String, Object> mappingData = jdbcTemplate.queryForMap(
+                    "SELECT dqm.* FROM dataset_question_mapping dqm " +
+                    "WHERE dqm.standard_question_id = ? " +
+                    "AND dqm.dataset_version_id = ?", 
+                    question.getId(), datasetVersionId);
+                    
+                // 构建DatasetQuestionMapping对象
+                DatasetQuestionMapping mapping = new DatasetQuestionMapping();
+                mapping.setId(((Number) mappingData.get("id")).longValue());
+                
+                // 设置必要的关联
+                DatasetVersion datasetVersion = new DatasetVersion();
+                datasetVersion.setId(datasetVersionId);
+                mapping.setDatasetVersion(datasetVersion);
+                
+                mapping.setStandardQuestion(question);
+                // 设置其他需要的字段
+                
+                answer.setDatasetQuestionMapping(mapping);
+                answer.setAnswerText(answerText);
+                answer.setRepeatIndex(repeatIndex);
+                answer.setGenerationTime(LocalDateTime.now());
+                answer.setGenerationStatus(LlmAnswer.GenerationStatus.SUCCESS);
+                
+                // 可以添加其他字段
+                answer.setPromptUsed(assemblePrompt(run, question));
+                
+                answerRepository.save(answer);
+                return null;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.error("保存模型回答失败: questionId={}, runId={}", question.getId(), run.getId(), e);
+                throw e;
+            }
+        });
     }
     
     /**
      * 记录失败的问题
      */
-    @Transactional
     public void recordFailedQuestion(ModelAnswerRun run, Long questionId) {
-        run.setFailedQuestionsCount(run.getFailedQuestionsCount() + 1);
-        
-        // 添加到失败问题ID列表
-        List<Long> failedIds = run.getFailedQuestionsIds();
-        if (failedIds == null) {
-            failedIds = new ArrayList<>();
-        }
-        failedIds.add(questionId);
-        run.setFailedQuestionsIds(failedIds);
-        
-        runRepository.save(run);
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.execute(status -> {
+            try {
+                run.setFailedQuestionsCount(run.getFailedQuestionsCount() + 1);
+                
+                // 添加到失败问题ID列表
+                List<Long> failedIds = run.getFailedQuestionsIds();
+                if (failedIds == null) {
+                    failedIds = new ArrayList<>();
+                }
+                failedIds.add(questionId);
+                run.setFailedQuestionsIds(failedIds);
+                
+                runRepository.save(run);
+                return null;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.error("记录失败问题时出错: runId={}, questionId={}", run.getId(), questionId, e);
+                throw e;
+            }
+        });
     }
     
     /**
@@ -987,151 +1107,210 @@ public class AnswerGenerationTask {
     /**
      * 更新运行进度
      */
-    @Transactional
     public void updateRunProgress(ModelAnswerRun run, int completedQuestions, int failedQuestions, int totalQuestions) {
-        // 更新运行进度信息
-        run.setLastProcessedQuestionId(null);
-        run.setLastProcessedQuestionIndex(-1);
-        run.setLastActivityTime(LocalDateTime.now());
-        
-        run.setCompletedQuestionsCount(completedQuestions);
-        run.setFailedQuestionsCount(failedQuestions);
-        
-        // 计算进度百分比
-        BigDecimal progressPercentage = BigDecimal.valueOf((double) completedQuestions / totalQuestions * 100)
-                .setScale(2, java.math.RoundingMode.HALF_UP);
-        run.setProgressPercentage(progressPercentage);
-        
-        runRepository.save(run);
-        
-        // 发送WebSocket进度更新通知
-        sendRunProgressNotification(run, progressPercentage.doubleValue(), 
-                "已处理 " + completedQuestions + "/" + totalQuestions + " 个问题");
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.execute(status -> {
+            try {
+                // 更新运行进度信息
+                run.setLastProcessedQuestionId(null);
+                run.setLastProcessedQuestionIndex(-1);
+                run.setLastActivityTime(LocalDateTime.now());
+                
+                run.setCompletedQuestionsCount(completedQuestions);
+                run.setFailedQuestionsCount(failedQuestions);
+                
+                // 计算进度百分比
+                BigDecimal progressPercentage = BigDecimal.valueOf((double) completedQuestions / totalQuestions * 100)
+                        .setScale(2, java.math.RoundingMode.HALF_UP);
+                run.setProgressPercentage(progressPercentage);
+                
+                runRepository.save(run);
+                
+                // 发送WebSocket进度更新通知
+                sendRunProgressNotification(run, progressPercentage.doubleValue(), 
+                        "已处理 " + completedQuestions + "/" + totalQuestions + " 个问题");
+                return null;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.error("更新运行{}进度失败", run.getId(), e);
+                throw e;
+            }
+        });
     }
     
     /**
      * 更新运行状态
      */
-    @Transactional
     public void updateRunStatus(ModelAnswerRun run, RunStatus status, String errorMessage) {
-        run.setStatus(status);
-        run.setLastActivityTime(LocalDateTime.now());
-        
-        if (errorMessage != null) {
-            run.setErrorMessage(errorMessage);
-        }
-        
-        if (status == RunStatus.COMPLETED) {
-            run.setProgressPercentage(BigDecimal.valueOf(100));
-        }
-        
-        runRepository.saveAndFlush(run);
-        entityManager.clear(); // 清除一级缓存，确保后续查询能获取最新状态
-        
-        // 发送状态变更通知
-        webSocketService.sendStatusChangeMessage(run.getId(), status.name(), 
-                "运行状态变更为: " + status.name());
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.execute(transStatus -> {
+            try {
+                run.setStatus(status);
+                run.setLastActivityTime(LocalDateTime.now());
+                
+                if (errorMessage != null) {
+                    run.setErrorMessage(errorMessage);
+                }
+                
+                if (status == RunStatus.COMPLETED) {
+                    run.setProgressPercentage(BigDecimal.valueOf(100));
+                }
+                
+                runRepository.saveAndFlush(run);
+                
+                // 发送状态变更通知
+                webSocketService.sendStatusChangeMessage(run.getId(), status.name(), 
+                        "运行状态变更为: " + status.name());
+                return null;
+            } catch (Exception e) {
+                transStatus.setRollbackOnly();
+                logger.error("更新运行{}状态失败", run.getId(), e);
+                throw e;
+            }
+        });
     }
     
     /**
      * 更新批次状态
      */
-    @Transactional
     public void updateBatchStatus(AnswerGenerationBatch batch, BatchStatus status, String errorMessage) {
-        batch.setStatus(status);
-        batch.setLastActivityTime(LocalDateTime.now());
-        
-        if (errorMessage != null) {
-            batch.setErrorMessage(errorMessage);
-        }
-        
-        if (status == BatchStatus.COMPLETED) {
-            batch.setCompletedAt(LocalDateTime.now());
-            batch.setProgressPercentage(BigDecimal.valueOf(100));
-        }
-        
-        batchRepository.saveAndFlush(batch);
-        entityManager.clear(); // 清除一级缓存，确保后续查询能获取最新状态
-        
-        // 同步状态到Redis
-        if (batchStateManager != null) {
-            batchStateManager.setBatchState(batch.getId(), status.name());
-            
-            // 根据状态设置中断标志
-            if (status == BatchStatus.PAUSED) {
-                batchStateManager.setInterruptFlag(batch.getId(), true);
-            } else {
-                batchStateManager.setInterruptFlag(batch.getId(), false);
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.execute(transStatus -> {
+            try {
+                batch.setStatus(status);
+                batch.setLastActivityTime(LocalDateTime.now());
+                
+                if (errorMessage != null) {
+                    batch.setErrorMessage(errorMessage);
+                }
+                
+                if (status == BatchStatus.COMPLETED) {
+                    batch.setCompletedAt(LocalDateTime.now());
+                    batch.setProgressPercentage(BigDecimal.valueOf(100));
+                }
+                
+                batchRepository.saveAndFlush(batch);
+                
+                // 同步状态到Redis
+                if (batchStateManager != null) {
+                    batchStateManager.setBatchState(batch.getId(), status.name());
+                    
+                    // 根据状态设置中断标志
+                    if (status == BatchStatus.PAUSED) {
+                        batchStateManager.setInterruptFlag(batch.getId(), true);
+                    } else {
+                        batchStateManager.setInterruptFlag(batch.getId(), false);
+                    }
+                    
+                    logger.debug("批次{}状态已同步到Redis: {}", batch.getId(), status);
+                }
+                
+                // 发送批次状态变更通知
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("batchId", batch.getId());
+                payload.put("status", status.name());
+                payload.put("timestamp", System.currentTimeMillis());
+                
+                if (errorMessage != null) {
+                    payload.put("error", errorMessage);
+                }
+                
+                MessageType messageType = (status == BatchStatus.COMPLETED) ? 
+                        MessageType.TASK_COMPLETED : MessageType.STATUS_CHANGE;
+                
+                webSocketService.sendBatchMessage(batch.getId(), messageType, payload);
+                
+                logger.info("批次{}状态已更新为: {}", batch.getId(), status);
+                return null;
+            } catch (Exception e) {
+                transStatus.setRollbackOnly();
+                logger.error("更新批次{}状态失败", batch.getId(), e);
+                throw e;
             }
-            
-            logger.debug("批次{}状态已同步到Redis: {}", batch.getId(), status);
-        }
-        
-        // 发送批次状态变更通知
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("batchId", batch.getId());
-        payload.put("status", status.name());
-        payload.put("timestamp", System.currentTimeMillis());
-        
-        if (errorMessage != null) {
-            payload.put("error", errorMessage);
-        }
-        
-        MessageType messageType = (status == BatchStatus.COMPLETED) ? 
-                MessageType.TASK_COMPLETED : MessageType.STATUS_CHANGE;
-        
-        webSocketService.sendBatchMessage(batch.getId(), messageType, payload);
-        
-        logger.info("批次{}状态已更新为: {}", batch.getId(), status);
+        });
     }
     
     /**
      * 检查并更新批次完成状态
      */
-    @Transactional
     public boolean checkAndUpdateBatchCompletion(AnswerGenerationBatch batch) {
-        List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batch.getId());
-        
-        // 检查所有运行是否完成
-        boolean allCompleted = runs.stream()
-                .allMatch(run -> run.getStatus() == RunStatus.COMPLETED || run.getStatus() == RunStatus.FAILED);
-        
-        if (allCompleted) {
-            // 计算批次总体进度
-            BigDecimal totalProgress = runs.stream()
-                    .map(ModelAnswerRun::getProgressPercentage)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(runs.size()), 2, java.math.RoundingMode.HALF_UP);
-            
-            batch.setProgressPercentage(totalProgress);
-            
-            // 检查是否存在失败的运行
-            boolean hasFailed = runs.stream().anyMatch(run -> run.getStatus() == RunStatus.FAILED);
-            
-            // 检查当前批次状态，避免从PENDING直接变为COMPLETED
-            if (batch.getStatus() == BatchStatus.PENDING) {
-                logger.warn("批次{}状态异常: 从PENDING直接尝试变为COMPLETED", batch.getId());
-                updateBatchStatus(batch, BatchStatus.GENERATING_ANSWERS, null);
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        return txTemplate.execute(status -> {
+            try {
+                List<ModelAnswerRun> runs = runRepository.findByAnswerGenerationBatchId(batch.getId());
                 
-                // 添加延迟确保状态能被正确更新
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                // 检查所有运行是否完成
+                boolean allCompleted = runs.stream()
+                        .allMatch(run -> run.getStatus() == RunStatus.COMPLETED || run.getStatus() == RunStatus.FAILED);
+                
+                if (allCompleted) {
+                    // 计算批次总体进度 - 添加空值检查
+                    BigDecimal totalProgress = BigDecimal.ZERO;
+                    int validRuns = 0;
+                    
+                    // 遍历所有运行，统计有效进度值
+                    for (ModelAnswerRun run : runs) {
+                        BigDecimal progress = run.getProgressPercentage();
+                        if (progress != null) {
+                            totalProgress = totalProgress.add(progress);
+                            validRuns++;
+                        }
+                    }
+                    
+                    // 只有当有有效运行时才计算平均值
+                    if (validRuns > 0) {
+                        totalProgress = totalProgress.divide(
+                            BigDecimal.valueOf(validRuns), 
+                            2, 
+                            java.math.RoundingMode.HALF_UP
+                        );
+                    } else {
+                        // 如果没有有效进度，设置默认值
+                        totalProgress = BigDecimal.valueOf(100.00);
+                        logger.warn("批次{}没有有效的进度数据，设置默认进度为100%", batch.getId());
+                    }
+                    
+                    batch.setProgressPercentage(totalProgress);
+                    
+                    // 检查是否存在失败的运行
+                    boolean hasFailed = runs.stream().anyMatch(run -> run.getStatus() == RunStatus.FAILED);
+                    
+                    // 检查当前批次状态，避免从PENDING直接变为COMPLETED
+                    if (batch.getStatus() == BatchStatus.PENDING) {
+                        logger.warn("批次{}状态异常: 从PENDING直接尝试变为COMPLETED", batch.getId());
+                        updateBatchStatus(batch, BatchStatus.GENERATING_ANSWERS, null);
+                        
+                        // 添加延迟确保状态能被正确更新
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        
+                        // 重新获取批次状态
+                        AnswerGenerationBatch refreshedBatch = batchRepository.findById(batch.getId()).orElse(batch);
+                        
+                        if (hasFailed) {
+                            updateBatchStatus(refreshedBatch, BatchStatus.FAILED, "部分运行失败");
+                        } else {
+                            updateBatchStatus(refreshedBatch, BatchStatus.COMPLETED, null);
+                        }
+                    } else {
+                        if (hasFailed) {
+                            updateBatchStatus(batch, BatchStatus.FAILED, "部分运行失败");
+                        } else {
+                            updateBatchStatus(batch, BatchStatus.COMPLETED, null);
+                        }
+                    }
                 }
                 
-                // 重新获取批次状态
-                batch = batchRepository.findById(batch.getId()).orElse(batch);
+                return allCompleted;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.error("检查批次{}完成状态失败", batch.getId(), e);
+                throw e;
             }
-            
-            if (hasFailed) {
-                updateBatchStatus(batch, BatchStatus.FAILED, "部分运行失败");
-            } else {
-                updateBatchStatus(batch, BatchStatus.COMPLETED, null);
-            }
-        }
-        
-        return allCompleted;
+        });
     }
     
     /**
@@ -1252,5 +1431,76 @@ public class AnswerGenerationTask {
         } else {
             batchStateManager.setInterruptFlag(batchId, false);
         }
+    }
+
+    /**
+     * 根据题型获取对应的提示词
+     */
+    private AnswerQuestionTypePrompt getQuestionTypePrompt(AnswerGenerationBatch batch, QuestionType questionType) {
+        if (questionType == null) {
+            logger.warn("题型为null，无法获取对应提示词");
+            return null;
+        }
+        
+        AnswerQuestionTypePrompt prompt = null;
+        
+        // 首先尝试从批次中获取预设的题型提示词
+        switch (questionType) {
+            case SINGLE_CHOICE:
+                prompt = batch.getSingleChoicePrompt();
+                break;
+            case MULTIPLE_CHOICE:
+                prompt = batch.getMultipleChoicePrompt();
+                break;
+            case SIMPLE_FACT:
+                prompt = batch.getSimpleFactPrompt();
+                break;
+            case SUBJECTIVE:
+                prompt = batch.getSubjectivePrompt();
+                break;
+            default:
+                logger.warn("未知题型: {}", questionType);
+                return null;
+        }
+        
+        // 如果批次没有预设提示词，则从仓库中查询激活的提示词
+        if (prompt == null) {
+            logger.info("批次{}未设置{}题型提示词，尝试从仓库获取", batch.getId(), questionType);
+            List<AnswerQuestionTypePrompt> prompts = answerQuestionTypePromptRepository
+                .findByQuestionTypeAndIsActiveTrueAndDeletedAtIsNull(questionType);
+            
+            if (!prompts.isEmpty()) {
+                prompt = prompts.get(0);
+                logger.info("从仓库获取到{}题型的提示词：ID={}，名称={}", 
+                    questionType, prompt.getId(), prompt.getName());
+                
+                // 将提示词设置到批次对象中，提高后续使用效率
+                switch (questionType) {
+                    case SINGLE_CHOICE:
+                        batch.setSingleChoicePrompt(prompt);
+                        break;
+                    case MULTIPLE_CHOICE:
+                        batch.setMultipleChoicePrompt(prompt);
+                        break;
+                    case SIMPLE_FACT:
+                        batch.setSimpleFactPrompt(prompt);
+                        break;
+                    case SUBJECTIVE:
+                        batch.setSubjectivePrompt(prompt);
+                        break;
+                }
+                
+                // 更新批次对象到数据库
+                try {
+                    batchRepository.save(batch);
+                } catch (Exception e) {
+                    logger.warn("保存批次{}的题型提示词失败: {}", batch.getId(), e.getMessage());
+                }
+            } else {
+                logger.warn("在仓库中未找到{}题型的提示词", questionType);
+            }
+        }
+        
+        return prompt;
     }
 } 

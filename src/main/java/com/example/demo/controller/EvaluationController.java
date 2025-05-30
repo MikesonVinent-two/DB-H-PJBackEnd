@@ -53,7 +53,7 @@ public class EvaluationController {
         
         logger.info("接收到评测请求，回答ID: {}, 评测者ID: {}, 用户ID: {}", answerId, evaluatorId, userId);
         
-        LlmAnswer answer = llmAnswerRepository.findById(answerId)
+        LlmAnswer answer = llmAnswerRepository.findByIdWithQuestion(answerId)
                 .orElseThrow(() -> new IllegalArgumentException("找不到指定的回答: " + answerId));
         
         Evaluation evaluation = evaluationService.evaluateAnswer(answer, evaluatorId, userId);
@@ -71,7 +71,7 @@ public class EvaluationController {
         logger.info("接收到批量评测请求，回答数量: {}, 评测者ID: {}, 用户ID: {}",
                 request.getAnswerIds().size(), request.getEvaluatorId(), request.getUserId());
         
-        List<LlmAnswer> answers = llmAnswerRepository.findAllById(request.getAnswerIds());
+        List<LlmAnswer> answers = llmAnswerRepository.findAllByIdWithQuestions(request.getAnswerIds());
         
         if (answers.size() != request.getAnswerIds().size()) {
             return ResponseEntity.badRequest().build();

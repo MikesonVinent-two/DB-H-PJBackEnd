@@ -45,11 +45,11 @@ public class EvaluationRepository {
             "evaluation_time, evaluation_status, error_message, evaluation_results, prompt_used, comments, raw_evaluator_response, " +
             "created_by_user_id, created_change_log_id, creation_time, completion_time, raw_score, normalized_score, weighted_score, " +
             "score_type, scoring_method) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::json, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE evaluations SET llm_answer_id=?, evaluator_id=?, evaluation_run_id=?, evaluation_type=?, overall_score=?, " +
-            "evaluation_time=?, evaluation_status=?, error_message=?, evaluation_results=?::json, prompt_used=?, comments=?, " +
+            "evaluation_time=?, evaluation_status=?, error_message=?, evaluation_results=?, prompt_used=?, comments=?, " +
             "raw_evaluator_response=?, created_by_user_id=?, created_change_log_id=?, creation_time=?, completion_time=?, " +
             "raw_score=?, normalized_score=?, weighted_score=?, score_type=?, scoring_method=? " +
             "WHERE id=?";

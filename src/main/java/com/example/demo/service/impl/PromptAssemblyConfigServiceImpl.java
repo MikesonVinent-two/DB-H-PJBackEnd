@@ -12,6 +12,7 @@ import com.example.demo.repository.jdbc.ChangeLogRepository;
 import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.PromptAssemblyConfigService;
+import com.example.demo.exception.EntityNotFoundException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.EntityNotFoundException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;

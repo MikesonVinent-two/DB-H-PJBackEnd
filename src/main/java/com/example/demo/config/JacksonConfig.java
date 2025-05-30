@@ -16,13 +16,12 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.datatype.hibernate6.Hibernate6Module;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 
 import java.io.IOException;
 
 /**
- * Jackson配置类，用于处理枚举的大小写敏感问题及Hibernate延迟加载
+ * Jackson配置类，用于处理枚举的大小写敏感问题
  */
 @Configuration
 public class JacksonConfig {
@@ -30,13 +29,6 @@ public class JacksonConfig {
     @Bean
     public ObjectMapper objectMapper(Jackson2ObjectMapperBuilder builder) {
         ObjectMapper objectMapper = builder.createXmlMapper(false).build();
-        
-        // 注册Hibernate6Module，处理延迟加载的实体
-        Hibernate6Module hibernate6Module = new Hibernate6Module();
-        // 配置不要序列化延迟加载的关联
-        hibernate6Module.configure(Hibernate6Module.Feature.FORCE_LAZY_LOADING, false);
-        hibernate6Module.configure(Hibernate6Module.Feature.SERIALIZE_IDENTIFIER_FOR_LAZY_NOT_LOADED_OBJECTS, true);
-        objectMapper.registerModule(hibernate6Module);
         
         // 启用对单引号的支持
         objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);

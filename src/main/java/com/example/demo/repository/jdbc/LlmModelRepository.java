@@ -36,10 +36,10 @@ public class LlmModelRepository {
 
     private static final String SQL_INSERT = 
             "INSERT INTO llm_models (name, provider, version, description, api_url, api_key, api_type, model_parameters, created_at, created_by_user_id, created_change_log_id, deleted_at) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?::json, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
-            "UPDATE llm_models SET name=?, provider=?, version=?, description=?, api_url=?, api_key=?, api_type=?, model_parameters=?::json, created_by_user_id=?, created_change_log_id=?, deleted_at=? " +
+            "UPDATE llm_models SET name=?, provider=?, version=?, description=?, api_url=?, api_key=?, api_type=?, model_parameters=?, created_by_user_id=?, created_change_log_id=?, deleted_at=? " +
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
@@ -111,7 +111,7 @@ public class LlmModelRepository {
             ps.setString(6, model.getApiKey());
             ps.setString(7, model.getApiType());
             
-            // 将模型参数转换为JSON字符?
+            // 将模型参数转换为JSON字符串
             if (model.getModelParameters() != null) {
                 try {
                     ps.setString(8, objectMapper.writeValueAsString(model.getModelParameters()));
@@ -206,7 +206,7 @@ public class LlmModelRepository {
      * 根据模型名称查找
      *
      * @param name 模型名称
-     * @return 匹配的模型列?
+     * @return 匹配的模型列表
      */
     public List<LlmModel> findByName(String name) {
         return jdbcTemplate.query(
@@ -217,10 +217,10 @@ public class LlmModelRepository {
     }
     
     /**
-     * 根据提供商查?
+     * 根据提供商查找
      *
-     * @param provider 提供商名?
-     * @return 匹配的模型列?
+     * @param provider 提供商名称
+     * @return 匹配的模型列表
      */
     public List<LlmModel> findByProvider(String provider) {
         return jdbcTemplate.query(
@@ -231,7 +231,7 @@ public class LlmModelRepository {
     }
     
     /**
-     * 查找所有未删除的模?
+     * 查找所有未删除的模型
      *
      * @return 未删除的模型列表
      */
@@ -242,9 +242,9 @@ public class LlmModelRepository {
     /**
      * 根据提供商和版本查找
      *
-     * @param provider 提供商名?
-     * @param version 版本?
-     * @return 匹配的模型列?
+     * @param provider 提供商名称
+     * @param version 版本
+     * @return 匹配的模型列表
      */
     public List<LlmModel> findByProviderAndVersion(String provider, String version) {
         return jdbcTemplate.query(
@@ -255,7 +255,7 @@ public class LlmModelRepository {
     }
     
     /**
-     * 检查指定名称和API URL的模型是否存?
+     * 检查指定名称和API URL的模型是否存在
      *
      * @param name 模型名称
      * @param apiUrl API URL
@@ -331,7 +331,7 @@ public class LlmModelRepository {
                 model.setDeletedAt(deletedAt.toLocalDateTime());
             }
             
-            // 设置创建者用?
+            // 设置创建者用户
             Long createdByUserId = rs.getLong("created_by_user_id");
             if (!rs.wasNull()) {
                 UserRepository.findById(createdByUserId).ifPresent(user -> model.setCreatedByUser(user));

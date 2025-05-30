@@ -58,13 +58,14 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
-import jakarta.persistence.EntityNotFoundException;
+import com.example.demo.exception.EntityNotFoundException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1940,7 +1941,7 @@ public class EvaluationServiceImpl implements EvaluationService {
         
         try {
             // 获取LLM回答
-            LlmAnswer llmAnswer = llmAnswerRepository.findById(llmAnswerId)
+            LlmAnswer llmAnswer = llmAnswerRepository.findByIdWithQuestion(llmAnswerId)
                     .orElseThrow(() -> new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId));
             
             // 获取评测者信息
@@ -2746,11 +2747,15 @@ public class EvaluationServiceImpl implements EvaluationService {
         // 处理每个模型运行
         for (ModelAnswerRun modelRun : modelRuns) {
             // 获取该运行下的所有回答
-            List<LlmAnswer> allAnswers = llmAnswerRepository.findByModelAnswerRunId(modelRun.getId());
+            List<LlmAnswer> allAnswers = llmAnswerRepository.findByModelAnswerRunIdWithQuestions(modelRun.getId());
             
             // 过滤出客观题回答
             List<LlmAnswer> objectiveAnswers = allAnswers.stream()
                     .filter(answer -> {
+                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                            return false;
+                        }
                         StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
                         QuestionType type = question.getQuestionType();
                         return type == QuestionType.SINGLE_CHOICE || 
@@ -2796,6 +2801,10 @@ public class EvaluationServiceImpl implements EvaluationService {
                     repeatIndexScoreSum.put(repeatIndex, repeatIndexScoreSum.get(repeatIndex).add(score));
                     
                     // 更新按repeatIndex分组的问题类型统计
+                    if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                        logger.warn("无法获取回答ID: {}的问题类型，因为关联的标准问题为空", answer.getId());
+                        continue;
+                    }
                     QuestionType type = answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType();
                     Map<QuestionType, Integer> indexTypeCount = repeatIndexTypeCount.get(repeatIndex);
                     Map<QuestionType, BigDecimal> indexTypeScoreSum = repeatIndexTypeScoreSum.get(repeatIndex);
@@ -2898,6 +2907,17 @@ public class EvaluationServiceImpl implements EvaluationService {
     public BigDecimal evaluateSingleObjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
                                         Map<QuestionType, Integer> typeCount, 
                                         Map<QuestionType, BigDecimal> typeScoreSum) {
+        // 确保加载完整的问题信息
+        answer = getLlmAnswerWithQuestions(answer);
+        
+        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+            // 获取详细的关联信息，以便更好地诊断问题
+            Map<String, Object> relations = checkAnswerRelations(answer.getId());
+            logger.warn("无法评测回答ID: {}，因为其关联的标准问题为空。关联信息: {}", answer.getId(), relations);
+            // 返回默认评分0
+            return BigDecimal.ZERO;
+        }
+
         StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
         QuestionType type = question.getQuestionType();
         
@@ -3152,12 +3172,17 @@ public class EvaluationServiceImpl implements EvaluationService {
         try {
             // 获取所有需要评测的主观题回答
                                     // 获取该批次的所有回答
-                        List<LlmAnswer> answers = llmAnswerRepository.findByBatchId(batchId);
+                        List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
                         
                         // 过滤出主观题的回答
                         answers = answers.stream()
-                                .filter(answer -> answer.getDatasetQuestionMapping()
-                                        .getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE)
+                                .filter(answer -> {
+                                    if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                                        logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                                        return false;
+                                    }
+                                    return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
+                                })
                                 .collect(Collectors.toList());
             
             if (answers.isEmpty()) {
@@ -3358,6 +3383,14 @@ public class EvaluationServiceImpl implements EvaluationService {
     public BigDecimal evaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
                                         List<EvaluationCriterion> criteria) {
         try {
+            // 确保加载完整的问题信息
+            answer = getLlmAnswerWithQuestions(answer);
+            
+            if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                logger.warn("无法评测回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                return BigDecimal.ZERO;
+            }
+            
             StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
             
             // 确保是主观题
@@ -3471,6 +3504,14 @@ public class EvaluationServiceImpl implements EvaluationService {
     public BigDecimal reEvaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
                                         List<EvaluationCriterion> criteria) {
         try {
+            // 确保加载完整的问题信息
+            answer = getLlmAnswerWithQuestions(answer);
+            
+            if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                logger.warn("无法评测回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                return BigDecimal.ZERO;
+            }
+            
             StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
             
             // 确保是主观题
@@ -3587,6 +3628,15 @@ public class EvaluationServiceImpl implements EvaluationService {
             LlmAnswer llmAnswer = llmAnswerRepository.findById(llmAnswerId)
                     .orElseThrow(() -> new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId));
             
+            // 确保加载完整的问题信息
+            llmAnswer = getLlmAnswerWithQuestions(llmAnswer);
+            
+            // 验证数据完整性
+            if (llmAnswer.getDatasetQuestionMapping() == null || llmAnswer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                logger.warn("回答ID: {}关联的标准问题为空，无法进行评测", llmAnswerId);
+                throw new IllegalStateException("回答关联的标准问题为空，无法进行评测");
+            }
+            
             // 验证回答是否为主观题
             StandardQuestion question = llmAnswer.getDatasetQuestionMapping().getStandardQuestion();
             if (question.getQuestionType() != QuestionType.SUBJECTIVE) {
@@ -3661,11 +3711,15 @@ public class EvaluationServiceImpl implements EvaluationService {
         // 处理每个模型运行
         for (ModelAnswerRun modelRun : modelRuns) {
             // 获取该运行下的所有回答
-            List<LlmAnswer> allAnswers = llmAnswerRepository.findByModelAnswerRunId(modelRun.getId());
+            List<LlmAnswer> allAnswers = llmAnswerRepository.findByModelAnswerRunIdWithQuestions(modelRun.getId());
             
             // 过滤出主观题回答
             List<LlmAnswer> subjectiveAnswers = allAnswers.stream()
                     .filter(answer -> {
+                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                            return false;
+                        }
                         StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
                         return question.getQuestionType() == QuestionType.SUBJECTIVE;
                     })
@@ -3732,5 +3786,53 @@ public class EvaluationServiceImpl implements EvaluationService {
         
         logger.info("批次主观题重新评测完成，总计: {}, 成功: {}, 失败: {}", totalAnswers, successCount, failedCount);
         return result;
+    }
+
+    /**
+     * 获取带有完整问题信息的LlmAnswer对象
+     * @param answer 原始LlmAnswer对象
+     * @return 带有完整问题信息的LlmAnswer对象
+     */
+    private LlmAnswer getLlmAnswerWithQuestions(LlmAnswer answer) {
+        if (answer == null) {
+            return null;
+        }
+        
+        try {
+            // 使用findByIdWithQuestion方法重新加载以确保有完整的问题信息
+            return llmAnswerRepository.findByIdWithQuestion(answer.getId())
+                    .orElse(answer); // 如果找不到，则返回原始对象
+        } catch (Exception e) {
+            logger.warn("无法加载完整的问题信息，回答ID: {}, 错误: {}", answer.getId(), e.getMessage());
+            return answer;
+        }
+    }
+
+    /**
+     * 检查回答对象的关联情况
+     * @param answerId 回答ID
+     * @return 关联信息
+     */
+    private Map<String, Object> checkAnswerRelations(Long answerId) {
+        logger.info("正在检查回答ID: {}的关联情况", answerId);
+        Map<String, Object> relations = llmAnswerRepository.checkAnswerRelations(answerId);
+        
+        if (relations.isEmpty()) {
+            logger.warn("回答ID: {}不存在", answerId);
+            return Collections.emptyMap();
+        }
+        
+        boolean hasDqm = relations.get("dqm_exists") != null && ((Boolean)relations.get("dqm_exists"));
+        boolean hasSq = relations.get("sq_exists") != null && ((Boolean)relations.get("sq_exists"));
+        
+        if (!hasDqm) {
+            logger.warn("回答ID: {}的dataset_question_mapping不存在", answerId);
+        } else if (!hasSq) {
+            logger.warn("回答ID: {}的standard_question不存在", answerId);
+        } else {
+            logger.info("回答ID: {}的所有关联对象正常", answerId);
+        }
+        
+        return relations;
     }
 } 

@@ -1,41 +1,33 @@
 package com.example.demo.converter;
 
 import com.example.demo.entity.jdbc.EntityType;
-import jakarta.persistence.AttributeConverter;
-import jakarta.persistence.Converter;
+import org.springframework.stereotype.Component;
 
 /**
  * EntityType枚举与数据库字符串之间的自动转换器
  * 用于解决数据库存储小写下划线形式而Java代码使用大写枚举的问题
  */
-@Converter(autoApply = true)
-public class EntityTypeConverter implements AttributeConverter<EntityType, String> {
+@Component
+public class EntityTypeConverter {
 
-    @Override
-    public String convertToDatabaseColumn(EntityType attribute) {
-        if (attribute == null) {
-            return null;
-        }
-        return attribute.getValue(); // 使用枚举的getValue()获取小写下划线形式
-    }
-
-    @Override
+    // 从数据库值转换到枚举
     public EntityType convertToEntityAttribute(String dbData) {
         if (dbData == null) {
             return null;
         }
-        // 查找匹配的枚举值
-        for (EntityType type : EntityType.values()) {
-            if (type.getValue().equals(dbData)) {
-                return type;
-            }
+        return EntityType.valueOf(dbData.toUpperCase());
+    }
+    
+    // 从枚举转换到数据库值
+    public String convertToDatabaseColumn(EntityType attribute) {
+        if (attribute == null) {
+            return null;
         }
-        // 如果找不到精确匹配，尝试不区分大小写的匹配
-        for (EntityType type : EntityType.values()) {
-            if (type.getValue().equalsIgnoreCase(dbData) || type.name().equalsIgnoreCase(dbData)) {
-                return type;
-            }
-        }
-        throw new IllegalArgumentException("未知的EntityType值: " + dbData);
+        return attribute.name().toLowerCase();
+    }
+    
+    // 为RowMapper提供方便的转换方法
+    public EntityType fromString(String value) {
+        return convertToEntityAttribute(value);
     }
 } 

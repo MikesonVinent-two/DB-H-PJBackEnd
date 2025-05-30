@@ -224,7 +224,7 @@ public class LLMModelController {
             } catch (Exception e) {
                 // 如果标准问题找不到，尝试在数据集映射中查找
                 String mappingQuery = "SELECT sq.question_text, sq.question_type, sq.difficulty " +
-                                      "FROM dataset_question_mappings dqm " +
+                                      "FROM dataset_question_mapping dqm " +
                                       "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
                                       "WHERE dqm.id = ?";
                 questionInfo = jdbcTemplate.queryForMap(mappingQuery, questionId);

@@ -21,8 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.demo.dto.TagDTO;
 import com.example.demo.entity.jdbc.Tag;
 import com.example.demo.service.TagService;
-
-import jakarta.persistence.EntityNotFoundException;
+import com.example.demo.exception.EntityNotFoundException;
 
 @RestController
 @RequestMapping("/tags")

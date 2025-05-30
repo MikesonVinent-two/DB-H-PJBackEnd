@@ -469,4 +469,40 @@ public class AnswerTagPromptRepository {
             return prompt;
         }
     }
+
+    /**
+     * 根据标签ID查询激活状态的提示词
+     * 
+     * @param tagId 标签ID
+     * @return 激活状态的提示词列表，按优先级排序
+     */
+    public List<AnswerTagPrompt> findActivePromptsByTagId(Long tagId) {
+        String sql = "SELECT * FROM answer_tag_prompts " +
+                     "WHERE tag_id = ? AND is_active = true AND deleted_at IS NULL " +
+                     "ORDER BY prompt_priority ASC";
+                     
+        return jdbcTemplate.query(sql, (rs, rowNum) -> mapAnswerTagPrompt(rs), tagId);
+    }
+    
+    /**
+     * 行映射器辅助方法
+     */
+    private AnswerTagPrompt mapAnswerTagPrompt(ResultSet rs) throws SQLException {
+        AnswerTagPrompt prompt = new AnswerTagPrompt();
+        prompt.setId(rs.getLong("id"));
+        prompt.setName(rs.getString("name"));
+        prompt.setPromptTemplate(rs.getString("prompt_template"));
+        prompt.setDescription(rs.getString("description"));
+        prompt.setPromptPriority(rs.getInt("prompt_priority"));
+        
+        // 设置标签ID - 创建Tag对象并设置ID
+        Long tagId = rs.getLong("tag_id");
+        if (!rs.wasNull()) {
+            Tag tag = new Tag();
+            tag.setId(tagId);
+            prompt.setTag(tag);
+        }
+        
+        return prompt;
+    }
 } 

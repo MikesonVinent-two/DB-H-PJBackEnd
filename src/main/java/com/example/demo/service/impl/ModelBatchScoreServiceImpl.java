@@ -342,7 +342,7 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                 "SELECT la.id, la.repeat_index " +
                 "FROM llm_answers la " +
                 "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
-                "JOIN dataset_question_mappings dqm ON la.dataset_question_mapping_id = dqm.id " +
+                "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
                 "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
                 "WHERE mar.llm_model_id = ? AND mar.answer_generation_batch_id = ? " +
                 "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE')";
@@ -490,7 +490,7 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                 "SELECT la.id, la.repeat_index " +
                 "FROM llm_answers la " +
                 "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
-                "JOIN dataset_question_mappings dqm ON la.dataset_question_mapping_id = dqm.id " +
+                "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
                 "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
                 "WHERE mar.llm_model_id = ? AND mar.answer_generation_batch_id = ? " +
                 "AND sq.question_type IN ('SUBJECTIVE', 'SIMPLE_FACT')";

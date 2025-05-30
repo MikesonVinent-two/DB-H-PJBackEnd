@@ -35,11 +35,11 @@ public class RawQuestionRepository {
     private static final String SQL_INSERT = 
             "INSERT INTO RAW_QUESTIONS (TITLE, CONTENT, SOURCE_URL, SOURCE_SITE, CRAWL_TIME, " +
             "TAGS, OTHER_METADATA) " +
-            "VALUES (?, ?, ?, ?, ?, ?::json, ?::json)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE RAW_QUESTIONS SET TITLE=?, CONTENT=?, SOURCE_URL=?, SOURCE_SITE=?, " +
-            "CRAWL_TIME=?, TAGS=?::json, OTHER_METADATA=?::json " +
+            "CRAWL_TIME=?, TAGS=?, OTHER_METADATA=? " +
             "WHERE ID=?";
     
     private static final String SQL_FIND_BY_ID = 

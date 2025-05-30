@@ -38,12 +38,12 @@ public class CrowdsourcedAnswerRepository {
             "INSERT INTO CROWDSOURCED_ANSWERS (STANDARD_QUESTION_ID, USER_ID, ANSWER_TEXT, " +
             "SUBMISSION_TIME, TASK_BATCH_ID, QUALITY_REVIEW_STATUS, REVIEWED_BY_USER_ID, " +
             "REVIEW_TIME, REVIEW_FEEDBACK, OTHER_METADATA) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::json)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE CROWDSOURCED_ANSWERS SET STANDARD_QUESTION_ID=?, USER_ID=?, ANSWER_TEXT=?, " +
             "SUBMISSION_TIME=?, TASK_BATCH_ID=?, QUALITY_REVIEW_STATUS=?, REVIEWED_BY_USER_ID=?, " +
-            "REVIEW_TIME=?, REVIEW_FEEDBACK=?, OTHER_METADATA=?::json WHERE ID=?";
+            "REVIEW_TIME=?, REVIEW_FEEDBACK=?, OTHER_METADATA=? WHERE ID=?";
     
     private static final String SQL_FIND_BY_ID = 
             "SELECT * FROM CROWDSOURCED_ANSWERS WHERE ID=?";
