@@ -36,7 +36,7 @@ public class EvaluationRunScheduler {
     @Scheduled(fixedRate = 60000)
     @Transactional
     public void checkTimeoutRuns() {
-        logger.debug("开始检查超时的评测运行");
+        logger.trace("开始检查超时的评测运行");
         
         LocalDateTime now = LocalDateTime.now();
         List<RunStatus> activeStatuses = Arrays.asList(
@@ -56,7 +56,7 @@ public class EvaluationRunScheduler {
     @Scheduled(fixedRate = 30000)
     @Transactional
     public void checkAutoResumeRuns() {
-        logger.debug("开始检查需要自动恢复的评测运行");
+        logger.trace("开始检查需要自动恢复的评测运行");
         
         LocalDateTime now = LocalDateTime.now();
         List<EvaluationRun> staleRuns = evaluationRunRepository.findStaleRunsForAutoResume(

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,34 @@ public class StandardAnswerController {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             logger.error("创建/更新标准答案失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+    
+    @PutMapping("/{standardQuestionId}")
+    public ResponseEntity<?> updateStandardAnswer(
+            @PathVariable Long standardQuestionId, 
+            @RequestBody StandardAnswerDTO answerDTO) {
+        logger.debug("接收到修改标准答案请求 - 标准问题ID: {}, 用户ID: {}", standardQuestionId, answerDTO.getUserId());
+        try {
+            // 确保DTO中的问题ID与路径参数一致
+            if (answerDTO.getStandardQuestionId() == null) {
+                answerDTO.setStandardQuestionId(standardQuestionId);
+            } else if (!answerDTO.getStandardQuestionId().equals(standardQuestionId)) {
+                return ResponseEntity.badRequest().body("路径参数中的问题ID与请求体中的问题ID不匹配");
+            }
+            
+            // 使用专门的更新方法
+            Object result = standardAnswerService.updateStandardAnswer(standardQuestionId, answerDTO, answerDTO.getUserId());
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("修改标准答案失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            logger.error("修改标准答案失败 - 状态错误", e);
+            return ResponseEntity.status(409).body(e.getMessage());  // 409 Conflict
+        } catch (Exception e) {
+            logger.error("修改标准答案失败 - 服务器错误", e);
             return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
         }
     }

@@ -135,6 +135,126 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
         }
     }
     
+    @Override
+    @Transactional
+    public Object updateStandardAnswer(Long standardQuestionId, StandardAnswerDTO answerDTO, Long userId) {
+        logger.debug("开始更新标准答案 - 标准问题ID: {}, 用户ID: {}", standardQuestionId, userId);
+        
+        // 验证基本参数
+        if (standardQuestionId == null || userId == null) {
+            logger.error("更新标准答案失败 - 标准问题ID或用户ID为空");
+            throw new IllegalArgumentException("标准问题ID和用户ID不能为空");
+        }
+        
+        // 验证答案文本
+        if (answerDTO.getAnswerText() == null || answerDTO.getAnswerText().trim().isEmpty()) {
+            logger.error("更新标准答案失败 - 答案文本为空");
+            throw new IllegalArgumentException("答案文本不能为空");
+        }
+        
+        try {
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    logger.error("更新标准答案失败 - 找不到用户ID: {}", userId);
+                    return new IllegalArgumentException("找不到指定的用户（ID: " + userId + "）");
+                });
+            
+            // 获取标准问题
+            StandardQuestion standardQuestion = standardQuestionRepository.findById(standardQuestionId)
+                .orElseThrow(() -> {
+                    logger.error("更新标准答案失败 - 找不到标准问题ID: {}", standardQuestionId);
+                    return new IllegalArgumentException("找不到指定的标准问题（ID: " + standardQuestionId + "）");
+                });
+            
+            // 确保问题类型已设置
+            if (answerDTO.getQuestionType() == null) {
+                answerDTO.setQuestionType(standardQuestion.getQuestionType());
+            }
+            
+            // 验证问题类型是否匹配
+            if (standardQuestion.getQuestionType() != answerDTO.getQuestionType()) {
+                logger.error("更新标准答案失败 - 问题类型不匹配，期望: {}, 实际: {}", 
+                    standardQuestion.getQuestionType(), answerDTO.getQuestionType());
+                throw new IllegalArgumentException("问题类型不匹配");
+            }
+            
+            // 根据问题类型验证特定字段
+            validateAnswerFields(answerDTO);
+            
+            // 确保标准问题ID已设置
+            answerDTO.setStandardQuestionId(standardQuestionId);
+            
+            // 创建变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.UPDATE_STANDARD_ANSWER);
+            changeLog.setChangedByUser(user);
+            changeLog.setCommitMessage(answerDTO.getCommitMessage() != null ? 
+                answerDTO.getCommitMessage() : "更新标准答案");
+            changeLog.setAssociatedStandardQuestion(standardQuestion);
+            changeLog = changeLogRepository.save(changeLog);
+            
+            // 检查是否存在答案
+            Object existingAnswer = null;
+            switch (standardQuestion.getQuestionType()) {
+                case SINGLE_CHOICE:
+                case MULTIPLE_CHOICE:
+                    existingAnswer = objectiveAnswerRepository
+                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
+                    break;
+                case SIMPLE_FACT:
+                    existingAnswer = simpleAnswerRepository
+                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId)
+                        .orElse(null);
+                    break;
+                case SUBJECTIVE:
+                    existingAnswer = subjectiveAnswerRepository
+                        .findByStandardQuestionIdAndDeletedAtIsNull(standardQuestionId);
+                    break;
+                default:
+                    logger.error("更新标准答案失败 - 不支持的问题类型: {}", standardQuestion.getQuestionType());
+                    throw new IllegalArgumentException("不支持的问题类型: " + standardQuestion.getQuestionType());
+            }
+            
+            // 如果不存在答案，则抛出异常
+            if (existingAnswer == null) {
+                logger.error("更新标准答案失败 - 标准问题ID: {} 没有关联的标准答案", standardQuestionId);
+                throw new IllegalStateException("该标准问题没有关联的标准答案，请先创建");
+            }
+            
+            // 更新相应的答案
+            Object result = null;
+            switch (standardQuestion.getQuestionType()) {
+                case SINGLE_CHOICE:
+                case MULTIPLE_CHOICE:
+                    result = updateObjectiveAnswer(standardQuestion, answerDTO, user, changeLog, 
+                        (StandardObjectiveAnswer) existingAnswer);
+                    break;
+                case SIMPLE_FACT:
+                    result = updateSimpleAnswer(standardQuestion, answerDTO, user, changeLog, 
+                        (StandardSimpleAnswer) existingAnswer);
+                    break;
+                case SUBJECTIVE:
+                    result = updateSubjectiveAnswer(standardQuestion, answerDTO, user, changeLog, 
+                        (StandardSubjectiveAnswer) existingAnswer);
+                    break;
+                default:
+                    logger.error("更新标准答案失败 - 不支持的问题类型: {}", standardQuestion.getQuestionType());
+                    throw new IllegalArgumentException("不支持的问题类型: " + standardQuestion.getQuestionType());
+            }
+            
+            logger.info("成功更新标准答案 - 标准问题ID: {}, 用户ID: {}", standardQuestionId, userId);
+            return result;
+            
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("更新标准答案时发生未预期的错误", e);
+            throw new RuntimeException("更新标准答案时发生错误: " + e.getMessage());
+        }
+    }
+    
     private void validateAnswerFields(StandardAnswerDTO answerDTO) {
         switch (answerDTO.getQuestionType()) {
             case SINGLE_CHOICE:
@@ -301,6 +421,111 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
         }
         
         return answer;
+    }
+    
+    // 更新客观题答案
+    private StandardObjectiveAnswer updateObjectiveAnswer(
+            StandardQuestion standardQuestion,
+            StandardAnswerDTO answerDTO,
+            User user,
+            ChangeLog changeLog,
+            StandardObjectiveAnswer existingAnswer) {
+        
+        // 更新答案字段
+        existingAnswer.setOptions(answerDTO.getOptions());
+        existingAnswer.setCorrectOptionIds(answerDTO.getCorrectIds());
+        existingAnswer.setDeterminedByUser(user);
+        existingAnswer.setDeterminedTime(LocalDateTime.now());
+        existingAnswer.setCreatedChangeLog(changeLog);
+        
+        // 保存更新后的答案
+        existingAnswer = objectiveAnswerRepository.save(existingAnswer);
+        
+        // 记录变更详情
+        List<ChangeLogDetail> details = ChangeLogUtils.compareAndCreateDetails(
+            changeLog,
+            EntityType.STANDARD_OBJECTIVE_ANSWER,
+            existingAnswer.getId(),
+            existingAnswer,
+            existingAnswer,
+            "options", "correctIds"
+        );
+        
+        for (ChangeLogDetail detail : details) {
+            changeLogDetailRepository.save(detail);
+        }
+        
+        return existingAnswer;
+    }
+    
+    // 更新简单题答案
+    private StandardSimpleAnswer updateSimpleAnswer(
+            StandardQuestion standardQuestion,
+            StandardAnswerDTO answerDTO,
+            User user,
+            ChangeLog changeLog,
+            StandardSimpleAnswer existingAnswer) {
+        
+        // 更新答案字段
+        existingAnswer.setAnswerText(answerDTO.getAnswerText());
+        existingAnswer.setAlternativeAnswers(answerDTO.getAlternativeAnswers());
+        existingAnswer.setDeterminedByUser(user);
+        existingAnswer.setDeterminedTime(LocalDateTime.now());
+        existingAnswer.setCreatedChangeLog(changeLog);
+        
+        // 保存更新后的答案
+        existingAnswer = simpleAnswerRepository.save(existingAnswer);
+        
+        // 记录变更详情
+        List<ChangeLogDetail> details = ChangeLogUtils.compareAndCreateDetails(
+            changeLog,
+            EntityType.STANDARD_SIMPLE_ANSWER,
+            existingAnswer.getId(),
+            existingAnswer,
+            existingAnswer,
+            "answerText", "alternativeAnswers"
+        );
+        
+        for (ChangeLogDetail detail : details) {
+            changeLogDetailRepository.save(detail);
+        }
+        
+        return existingAnswer;
+    }
+    
+    // 更新主观题答案
+    private StandardSubjectiveAnswer updateSubjectiveAnswer(
+            StandardQuestion standardQuestion,
+            StandardAnswerDTO answerDTO,
+            User user,
+            ChangeLog changeLog,
+            StandardSubjectiveAnswer existingAnswer) {
+        
+        // 更新答案字段
+        existingAnswer.setAnswerText(answerDTO.getAnswerText());
+        existingAnswer.setScoringGuidance(answerDTO.getScoringGuidance());
+        existingAnswer.setDeterminedByUser(user);
+        existingAnswer.setDeterminedTime(LocalDateTime.now());
+        existingAnswer.setCreatedChangeLog(changeLog);
+        
+        // 保存更新后的答案
+        existingAnswer = subjectiveAnswerRepository.save(existingAnswer);
+        
+        // 记录变更详情
+        List<ChangeLogDetail> details = ChangeLogUtils.compareAndCreateDetails(
+            changeLog,
+            EntityType.STANDARD_SUBJECTIVE_ANSWER,
+            existingAnswer.getId(),
+            existingAnswer,
+            existingAnswer,
+            "answerText", "scoringGuidance"
+        );
+        
+        for (ChangeLogDetail detail : details) {
+            changeLogDetailRepository.save(detail);
+        }
+        
+        return existingAnswer;
     }
     
     @Override

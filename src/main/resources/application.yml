@@ -83,6 +83,7 @@ logging:
     root: INFO
     com.example.demo: DEBUG
     com.example.demo.service.impl.EvaluationServiceImpl: INFO
+    com.example.demo.service.impl.EvaluationRunScheduler: INFO
     com.example.demo.exception: DEBUG
     org.springframework.web: INFO
     org.springframework.security: DEBUG

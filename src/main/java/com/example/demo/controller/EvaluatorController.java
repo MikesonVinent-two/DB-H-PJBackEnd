@@ -1,23 +1,32 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.jdbc.Evaluator;
-import com.example.demo.entity.jdbc.User;
-import com.example.demo.repository.jdbc.EvaluatorRepository;
-import com.example.demo.repository.jdbc.UserRepository;
-import com.example.demo.service.UserService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.repository.jdbc.EvaluatorRepository;
+import com.example.demo.repository.jdbc.UserRepository;
+import com.example.demo.util.ApiConstants;
 
 /**
  * 评测者管理控制器
@@ -31,13 +40,10 @@ public class EvaluatorController {
     
     private final EvaluatorRepository evaluatorRepository;
     private final UserRepository userRepository;
-    private final UserService userService;
     
-    @Autowired
-    public EvaluatorController(EvaluatorRepository evaluatorRepository, UserRepository userRepository, UserService userService) {
+    public EvaluatorController(EvaluatorRepository evaluatorRepository, UserRepository userRepository) {
         this.evaluatorRepository = evaluatorRepository;
         this.userRepository = userRepository;
-        this.userService = userService;
     }
     
     /**
@@ -170,8 +176,8 @@ public class EvaluatorController {
                 .orElseThrow(() -> new RuntimeException("用户未登录"));
             
             if (currentUser == null) {
-                response.put("success", false);
-                response.put("message", "用户未登录");
+                response.put(ApiConstants.KEY_SUCCESS, false);
+                response.put(ApiConstants.KEY_MESSAGE, "用户未登录");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
             }
             
@@ -182,8 +188,8 @@ public class EvaluatorController {
                 .findFirst();
             
             if (existingEvaluator.isPresent()) {
-                response.put("success", false);
-                response.put("message", "用户已经是评测者");
+                response.put(ApiConstants.KEY_SUCCESS, false);
+                response.put(ApiConstants.KEY_MESSAGE, "用户已经是评测者");
                 response.put("evaluator", existingEvaluator.get());
                 return ResponseEntity.ok(response);
             }
@@ -200,15 +206,15 @@ public class EvaluatorController {
             
             Evaluator savedEvaluator = evaluatorRepository.save(evaluator);
             
-            response.put("success", true);
-            response.put("message", "成功注册为评测者");
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "成功注册为评测者");
             response.put("evaluator", savedEvaluator);
             
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
             
         } catch (Exception e) {
-            response.put("success", false);
-            response.put("message", "注册评测者失败: " + e.getMessage());
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_MESSAGE, "注册评测者失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

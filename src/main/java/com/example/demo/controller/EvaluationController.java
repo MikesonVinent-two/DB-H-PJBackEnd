@@ -1,27 +1,39 @@
 package com.example.demo.controller;
 
 
-import com.example.demo.entity.jdbc.Evaluation;
-import com.example.demo.entity.jdbc.LlmAnswer;
-import com.example.demo.entity.jdbc.EvaluationRun;
-import com.example.demo.entity.jdbc.EvaluationDetail;
-import com.example.demo.entity.jdbc.EvaluationCriterion;
-import com.example.demo.entity.jdbc.QuestionType;
-import com.example.demo.dto.CreateEvaluationRunRequest;
-import com.example.demo.repository.jdbc.LlmAnswerRepository;
-import com.example.demo.service.EvaluationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.demo.dto.CreateEvaluationRunRequest;
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.EvaluationCriterion;
+import com.example.demo.entity.jdbc.EvaluationDetail;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.repository.jdbc.LlmAnswerRepository;
+import com.example.demo.service.EvaluationService;
+import com.example.demo.util.ApiConstants;
+
 import lombok.Data;
 
 @RestController
@@ -34,7 +46,6 @@ public class EvaluationController {
     private final EvaluationService evaluationService;
     private final LlmAnswerRepository llmAnswerRepository;
     
-    @Autowired
     public EvaluationController(
             EvaluationService evaluationService,
             LlmAnswerRepository llmAnswerRepository) {
@@ -200,9 +211,9 @@ public class EvaluationController {
             
             Map<String, Object> result = new HashMap<>();
             result.put("answerId", answerId);
-            result.put("score", score);
-            result.put("success", true);
-            result.put("message", "重新评测成功");
+            result.put(ApiConstants.KEY_SCORE, score);
+            result.put(ApiConstants.KEY_SUCCESS, true);
+            result.put(ApiConstants.KEY_MESSAGE, "重新评测成功");
             
             return ResponseEntity.ok(result);
             
@@ -211,8 +222,8 @@ public class EvaluationController {
             
             Map<String, Object> result = new HashMap<>();
             result.put("answerId", answerId);
-            result.put("success", false);
-            result.put("message", "重新评测失败: " + e.getMessage());
+            result.put(ApiConstants.KEY_SUCCESS, false);
+            result.put(ApiConstants.KEY_MESSAGE, "重新评测失败: " + e.getMessage());
             
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
         }
@@ -275,8 +286,8 @@ public class EvaluationController {
         evaluationService.startEvaluationRun(runId);
         
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "评测运行已启动");
-        response.put("runId", runId);
+        response.put(ApiConstants.KEY_MESSAGE, "评测运行已启动");
+        response.put(ApiConstants.KEY_RUN_ID, runId);
         
         return ResponseEntity.ok(response);
     }
@@ -292,7 +303,7 @@ public class EvaluationController {
         
         Map<String, Object> response = new HashMap<>();
         response.put("paused", paused);
-        response.put("runId", runId);
+        response.put(ApiConstants.KEY_RUN_ID, runId);
         
         return ResponseEntity.ok(response);
     }
@@ -308,8 +319,8 @@ public class EvaluationController {
         evaluationService.resumeEvaluationRun(runId);
         
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "评测运行已恢复");
-        response.put("runId", runId);
+        response.put(ApiConstants.KEY_MESSAGE, "评测运行已恢复");
+        response.put(ApiConstants.KEY_RUN_ID, runId);
         
         return ResponseEntity.ok(response);
     }
@@ -411,7 +422,7 @@ public class EvaluationController {
         
         // 创建评测运行记录
         Map<String, Object> params = new HashMap<>();
-        params.put("batchId", request.getBatchId());
+        params.put(ApiConstants.KEY_BATCH_ID, request.getBatchId());
         params.put("evaluationType", "SUBJECTIVE_BATCH");
         
         EvaluationRun evaluationRun = evaluationService.createEvaluationRun(
@@ -434,9 +445,9 @@ public class EvaluationController {
         
         // 立即返回响应
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "评测任务已启动");
-        response.put("runId", evaluationRun.getId());
-        response.put("status", "STARTED");
+        response.put(ApiConstants.KEY_MESSAGE, "评测任务已启动");
+        response.put(ApiConstants.KEY_RUN_ID, evaluationRun.getId());
+        response.put(ApiConstants.KEY_STATUS, "STARTED");
         
         return ResponseEntity.ok(response);
     }
@@ -505,28 +516,175 @@ public class EvaluationController {
     }
     
     /**
-     * 批量按答案ID评测请求DTO
+     * 创建并提交人工评测（一步式操作）
+     */
+    @PostMapping("/human")
+    public ResponseEntity<Map<String, Object>> createAndSubmitHumanEvaluation(
+            @RequestBody CreateAndSubmitHumanEvaluationRequest request) {
+        
+        logger.info("接收到一步式提交人工评测请求，回答ID: {}", request.getLlmAnswerId());
+        
+        try {
+            Evaluation evaluation = evaluationService.createAndSubmitHumanEvaluation(
+                    request.getLlmAnswerId(), 
+                    request.getEvaluatorId(), 
+                    request.getOverallScore(), 
+                    request.getComments(), 
+                    request.getDetailScores(), 
+                    request.getUserId());
+            
+            // 构建API响应
+            Map<String, Object> response = new HashMap<>();
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "评测提交成功");
+            
+            // 构建返回数据
+            Map<String, Object> data = new HashMap<>();
+            data.put("evaluationId", evaluation.getId());
+            data.put("llmAnswerId", evaluation.getLlmAnswer().getId());
+            data.put("evaluatorId", evaluation.getEvaluator().getId());
+            data.put("overallScore", evaluation.getScore());
+            data.put(ApiConstants.KEY_COMMENTS, evaluation.getComments());
+            
+            // 获取详细评分项
+            List<EvaluationDetail> details = evaluationService.getEvaluationDetails(evaluation.getId());
+            List<Map<String, Object>> detailScores = new ArrayList<>();
+            
+            for (EvaluationDetail detail : details) {
+                Map<String, Object> detailScore = new HashMap<>();
+                detailScore.put("id", detail.getId());
+                detailScore.put("criterionId", detail.getCriterion().getId());
+                detailScore.put("criterionName", detail.getCriterionName());
+                detailScore.put(ApiConstants.KEY_SCORE, detail.getScore());
+                detailScore.put(ApiConstants.KEY_COMMENTS, detail.getComments());
+                detailScores.add(detailScore);
+            }
+            
+            data.put("detailScores", detailScores);
+            data.put("createdBy", evaluation.getCreatedByUser().getId());
+            data.put("createdAt", evaluation.getCreationTime());
+            data.put(ApiConstants.KEY_STATUS, evaluation.getStatus());
+            
+            response.put("data", data);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("处理一步式人工评测请求时发生异常", e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
+            errorResponse.put(ApiConstants.KEY_MESSAGE, "评测提交失败");
+            errorResponse.put(ApiConstants.KEY_ERROR, Map.of(
+                "code", "EVALUATION_ERROR",
+                "details", e.getMessage()
+            ));
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    /**
+     * 修改人工评测结果
+     */
+    @PutMapping("/human/{evaluationId}")
+    public ResponseEntity<Map<String, Object>> updateHumanEvaluation(
+            @PathVariable Long evaluationId,
+            @RequestBody UpdateHumanEvaluationRequest request) {
+        
+        logger.info("接收到修改人工评测请求，评测ID: {}", evaluationId);
+        
+        try {
+            // 使用已有的submitHumanEvaluation方法，而不是不存在的updateHumanEvaluation方法
+            Evaluation evaluation = evaluationService.submitHumanEvaluation(
+                    evaluationId,
+                    request.getOverallScore(), 
+                    request.getComments(), 
+                    request.getDetailScores(), 
+                    request.getUserId());
+            
+            // 构建API响应
+            Map<String, Object> response = new HashMap<>();
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "评测修改成功");
+            
+            // 构建返回数据
+            Map<String, Object> data = new HashMap<>();
+            data.put("evaluationId", evaluation.getId());
+            data.put("llmAnswerId", evaluation.getLlmAnswer().getId());
+            data.put("evaluatorId", evaluation.getEvaluator().getId());
+            data.put("overallScore", evaluation.getScore());
+            data.put(ApiConstants.KEY_COMMENTS, evaluation.getComments());
+            
+            // 获取详细评分项
+            List<EvaluationDetail> details = evaluationService.getEvaluationDetails(evaluation.getId());
+            List<Map<String, Object>> detailScores = new ArrayList<>();
+            
+            for (EvaluationDetail detail : details) {
+                Map<String, Object> detailScore = new HashMap<>();
+                detailScore.put("id", detail.getId());
+                detailScore.put("criterionId", detail.getCriterion().getId());
+                detailScore.put("criterionName", detail.getCriterionName());
+                detailScore.put(ApiConstants.KEY_SCORE, detail.getScore());
+                detailScore.put(ApiConstants.KEY_COMMENTS, detail.getComments());
+                detailScores.add(detailScore);
+            }
+            
+            data.put("detailScores", detailScores);
+            data.put("createdBy", evaluation.getCreatedByUser().getId());
+            data.put("createdAt", evaluation.getCreationTime());
+            data.put(ApiConstants.KEY_STATUS, evaluation.getStatus());
+            
+            response.put("data", data);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("处理修改人工评测请求时发生异常", e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
+            errorResponse.put(ApiConstants.KEY_MESSAGE, "评测修改失败");
+            errorResponse.put(ApiConstants.KEY_ERROR, Map.of(
+                "code", "EVALUATION_ERROR",
+                "details", e.getMessage()
+            ));
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    /**
+     * 修改人工评测请求类
      */
     @Data
-    public static class BatchAnswerEvaluationRequest {
-        private List<Long> answerIds;
-        private Long evaluatorId;
-        private Long userId;
+    public static class UpdateHumanEvaluationRequest {
+        private BigDecimal overallScore;    // 总体评分
+        private String comments;            // 评语
+        private List<Map<String, Object>> detailScores;  // 详细评分项
+        private Long userId;                // 用户ID
         
-        public List<Long> getAnswerIds() {
-            return answerIds;
+        // Getters and Setters
+        public BigDecimal getOverallScore() {
+            return overallScore;
         }
         
-        public void setAnswerIds(List<Long> answerIds) {
-            this.answerIds = answerIds;
+        public void setOverallScore(BigDecimal overallScore) {
+            this.overallScore = overallScore;
         }
         
-        public Long getEvaluatorId() {
-            return evaluatorId;
+        public String getComments() {
+            return comments;
         }
         
-        public void setEvaluatorId(Long evaluatorId) {
-            this.evaluatorId = evaluatorId;
+        public void setComments(String comments) {
+            this.comments = comments;
+        }
+        
+        public List<Map<String, Object>> getDetailScores() {
+            return detailScores;
+        }
+        
+        public void setDetailScores(List<Map<String, Object>> detailScores) {
+            this.detailScores = detailScores;
         }
         
         public Long getUserId() {
@@ -542,17 +700,17 @@ public class EvaluationController {
      * 批量评测请求DTO
      */
     @Data
-    public static class BatchEvaluationRequest {
-        private Long batchId;
+    public static class BatchAnswerEvaluationRequest {
+        private List<Long> answerIds;
         private Long evaluatorId;
         private Long userId;
         
-        public Long getBatchId() {
-            return batchId;
+        public List<Long> getAnswerIds() {
+            return answerIds;
         }
         
-        public void setBatchId(Long batchId) {
-            this.batchId = batchId;
+        public void setAnswerIds(List<Long> answerIds) {
+            this.answerIds = answerIds;
         }
         
         public Long getEvaluatorId() {
@@ -762,10 +920,106 @@ public class EvaluationController {
         }
     }
     
+    /**
+     * 一步式人工评测请求类
+     */
+    @Data
+    public static class CreateAndSubmitHumanEvaluationRequest {
+        private Long llmAnswerId;           // 大模型回答ID
+        private Long evaluatorId;           // 评测者ID
+        private BigDecimal overallScore;    // 总体评分
+        private String comments;            // 评语
+        private List<Map<String, Object>> detailScores;  // 详细评分项
+        private Long userId;                // 用户ID
+        
+        // Getters and Setters
+        public Long getLlmAnswerId() {
+            return llmAnswerId;
+        }
+        
+        public void setLlmAnswerId(Long llmAnswerId) {
+            this.llmAnswerId = llmAnswerId;
+        }
+        
+        public Long getEvaluatorId() {
+            return evaluatorId;
+        }
+        
+        public void setEvaluatorId(Long evaluatorId) {
+            this.evaluatorId = evaluatorId;
+        }
+        
+        public BigDecimal getOverallScore() {
+            return overallScore;
+        }
+        
+        public void setOverallScore(BigDecimal overallScore) {
+            this.overallScore = overallScore;
+        }
+        
+        public String getComments() {
+            return comments;
+        }
+        
+        public void setComments(String comments) {
+            this.comments = comments;
+        }
+        
+        public List<Map<String, Object>> getDetailScores() {
+            return detailScores;
+        }
+        
+        public void setDetailScores(List<Map<String, Object>> detailScores) {
+            this.detailScores = detailScores;
+        }
+        
+        public Long getUserId() {
+            return userId;
+        }
+        
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+    }
+    
+    /**
+     * 批量评测请求DTO
+     */
+    @Data
+    public static class BatchEvaluationRequest {
+        private Long batchId;
+        private Long evaluatorId;
+        private Long userId;
+        
+        public Long getBatchId() {
+            return batchId;
+        }
+        
+        public void setBatchId(Long batchId) {
+            this.batchId = batchId;
+        }
+        
+        public Long getEvaluatorId() {
+            return evaluatorId;
+        }
+        
+        public void setEvaluatorId(Long evaluatorId) {
+            this.evaluatorId = evaluatorId;
+        }
+        
+        public Long getUserId() {
+            return userId;
+        }
+        
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+    }
+    
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleException(Exception e) {
         logger.error("处理评测请求时发生异常", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", e.getMessage()));
+                .body(Map.of(ApiConstants.KEY_ERROR, e.getMessage()));
     }
 } 

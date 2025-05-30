@@ -1,6 +1,7 @@
 package com.example.demo.entity.jdbc;
 
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 
 /**
  * 原始问题标签关联实体类
@@ -47,6 +48,7 @@ public class RawQuestionTag {
         this.id = id;
     }
     
+    @JsonBackReference
     public RawQuestion getRawQuestion() {
         return rawQuestion;
     }

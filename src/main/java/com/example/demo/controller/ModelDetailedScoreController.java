@@ -17,7 +17,7 @@ import java.util.Map;
  * 提供模型在批次中更细粒度的评分数据查询API
  */
 @RestController
-@RequestMapping("/api/llm-models")
+@RequestMapping("/llm-models")
 @CrossOrigin(origins = "*")
 public class ModelDetailedScoreController {
     

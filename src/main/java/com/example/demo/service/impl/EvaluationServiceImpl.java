@@ -3835,4 +3835,105 @@ public class EvaluationServiceImpl implements EvaluationService {
         
         return relations;
     }
+
+    /**
+     * 创建并提交人工评测（一步式操作）
+     */
+    @Override
+    @Transactional
+    public Evaluation createAndSubmitHumanEvaluation(Long llmAnswerId, Long evaluatorId, 
+                                                 BigDecimal overallScore, String comments, 
+                                                 List<Map<String, Object>> detailScores, Long userId) {
+        logger.info("创建并提交人工评测，回答ID: {}, 评测者ID: {}, 总分: {}, 用户ID: {}", 
+                llmAnswerId, evaluatorId, overallScore, userId);
+        
+        try {
+            // 获取LLM回答
+            LlmAnswer llmAnswer = llmAnswerRepository.findByIdWithQuestion(llmAnswerId)
+                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId));
+            
+            // 获取评测者信息
+            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
+            
+            // 验证评测者类型是人类
+            if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.HUMAN) {
+                throw new IllegalArgumentException("评测者不是人类: " + evaluatorId);
+            }
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
+            
+            // 检查是否已存在该回答的人工评测，如果存在则删除
+            List<Evaluation> existingEvaluations = evaluationRepository.findByLlmAnswerIdAndEvaluatorId(llmAnswerId, evaluatorId);
+            if (!existingEvaluations.isEmpty()) {
+                evaluationRepository.deleteAll(existingEvaluations);
+                logger.info("删除已存在的人工评测记录，回答ID: {}, 评测者ID: {}", llmAnswerId, evaluatorId);
+            }
+            
+            // 创建评测记录
+            Evaluation evaluation = new Evaluation();
+            evaluation.setLlmAnswer(llmAnswer);
+            evaluation.setEvaluator(evaluator);
+            evaluation.setCreatedByUser(user);
+            evaluation.setCreationTime(LocalDateTime.now());
+            evaluation.setStatus(EvaluationStatus.SUCCESS); // 直接设置为成功状态
+            evaluation.setScore(overallScore);
+            evaluation.setComments(comments);
+            evaluation.setCompletionTime(LocalDateTime.now());
+            evaluation.setEvaluationType(EvaluationType.MANUAL);
+            
+            // 构建评测结果JSON
+            Map<String, Object> evaluationResults = new HashMap<>();
+            evaluationResults.put("score", overallScore);
+            evaluationResults.put("comments", comments);
+            evaluationResults.put("criteria_scores", detailScores);
+            evaluation.setEvaluationResults(evaluationResults);
+            
+            // 保存评测记录
+            evaluation = evaluationRepository.save(evaluation);
+            
+            // 保存评测详情
+            List<EvaluationDetail> details = new ArrayList<>();
+            for (Map<String, Object> detailScore : detailScores) {
+                EvaluationDetail detail = new EvaluationDetail();
+                detail.setEvaluation(evaluation);
+                detail.setCriterionName((String) detailScore.get("criterion"));
+                detail.setScore(new BigDecimal(detailScore.get("score").toString()));
+                detail.setComments((String) detailScore.get("comments"));
+                detail.setCreatedAt(LocalDateTime.now());
+                details.add(detail);
+            }
+            
+            evaluationDetailRepository.saveAll(details);
+            
+            // 获取问题类型
+            StandardQuestion question = llmAnswer.getDatasetQuestionMapping().getStandardQuestion();
+            String scoreType = "HUMAN_" + question.getQuestionType().name();
+            
+            // 标准化分数（0-100分）
+            BigDecimal normalizedScore;
+            if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                // 主观题现在使用0-100分制，直接使用
+                normalizedScore = overallScore;
+            } else {
+                // 客观题分数通常是0-100分
+                normalizedScore = overallScore;
+            }
+            
+            evaluation.setRawScore(overallScore);
+            evaluation.setNormalizedScore(normalizedScore);
+            evaluation.setScoreType(scoreType);
+            evaluation.setScoringMethod("HUMAN");
+            evaluation = evaluationRepository.save(evaluation);
+            
+            logger.info("成功创建并提交人工评测，评测ID: {}", evaluation.getId());
+            return evaluation;
+            
+        } catch (Exception e) {
+            logger.error("创建并提交人工评测失败", e);
+            throw new RuntimeException("创建并提交人工评测失败: " + e.getMessage(), e);
+        }
+    }
 } 

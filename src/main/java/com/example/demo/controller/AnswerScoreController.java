@@ -1,29 +1,33 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.jdbc.AnswerScore;
-import com.example.demo.service.AnswerScoreService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.demo.entity.jdbc.AnswerScore;
+import com.example.demo.service.AnswerScoreService;
+import com.example.demo.util.ApiConstants;
 
 /**
  * 回答分数控制器
  */
 @RestController
-@RequestMapping("/api/scores")
+@RequestMapping("/scores")
 public class AnswerScoreController {
 
     private static final Logger logger = LoggerFactory.getLogger(AnswerScoreController.class);
     
     private final AnswerScoreService answerScoreService;
 
-    @Autowired
     public AnswerScoreController(AnswerScoreService answerScoreService) {
         this.answerScoreService = answerScoreService;
     }
@@ -83,13 +87,13 @@ public class AnswerScoreController {
         Map<String, Object> response = new HashMap<>();
         try {
             answerScoreService.deleteScore(scoreId);
-            response.put("success", true);
-            response.put("message", "分数记录删除成功");
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "分数记录删除成功");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("删除分数记录失败", e);
-            response.put("success", false);
-            response.put("message", "删除失败: " + e.getMessage());
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_MESSAGE, "删除失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -104,13 +108,13 @@ public class AnswerScoreController {
         Map<String, Object> response = new HashMap<>();
         try {
             answerScoreService.deleteScoresByAnswerId(answerId);
-            response.put("success", true);
-            response.put("message", "回答的所有分数记录删除成功");
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "回答的所有分数记录删除成功");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("删除回答的所有分数记录失败", e);
-            response.put("success", false);
-            response.put("message", "删除失败: " + e.getMessage());
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_MESSAGE, "删除失败: " + e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
     }

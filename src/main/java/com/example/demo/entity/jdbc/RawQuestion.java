@@ -3,6 +3,7 @@ package com.example.demo.entity.jdbc;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 /**
  * 原始问题实体类
@@ -114,6 +115,7 @@ public class RawQuestion {
         this.otherMetadata = otherMetadata;
     }
     
+    @JsonManagedReference
     public List<RawQuestionTag> getQuestionTags() {
         return questionTags;
     }

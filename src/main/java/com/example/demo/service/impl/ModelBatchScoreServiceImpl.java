@@ -191,6 +191,9 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                 logger.warn("批次ID{}中模型ID{}没有找到任何回答", batchId, modelId);
                 return;
             }
+            else{
+                logger.info("批次ID{}中模型ID{}找到{}个回答", batchId, modelId, answers.size());
+            }
             
             // 获取回答ID列表
             List<Long> answerIds = new ArrayList<>();
@@ -219,7 +222,9 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                 logger.warn("批次ID{}中模型ID{}的回答没有任何评分", batchId, modelId);
                 return;
             }
-            
+            else{
+                logger.info("批次ID{}中模型ID{}找到{}个评分", batchId, modelId, scores.size());
+            }
             // 3. 按评分类型和回答重复索引分组计算
             Map<String, Map<Integer, List<Map<String, Object>>>> scoresByTypeAndRepeat = new HashMap<>();
             
@@ -230,7 +235,8 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                 }
                 
                 Integer repeatIndex = ((Number) score.get("repeat_index")).intValue();
-                
+                logger.info("批次ID{}中模型ID{}评分类型为{}，重复索引为{}", batchId, modelId, scoreType, repeatIndex);
+
                 if (!scoresByTypeAndRepeat.containsKey(scoreType)) {
                     scoresByTypeAndRepeat.put(scoreType, new HashMap<>());
                 }
@@ -285,6 +291,7 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                         minScore,
                         repeatIndex
                     );
+                    logger.info("批次ID{}中模型ID{}评分类型为{}，重复索引为{}，平均分为{}", batchId, modelId, scoreType, repeatIndex, averageScore);
                 }
                 
                 // 计算所有重复索引的平均值
@@ -323,6 +330,104 @@ public class ModelBatchScoreServiceImpl implements ModelBatchScoreService {
                     maxScore,
                     minScore
                 );
+            }
+            
+            // 5. 计算所有评分类型的综合平均分
+            logger.info("计算批次ID{}中模型ID{}的所有评分类型综合平均分", batchId, modelId);
+            
+            // 收集所有评分
+            List<Map<String, Object>> allTypeScores = new ArrayList<>();
+            for (Map<String, Object> score : scores) {
+                allTypeScores.add(score);
+            }
+            
+            if (!allTypeScores.isEmpty()) {
+                // 按重复索引分组
+                Map<Integer, List<Map<String, Object>>> allScoresByRepeat = new HashMap<>();
+                
+                for (Map<String, Object> score : allTypeScores) {
+                    Integer repeatIndex = ((Number) score.get("repeat_index")).intValue();
+                    
+                    if (!allScoresByRepeat.containsKey(repeatIndex)) {
+                        allScoresByRepeat.put(repeatIndex, new ArrayList<>());
+                    }
+                    
+                    allScoresByRepeat.get(repeatIndex).add(score);
+                }
+                
+                // 计算每个重复索引的综合统计数据
+                for (Map.Entry<Integer, List<Map<String, Object>>> entry : allScoresByRepeat.entrySet()) {
+                    Integer repeatIndex = entry.getKey();
+                    List<Map<String, Object>> repeatScores = entry.getValue();
+                    
+                    double totalScore = 0;
+                    double maxScore = Double.MIN_VALUE;
+                    double minScore = Double.MAX_VALUE;
+                    
+                    for (Map<String, Object> score : repeatScores) {
+                        double normalizedScore = ((Number) score.get("normalized_score")).doubleValue();
+                        totalScore += normalizedScore;
+                        maxScore = Math.max(maxScore, normalizedScore);
+                        minScore = Math.min(minScore, normalizedScore);
+                    }
+                    
+                    double averageScore = totalScore / repeatScores.size();
+                    
+                    // 保存每个重复索引的综合评分统计
+                    String insertQuery = 
+                        "INSERT INTO model_batch_scores (batch_id, model_id, evaluator_id, score_type, " +
+                        "average_score, total_answers, scored_answers, max_score, min_score, repeat_index, created_by_user_id) " +
+                        "VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 1)";
+                    
+                    jdbcTemplate.update(
+                        insertQuery,
+                        batchId,
+                        modelId,
+                        "OVERALL",
+                        averageScore,
+                        repeatScores.size(),
+                        repeatScores.size(),
+                        maxScore,
+                        minScore,
+                        repeatIndex
+                    );
+                    
+                    logger.info("批次ID{}中模型ID{}的综合评分，重复索引为{}，平均分为{}", batchId, modelId, repeatIndex, averageScore);
+                }
+                
+                // 计算所有重复索引的综合平均值
+                double totalScore = 0;
+                double maxScore = Double.MIN_VALUE;
+                double minScore = Double.MAX_VALUE;
+                
+                for (Map<String, Object> score : allTypeScores) {
+                    double normalizedScore = ((Number) score.get("normalized_score")).doubleValue();
+                    totalScore += normalizedScore;
+                    maxScore = Math.max(maxScore, normalizedScore);
+                    minScore = Math.min(minScore, normalizedScore);
+                }
+                
+                double averageScore = totalScore / allTypeScores.size();
+                
+                // 保存所有重复索引的综合平均统计数据
+                String insertQuery = 
+                    "INSERT INTO model_batch_scores (batch_id, model_id, evaluator_id, score_type, " +
+                    "average_score, total_answers, scored_answers, max_score, min_score, repeat_index, created_by_user_id) " +
+                    "VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, -1, 1)";
+                
+                jdbcTemplate.update(
+                    insertQuery,
+                    batchId,
+                    modelId,
+                    "OVERALL",
+                    averageScore,
+                    allTypeScores.size(),
+                    allTypeScores.size(),
+                    maxScore,
+                    minScore
+                );
+                
+                logger.info("批次ID{}中模型ID{}的综合评分，所有重复索引，平均分为{}", batchId, modelId, averageScore);
             }
             
             logger.info("成功计算批次ID{}中模型ID{}的总体评分", batchId, modelId);

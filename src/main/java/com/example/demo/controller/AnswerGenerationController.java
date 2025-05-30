@@ -1,22 +1,28 @@
 package com.example.demo.controller;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.ModelAnswerRunDTO;
 import com.example.demo.manager.BatchStateManager;
 import com.example.demo.service.AnswerGenerationService;
 import com.example.demo.service.AnswerGenerationService.AnswerGenerationBatchCreateRequest;
+import com.example.demo.util.ApiConstants;
 
 import jakarta.validation.Valid;
 
@@ -26,12 +32,13 @@ import jakarta.validation.Valid;
 public class AnswerGenerationController {
     
     private static final Logger logger = LoggerFactory.getLogger(AnswerGenerationController.class);
+    private static final String STATUS_PAUSED = ApiConstants.STATUS_PAUSED;
+    private static final String STATUS_FAILED = ApiConstants.STATUS_FAILED;
     
     private final AnswerGenerationService answerGenerationService;
     private final BatchStateManager batchStateManager;
     private final JdbcTemplate jdbcTemplate;
     
-    @Autowired
     public AnswerGenerationController(AnswerGenerationService answerGenerationService, 
                                       BatchStateManager batchStateManager,
                                       JdbcTemplate jdbcTemplate) {
@@ -56,11 +63,11 @@ public class AnswerGenerationController {
         logger.info("批次{}当前Redis状态为: {}", batchId, currentStatus);
         
         // 确保Redis状态与数据库一致
-        if (batchStateManager != null) {
-            String dbStatus = jdbcTemplate.queryForObject(
-                "SELECT status FROM answer_generation_batches WHERE id = ?", 
-                String.class, batchId);
-            
+        String dbStatus = jdbcTemplate.queryForObject(
+            "SELECT status FROM answer_generation_batches WHERE id = ?", 
+            String.class, batchId);
+        
+        if (dbStatus != null) {
             logger.info("批次{}数据库状态: {}, Redis状态: {}", batchId, dbStatus, currentStatus);
             
             // 如果状态不一致，以数据库为准更新Redis
@@ -69,12 +76,7 @@ public class AnswerGenerationController {
                     batchId, currentStatus, dbStatus);
                 batchStateManager.setBatchState(batchId, dbStatus);
                 // 如果数据库是PAUSED状态，确保中断标志一致
-                if ("PAUSED".equals(dbStatus)) {
-                    batchStateManager.setInterruptFlag(batchId, true);
-                } else {
-                    batchStateManager.setInterruptFlag(batchId, false);
-                }
-                currentStatus = dbStatus;
+                batchStateManager.setInterruptFlag(batchId, STATUS_PAUSED.equals(dbStatus));
             }
         }
         
@@ -89,9 +91,9 @@ public class AnswerGenerationController {
                 
                 // 发送错误通知
                 Map<String, Object> errorData = new HashMap<>();
-                errorData.put("batchId", batchId);
-                errorData.put("error", "批次启动失败: " + e.getMessage());
-                errorData.put("timestamp", System.currentTimeMillis());
+                errorData.put(ApiConstants.KEY_BATCH_ID, batchId);
+                errorData.put(ApiConstants.KEY_ERROR, "批次启动失败: " + e.getMessage());
+                errorData.put(ApiConstants.KEY_TIMESTAMP, System.currentTimeMillis());
                 
                 try {
                     answerGenerationService.sendErrorNotification(batchId, errorData);
@@ -103,9 +105,9 @@ public class AnswerGenerationController {
         
         // 立即返回响应，不等待批次启动完成
         Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("batchId", batchId);
-        response.put("message", "批次启动请求已接收，正在后台处理");
+        response.put(ApiConstants.KEY_SUCCESS, true);
+        response.put(ApiConstants.KEY_BATCH_ID, batchId);
+        response.put(ApiConstants.KEY_MESSAGE, "批次启动请求已接收，正在后台处理");
         
         return ResponseEntity.ok(response);
     }
@@ -118,10 +120,10 @@ public class AnswerGenerationController {
         boolean success = batchStateManager.pauseBatch(batchId, reason);
         
         Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("batchId", batchId);
-        response.put("status", batchStateManager.getBatchState(batchId));
-        response.put("message", success ? "批次已暂停" : "暂停请求已提交，但操作可能未完成");
+        response.put(ApiConstants.KEY_SUCCESS, success);
+        response.put(ApiConstants.KEY_BATCH_ID, batchId);
+        response.put(ApiConstants.KEY_STATUS, batchStateManager.getBatchState(batchId));
+        response.put(ApiConstants.KEY_MESSAGE, success ? "批次已暂停" : "暂停请求已提交，但操作可能未完成");
         
         return ResponseEntity.ok(response);
     }
@@ -136,12 +138,12 @@ public class AnswerGenerationController {
                 "SELECT status FROM answer_generation_batches WHERE id = ?", 
                 String.class, batchId);
                 
-            if (!"PAUSED".equals(currentStatus)) {
+            if (!STATUS_PAUSED.equals(currentStatus)) {
                 Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("batchId", batchId);
-                response.put("status", currentStatus);
-                response.put("message", "只能恢复PAUSED状态的批次，当前状态: " + currentStatus);
+                response.put(ApiConstants.KEY_SUCCESS, false);
+                response.put(ApiConstants.KEY_BATCH_ID, batchId);
+                response.put(ApiConstants.KEY_STATUS, currentStatus);
+                response.put(ApiConstants.KEY_MESSAGE, "只能恢复PAUSED状态的批次，当前状态: " + currentStatus);
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -152,20 +154,40 @@ public class AnswerGenerationController {
             
             // 立即返回响应
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("batchId", batchId);
-            response.put("status", "IN_PROGRESS"); // 服务层已将状态更新为IN_PROGRESS
-            response.put("message", "批次恢复请求已处理");
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_STATUS, "IN_PROGRESS"); // 服务层已将状态更新为IN_PROGRESS
+            response.put(ApiConstants.KEY_MESSAGE, "批次恢复请求已处理");
             
             return ResponseEntity.ok(response);
+        } catch (org.springframework.dao.DataAccessException e) {
+            logger.error("访问批次{}数据时出错: {}", batchId, e.getMessage(), e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_ERROR, "数据库访问错误: " + e.getMessage());
+            response.put(ApiConstants.KEY_MESSAGE, "处理批次恢复请求时出错: " + e.getMessage());
+            
+            return ResponseEntity.status(500).body(response);
+        } catch (IllegalStateException e) {
+            logger.error("批次{}状态错误: {}", batchId, e.getMessage(), e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_ERROR, "状态错误: " + e.getMessage());
+            response.put(ApiConstants.KEY_MESSAGE, "批次状态错误: " + e.getMessage());
+            
+            return ResponseEntity.status(400).body(response);
         } catch (Exception e) {
             logger.error("处理批次{}恢复请求时出错: {}", batchId, e.getMessage(), e);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("batchId", batchId);
-            response.put("error", e.getMessage());
-            response.put("message", "处理批次恢复请求时出错: " + e.getMessage());
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_ERROR, e.getMessage());
+            response.put(ApiConstants.KEY_MESSAGE, "处理批次恢复请求时出错: " + e.getMessage());
             
             return ResponseEntity.status(500).body(response);
         }
@@ -179,12 +201,12 @@ public class AnswerGenerationController {
             // 获取当前批次状态
             String currentStatus = batchStateManager.getBatchState(batchId);
             
-            if (!"FAILED".equals(currentStatus)) {
+            if (!STATUS_FAILED.equals(currentStatus)) {
                 Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("batchId", batchId);
-                response.put("status", currentStatus);
-                response.put("message", "只能重置FAILED状态的批次，当前状态: " + currentStatus);
+                response.put(ApiConstants.KEY_SUCCESS, false);
+                response.put(ApiConstants.KEY_BATCH_ID, batchId);
+                response.put(ApiConstants.KEY_STATUS, currentStatus);
+                response.put(ApiConstants.KEY_MESSAGE, "只能重置FAILED状态的批次，当前状态: " + currentStatus);
                 return ResponseEntity.badRequest().body(response);
             }
             
@@ -192,24 +214,24 @@ public class AnswerGenerationController {
             answerGenerationService.resetFailedBatch(batchId);
             
             // 同步更新Redis状态
-            batchStateManager.setBatchState(batchId, "PAUSED");
+            batchStateManager.setBatchState(batchId, STATUS_PAUSED);
             batchStateManager.setInterruptFlag(batchId, true);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("batchId", batchId);
-            response.put("status", "PAUSED");
-            response.put("message", "批次状态已成功从FAILED重置为PAUSED，可以重新恢复处理");
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_STATUS, STATUS_PAUSED);
+            response.put(ApiConstants.KEY_MESSAGE, "批次状态已成功从FAILED重置为PAUSED，可以重新恢复处理");
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("重置批次{}状态失败", batchId, e);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("batchId", batchId);
-            response.put("error", e.getMessage());
-            response.put("message", "重置批次状态失败: " + e.getMessage());
+            response.put(ApiConstants.KEY_SUCCESS, false);
+            response.put(ApiConstants.KEY_BATCH_ID, batchId);
+            response.put(ApiConstants.KEY_ERROR, e.getMessage());
+            response.put(ApiConstants.KEY_MESSAGE, "重置批次状态失败: " + e.getMessage());
             
             return ResponseEntity.badRequest().body(response);
         }
@@ -263,9 +285,9 @@ public class AnswerGenerationController {
             logger.error("系统连通性测试失败: {}", e.getMessage(), e);
             
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "系统连通性测试失败: " + e.getMessage());
-            errorResponse.put("timestamp", System.currentTimeMillis());
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
+            errorResponse.put(ApiConstants.KEY_ERROR, "系统连通性测试失败: " + e.getMessage());
+            errorResponse.put(ApiConstants.KEY_TIMESTAMP, System.currentTimeMillis());
             
             return ResponseEntity.status(500).body(errorResponse);
         }
@@ -282,10 +304,10 @@ public class AnswerGenerationController {
             logger.error("模型{}连通性测试失败: {}", modelId, e.getMessage(), e);
             
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
             errorResponse.put("modelId", modelId);
-            errorResponse.put("error", "模型连通性测试失败: " + e.getMessage());
-            errorResponse.put("timestamp", System.currentTimeMillis());
+            errorResponse.put(ApiConstants.KEY_ERROR, "模型连通性测试失败: " + e.getMessage());
+            errorResponse.put(ApiConstants.KEY_TIMESTAMP, System.currentTimeMillis());
             
             return ResponseEntity.status(500).body(errorResponse);
         }
@@ -302,10 +324,10 @@ public class AnswerGenerationController {
             logger.error("批次{}模型连通性测试失败: {}", batchId, e.getMessage(), e);
             
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("batchId", batchId);
-            errorResponse.put("error", "批次模型连通性测试失败: " + e.getMessage());
-            errorResponse.put("timestamp", System.currentTimeMillis());
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
+            errorResponse.put(ApiConstants.KEY_BATCH_ID, batchId);
+            errorResponse.put(ApiConstants.KEY_ERROR, "批次模型连通性测试失败: " + e.getMessage());
+            errorResponse.put(ApiConstants.KEY_TIMESTAMP, System.currentTimeMillis());
             
             return ResponseEntity.status(500).body(errorResponse);
         }

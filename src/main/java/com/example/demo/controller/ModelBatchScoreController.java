@@ -17,7 +17,7 @@ import java.util.Map;
  * 提供模型在批次中的评分统计相关API
  */
 @RestController
-@RequestMapping("/api/model-batch-scores")
+@RequestMapping("/model-batch-scores")
 @CrossOrigin(origins = "*")
 public class ModelBatchScoreController {
     

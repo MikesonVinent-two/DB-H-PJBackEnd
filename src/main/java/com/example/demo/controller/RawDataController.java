@@ -17,6 +17,10 @@ import com.example.demo.dto.RawQuestionDisplayDTO;
 import com.example.demo.entity.jdbc.RawAnswer;
 import com.example.demo.entity.jdbc.RawQuestion;
 import com.example.demo.service.RawDataService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.example.demo.serializer.RawQuestionSerializer;
 
 import jakarta.validation.Valid;
 import java.util.Arrays;
@@ -46,7 +50,23 @@ public class RawDataController {
     @PostMapping("/questions-dto")
     public ResponseEntity<RawQuestion> createQuestionFromDTO(@Valid @RequestBody RawQuestionDTO questionDTO) {
         RawQuestion savedQuestion = rawDataService.createQuestionFromDTO(questionDTO);
-        return ResponseEntity.ok(savedQuestion);
+        
+        // 使用ObjectMapper配置，防止循环引用
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(RawQuestion.class, new RawQuestionSerializer());
+        objectMapper.registerModule(module);
+        
+        try {
+            // 先转为JSON字符串，再转回对象，避免循环引用
+            String json = objectMapper.writeValueAsString(savedQuestion);
+            RawQuestion result = objectMapper.readValue(json, RawQuestion.class);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("序列化问题对象失败", e);
+            return ResponseEntity.ok(savedQuestion); // 如果失败，返回原始对象
+        }
     }
     
     /**
@@ -244,5 +264,15 @@ public class RawDataController {
             response.put("details", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
+    }
+    
+    /**
+     * 获取所有原始问题（DTO格式，避免循环引用）
+     */
+    @GetMapping("/questions-dto")
+    public ResponseEntity<Page<RawQuestionDisplayDTO>> getAllRawQuestionsDTO(
+            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+        logger.info("接收到获取原始问题DTO请求");
+        return ResponseEntity.ok(rawDataService.findAllRawQuestions(pageable));
     }
 } 

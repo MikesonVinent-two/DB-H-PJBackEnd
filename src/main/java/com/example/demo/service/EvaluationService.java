@@ -269,4 +269,19 @@ public interface EvaluationService {
      * @return 评测结果统计
      */
     Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
+    
+    /**
+     * 创建并提交人工评测（一步式操作）
+     * 
+     * @param llmAnswerId LLM回答ID
+     * @param evaluatorId 评测者ID（人类）
+     * @param overallScore 总分
+     * @param comments 评语
+     * @param detailScores 各维度得分和评语
+     * @param userId 用户ID
+     * @return 评测记录
+     */
+    Evaluation createAndSubmitHumanEvaluation(Long llmAnswerId, Long evaluatorId, 
+                                           BigDecimal overallScore, String comments, 
+                                           List<Map<String, Object>> detailScores, Long userId);
 } 
