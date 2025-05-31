@@ -30,6 +30,7 @@ import com.example.demo.entity.jdbc.EvaluationDetail;
 import com.example.demo.entity.jdbc.EvaluationRun;
 import com.example.demo.entity.jdbc.LlmAnswer;
 import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.StandardQuestion;
 import com.example.demo.repository.jdbc.LlmAnswerRepository;
 import com.example.demo.service.EvaluationService;
 import com.example.demo.util.ApiConstants;
@@ -1014,6 +1015,95 @@ public class EvaluationController {
         public void setUserId(Long userId) {
             this.userId = userId;
         }
+    }
+    
+    /**
+     * 获取指定批次中某评测员尚未评测的回答列表
+     * 同时返回对应的标准回答和标准问题
+     */
+    @GetMapping("/batch/{batchId}/unevaluated")
+    public ResponseEntity<Map<String, Object>> getUnevaluatedAnswers(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "10") int size) {
+        
+        logger.info("接收到获取未评测回答请求，批次ID: {}, 评测者ID: {}, 页码: {}, 每页大小: {}", 
+                batchId, evaluatorId, page, size);
+        
+        // 查询该批次的所有回答
+        List<LlmAnswer> allAnswers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
+        if (allAnswers.isEmpty()) {
+            Map<String, Object> emptyResult = new HashMap<>();
+            emptyResult.put("unevaluatedAnswers", new ArrayList<>());
+            emptyResult.put("totalCount", 0);
+            emptyResult.put("page", page);
+            emptyResult.put("size", size);
+            emptyResult.put("totalPages", 0);
+            return ResponseEntity.ok(emptyResult);
+        }
+        
+        // 筛选出未被该评测员评测的回答
+        List<Map<String, Object>> allUnevaluatedAnswers = new ArrayList<>();
+        for (LlmAnswer answer : allAnswers) {
+            // 检查该回答是否已被该评测员评测
+            boolean evaluated = evaluationService.isAnswerEvaluatedByEvaluator(answer.getId(), evaluatorId);
+            
+            if (!evaluated) {
+                // 获取标准问题和标准答案
+                Map<String, Object> answerData = new HashMap<>();
+                answerData.put("answer", answer);
+                
+                // 如果有关联的标准问题
+                if (answer.getDatasetQuestionMapping() != null && 
+                    answer.getDatasetQuestionMapping().getStandardQuestion() != null) {
+                    
+                    StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
+                    answerData.put("standardQuestion", question);
+                    
+                    // 根据问题类型获取标准答案
+                    Map<String, Object> standardAnswer = evaluationService.getStandardAnswerForQuestion(question.getId());
+                    if (standardAnswer != null && !standardAnswer.isEmpty()) {
+                        answerData.put("standardAnswer", standardAnswer);
+                    }
+                }
+                
+                allUnevaluatedAnswers.add(answerData);
+            }
+        }
+        
+        // 计算分页信息
+        int totalCount = allUnevaluatedAnswers.size();
+        int totalPages = (int) Math.ceil((double) totalCount / size);
+        
+        // 分页处理
+        List<Map<String, Object>> pagedAnswers;
+        if (totalCount > 0) {
+            int startIndex = page * size;
+            int endIndex = Math.min(startIndex + size, totalCount);
+            
+            // 确保起始索引不超过列表大小
+            if (startIndex >= totalCount) {
+                startIndex = Math.max(0, totalCount - size);
+                endIndex = totalCount;
+                page = Math.max(0, totalPages - 1); // 调整页码为最后一页
+            }
+            
+            pagedAnswers = allUnevaluatedAnswers.subList(startIndex, endIndex);
+        } else {
+            pagedAnswers = new ArrayList<>();
+        }
+        
+        // 组装结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("unevaluatedAnswers", pagedAnswers);
+        result.put("totalCount", totalCount);
+        result.put("page", page);
+        result.put("size", size);
+        result.put("totalPages", totalPages);
+        
+        logger.info("找到{}个未评测的回答，当前页{}显示{}条", totalCount, page, pagedAnswers.size());
+        return ResponseEntity.ok(result);
     }
     
     @ExceptionHandler(Exception.class)

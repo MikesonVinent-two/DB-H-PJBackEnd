@@ -1,5 +1,18 @@
 package com.example.demo.service.impl;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.example.demo.dto.AnswerPromptAssemblyConfigDTO;
 import com.example.demo.dto.EvaluationPromptAssemblyConfigDTO;
 import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
@@ -7,22 +20,12 @@ import com.example.demo.entity.jdbc.ChangeLog;
 import com.example.demo.entity.jdbc.ChangeType;
 import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.User;
+import com.example.demo.exception.EntityNotFoundException;
 import com.example.demo.repository.jdbc.AnswerPromptAssemblyConfigRepository;
 import com.example.demo.repository.jdbc.ChangeLogRepository;
 import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.PromptAssemblyConfigService;
-import com.example.demo.exception.EntityNotFoundException;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class PromptAssemblyConfigServiceImpl implements PromptAssemblyConfigService {
@@ -152,6 +155,20 @@ public class PromptAssemblyConfigServiceImpl implements PromptAssemblyConfigServ
         return answerConfigRepository.findByIsActiveTrue().stream()
                 .map(this::convertToAnswerDTO)
                 .collect(Collectors.toList());
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AnswerPromptAssemblyConfigDTO> getAllActiveAnswerConfigsPageable(Pageable pageable) {
+        Page<AnswerPromptAssemblyConfig> configPage = answerConfigRepository.findByIsActiveTruePageable(pageable);
+        
+        // 将实体转换为DTO
+        List<AnswerPromptAssemblyConfigDTO> dtos = configPage.getContent().stream()
+                .map(this::convertToAnswerDTO)
+                .collect(Collectors.toList());
+        
+        // 创建新的Page对象
+        return new PageImpl<>(dtos, pageable, configPage.getTotalElements());
     }
     
     @Override

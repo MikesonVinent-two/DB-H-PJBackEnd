@@ -1,17 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,6 +12,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.DifficultyLevel;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.RawQuestion;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.StandardQuestionTag;
+import com.example.demo.entity.jdbc.Tag;
+
 /**
  * 基于JDBC的标准问题仓库实现
  */
@@ -32,6 +39,7 @@ public class StandardQuestionRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final UserRepository userRepository;
+    private final StandardQuestionTagRepository standardQuestionTagRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO standard_questions (original_raw_question_id, question_text, question_type, difficulty, " +
@@ -44,13 +52,26 @@ public class StandardQuestionRepository {
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
-            "SELECT * FROM standard_questions WHERE id=? AND deleted_at IS NULL";
+            "SELECT sq.*, t.id as tag_id, t.tag_name, t.tag_type " +
+            "FROM standard_questions sq " +
+            "LEFT JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id " +
+            "LEFT JOIN tags t ON sqt.tag_id = t.id " +
+            "WHERE sq.id = ? AND sq.deleted_at IS NULL";
     
     private static final String SQL_FIND_ALL = 
-            "SELECT * FROM standard_questions WHERE deleted_at IS NULL";
+            "SELECT sq.*, t.id as tag_id, t.tag_name, t.tag_type " +
+            "FROM standard_questions sq " +
+            "LEFT JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id " +
+            "LEFT JOIN tags t ON sqt.tag_id = t.id " +
+            "WHERE sq.deleted_at IS NULL";
     
     private static final String SQL_FIND_ALL_PAGEABLE = 
-            "SELECT * FROM standard_questions WHERE deleted_at IS NULL LIMIT ? OFFSET ?";
+            "SELECT sq.*, t.id as tag_id, t.tag_name, t.tag_type " +
+            "FROM standard_questions sq " +
+            "LEFT JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id " +
+            "LEFT JOIN tags t ON sqt.tag_id = t.id " +
+            "WHERE sq.deleted_at IS NULL " +
+            "LIMIT ? OFFSET ?";
     
     private static final String SQL_COUNT_ALL = 
             "SELECT COUNT(*) FROM standard_questions WHERE deleted_at IS NULL";
@@ -92,7 +113,10 @@ public class StandardQuestionRepository {
             "WHERE question_text LIKE ? AND deleted_at IS NULL";
     
     private static final String SQL_FIND_LATEST_VERSIONS = 
-            "SELECT sq.* FROM standard_questions sq " +
+            "SELECT sq.*, t.id as tag_id, t.tag_name, t.tag_type " +
+            "FROM standard_questions sq " +
+            "LEFT JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id " +
+            "LEFT JOIN tags t ON sqt.tag_id = t.id " +
             "WHERE NOT EXISTS (" +
             "  SELECT 1 FROM standard_questions child " +
             "  WHERE child.parent_standard_question_id = sq.id AND child.deleted_at IS NULL" +
@@ -112,9 +136,10 @@ public class StandardQuestionRepository {
             "WHERE sq.id IN (%s) AND sq.deleted_at IS NULL";
 
     @Autowired
-    public StandardQuestionRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
+    public StandardQuestionRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository, StandardQuestionTagRepository standardQuestionTagRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.userRepository = userRepository;
+        this.standardQuestionTagRepository = standardQuestionTagRepository;
     }
 
     /**
@@ -233,8 +258,8 @@ public class StandardQuestionRepository {
      */
     public Optional<StandardQuestion> findById(Long id) {
         try {
-            StandardQuestion question = jdbcTemplate.queryForObject(SQL_FIND_BY_ID, new Object[]{id}, new StandardQuestionRowMapper());
-            return Optional.ofNullable(question);
+            List<StandardQuestion> results = jdbcTemplate.query(SQL_FIND_BY_ID, new Object[]{id}, new StandardQuestionRowMapper());
+            return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
@@ -343,7 +368,7 @@ public class StandardQuestionRepository {
         return jdbcTemplate.query(
                 SQL_FIND_BY_DATASET_VERSION_ID,
                 new Object[]{datasetVersionId},
-                new StandardQuestionRowMapper()
+                new StandardQuestionRowMapperWithoutTags()
         );
     }
     
@@ -371,7 +396,7 @@ public class StandardQuestionRepository {
         return jdbcTemplate.query(
                 SQL_FIND_BY_QUESTION_TEXT_CONTAINING,
                 new Object[]{"%" + questionText + "%"},
-                new StandardQuestionRowMapper()
+                new StandardQuestionRowMapperWithoutTags()
         );
     }
     
@@ -413,71 +438,167 @@ public class StandardQuestionRepository {
         }
         
         String sql = String.format(SQL_FIND_BY_IDS_WITH_DATASET_MAPPINGS, placeholders.toString());
-        return jdbcTemplate.query(sql, questionIds.toArray(), new StandardQuestionRowMapper());
+        return jdbcTemplate.query(sql, questionIds.toArray(), new StandardQuestionRowMapperWithoutTags());
+    }
+
+    /**
+     * 标准问题行映射器（不包含标签信息）
+     */
+    private class StandardQuestionRowMapperWithoutTags implements RowMapper<StandardQuestion> {
+        private Map<Long, StandardQuestion> questionMap = new HashMap<>();
+        
+        @Override
+        public StandardQuestion mapRow(ResultSet rs, int rowNum) throws SQLException {
+            Long questionId = rs.getLong("id");
+            StandardQuestion question = questionMap.get(questionId);
+            
+            if (question == null) {
+                final StandardQuestion newQuestion = new StandardQuestion();
+                newQuestion.setId(questionId);
+                newQuestion.setQuestionText(rs.getString("question_text"));
+                
+                // 解析枚举
+                String questionTypeStr = rs.getString("question_type");
+                if (questionTypeStr != null) {
+                    newQuestion.setQuestionType(QuestionType.valueOf(questionTypeStr));
+                }
+                
+                String difficultyStr = rs.getString("difficulty");
+                if (difficultyStr != null) {
+                    newQuestion.setDifficulty(DifficultyLevel.valueOf(difficultyStr));
+                }
+                
+                // 设置时间
+                Timestamp creationTime = rs.getTimestamp("creation_time");
+                if (creationTime != null) {
+                    newQuestion.setCreationTime(creationTime.toLocalDateTime());
+                }
+                
+                Timestamp deletedAt = rs.getTimestamp("deleted_at");
+                if (deletedAt != null) {
+                    newQuestion.setDeletedAt(deletedAt.toLocalDateTime());
+                }
+                
+                // 处理外键关联
+                Long originalRawQuestionId = rs.getLong("original_raw_question_id");
+                if (!rs.wasNull()) {
+                    RawQuestion rawQuestion = new RawQuestion();
+                    rawQuestion.setId(originalRawQuestionId);
+                    newQuestion.setOriginalRawQuestion(rawQuestion);
+                }
+                
+                // 设置创建者用户
+                Long createdByUserId = rs.getLong("created_by_user_id");
+                if (!rs.wasNull()) {
+                    userRepository.findById(createdByUserId).ifPresent(user -> newQuestion.setCreatedByUser(user));
+                }
+                
+                Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
+                if (!rs.wasNull()) {
+                    StandardQuestion parentQuestion = new StandardQuestion();
+                    parentQuestion.setId(parentStandardQuestionId);
+                    newQuestion.setParentStandardQuestion(parentQuestion);
+                }
+                
+                Long createdChangeLogId = rs.getLong("created_change_log_id");
+                if (!rs.wasNull()) {
+                    ChangeLog changeLog = new ChangeLog();
+                    changeLog.setId(createdChangeLogId);
+                    newQuestion.setCreatedChangeLog(changeLog);
+                }
+                
+                questionMap.put(questionId, newQuestion);
+                question = newQuestion;
+            }
+            
+            return question;
+        }
     }
 
     /**
      * 标准问题行映射器
      */
     private class StandardQuestionRowMapper implements RowMapper<StandardQuestion> {
+        private Map<Long, StandardQuestion> questionMap = new HashMap<>();
+        
         @Override
         public StandardQuestion mapRow(ResultSet rs, int rowNum) throws SQLException {
-            StandardQuestion question = new StandardQuestion();
-            question.setId(rs.getLong("id"));
-            question.setQuestionText(rs.getString("question_text"));
+            Long questionId = rs.getLong("id");
+            StandardQuestion question = questionMap.get(questionId);
             
-            // 解析枚举
-            String questionTypeStr = rs.getString("question_type");
-            if (questionTypeStr != null) {
-                question.setQuestionType(QuestionType.valueOf(questionTypeStr));
+            if (question == null) {
+                final StandardQuestion newQuestion = new StandardQuestion();
+                newQuestion.setId(questionId);
+                newQuestion.setQuestionText(rs.getString("question_text"));
+                
+                // 解析枚举
+                String questionTypeStr = rs.getString("question_type");
+                if (questionTypeStr != null) {
+                    newQuestion.setQuestionType(QuestionType.valueOf(questionTypeStr));
+                }
+                
+                String difficultyStr = rs.getString("difficulty");
+                if (difficultyStr != null) {
+                    newQuestion.setDifficulty(DifficultyLevel.valueOf(difficultyStr));
+                }
+                
+                // 设置时间
+                Timestamp creationTime = rs.getTimestamp("creation_time");
+                if (creationTime != null) {
+                    newQuestion.setCreationTime(creationTime.toLocalDateTime());
+                }
+                
+                Timestamp deletedAt = rs.getTimestamp("deleted_at");
+                if (deletedAt != null) {
+                    newQuestion.setDeletedAt(deletedAt.toLocalDateTime());
+                }
+                
+                // 处理外键关联
+                Long originalRawQuestionId = rs.getLong("original_raw_question_id");
+                if (!rs.wasNull()) {
+                    RawQuestion rawQuestion = new RawQuestion();
+                    rawQuestion.setId(originalRawQuestionId);
+                    newQuestion.setOriginalRawQuestion(rawQuestion);
+                }
+                
+                // 设置创建者用户
+                Long createdByUserId = rs.getLong("created_by_user_id");
+                if (!rs.wasNull()) {
+                    userRepository.findById(createdByUserId).ifPresent(user -> newQuestion.setCreatedByUser(user));
+                }
+                
+                Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
+                if (!rs.wasNull()) {
+                    StandardQuestion parentQuestion = new StandardQuestion();
+                    parentQuestion.setId(parentStandardQuestionId);
+                    newQuestion.setParentStandardQuestion(parentQuestion);
+                }
+                
+                Long createdChangeLogId = rs.getLong("created_change_log_id");
+                if (!rs.wasNull()) {
+                    ChangeLog changeLog = new ChangeLog();
+                    changeLog.setId(createdChangeLogId);
+                    newQuestion.setCreatedChangeLog(changeLog);
+                }
+                
+                questionMap.put(questionId, newQuestion);
+                question = newQuestion;
             }
             
-            String difficultyStr = rs.getString("difficulty");
-            if (difficultyStr != null) {
-                question.setDifficulty(DifficultyLevel.valueOf(difficultyStr));
-            }
-            
-            // 设置时间
-            Timestamp creationTime = rs.getTimestamp("creation_time");
-            if (creationTime != null) {
-                question.setCreationTime(creationTime.toLocalDateTime());
-            }
-            
-            Timestamp deletedAt = rs.getTimestamp("deleted_at");
-            if (deletedAt != null) {
-                question.setDeletedAt(deletedAt.toLocalDateTime());
-            }
-            
-            // 处理外键关联 - 这里简化处理，大部分只设置ID，避免过度加载
-            Long originalRawQuestionId = rs.getLong("original_raw_question_id");
+            // 处理标签
+            Long tagId = rs.getLong("tag_id");
             if (!rs.wasNull()) {
-                RawQuestion rawQuestion = new RawQuestion();
-                rawQuestion.setId(originalRawQuestionId);
-                question.setOriginalRawQuestion(rawQuestion);
+                Tag tag = new Tag();
+                tag.setId(tagId);
+                tag.setTagName(rs.getString("tag_name"));
+                tag.setTagType(rs.getString("tag_type"));
+                
+                StandardQuestionTag questionTag = new StandardQuestionTag();
+                questionTag.setStandardQuestion(question);
+                questionTag.setTag(tag);
+                
+                question.getQuestionTags().add(questionTag);
             }
-            
-            // 设置创建者用户
-            Long createdByUserId = rs.getLong("created_by_user_id");
-            if (!rs.wasNull()) {
-                userRepository.findById(createdByUserId).ifPresent(user -> question.setCreatedByUser(user));
-            }
-            
-            Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
-            if (!rs.wasNull()) {
-                StandardQuestion parentQuestion = new StandardQuestion();
-                parentQuestion.setId(parentStandardQuestionId);
-                question.setParentStandardQuestion(parentQuestion);
-            }
-            
-            Long createdChangeLogId = rs.getLong("created_change_log_id");
-            if (!rs.wasNull()) {
-                ChangeLog changeLog = new ChangeLog();
-                changeLog.setId(createdChangeLogId);
-                question.setCreatedChangeLog(changeLog);
-            }
-            
-            // 注意：这里没有加载关联的标签、数据集映射和答案等
-            // 这些关联对象需要在服务层按需加载
             
             return question;
         }

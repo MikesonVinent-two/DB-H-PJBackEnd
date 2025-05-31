@@ -1,19 +1,30 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.AnswerPromptAssemblyConfigDTO;
-import com.example.demo.dto.EvaluationPromptAssemblyConfigDTO;
-import com.example.demo.service.PromptAssemblyConfigService;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.demo.dto.AnswerPromptAssemblyConfigDTO;
+import com.example.demo.dto.EvaluationPromptAssemblyConfigDTO;
+import com.example.demo.service.PromptAssemblyConfigService;
 
 import jakarta.validation.Valid;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/prompt-assembly")
@@ -165,6 +176,39 @@ public class PromptAssemblyConfigController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "获取所有活跃回答提示词组装配置失败");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+    
+    /**
+     * 获取所有活跃的回答提示词组装配置（分页版本）
+     */
+    @GetMapping("/answer-configs/page")
+    public ResponseEntity<?> getAllActiveAnswerConfigsPageable(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        logger.info("接收到分页获取所有活跃回答提示词组装配置请求: page={}, size={}", page, size);
+        
+        try {
+            Pageable pageable = PageRequest.of(page, size);
+            Page<AnswerPromptAssemblyConfigDTO> configPage = configService.getAllActiveAnswerConfigsPageable(pageable);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("configs", configPage.getContent());
+            response.put("currentPage", configPage.getNumber());
+            response.put("totalItems", configPage.getTotalElements());
+            response.put("totalPages", configPage.getTotalPages());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("分页获取所有活跃回答提示词组装配置失败", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "分页获取所有活跃回答提示词组装配置失败");
             response.put("error", e.getMessage());
             
             return ResponseEntity.badRequest().body(response);

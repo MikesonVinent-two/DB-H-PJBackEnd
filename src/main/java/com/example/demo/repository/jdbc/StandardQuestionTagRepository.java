@@ -1,10 +1,13 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.StandardQuestionTag;
-import com.example.demo.entity.jdbc.Tag;
-import com.example.demo.entity.jdbc.User;
-import com.example.demo.entity.jdbc.ChangeLog;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,13 +16,10 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.StandardQuestionTag;
+import com.example.demo.entity.jdbc.Tag;
 
 /**
  * 基于JDBC的标准问题标签仓库实?
@@ -31,7 +31,7 @@ public class StandardQuestionTagRepository {
     private final UserRepository userRepository;
 
     private static final String SQL_INSERT = 
-            "INSERT INTO standard_question_tags (standard_question_id, tag_id, created_at, created_by_user_id, created_change_log_id) " +
+            "INSERT IGNORE INTO standard_question_tags (standard_question_id, tag_id, created_at, created_by_user_id, created_change_log_id) " +
             "VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)";
     
     private static final String SQL_FIND_BY_ID = 
@@ -69,9 +69,14 @@ public class StandardQuestionTagRepository {
      */
     public StandardQuestionTag save(StandardQuestionTag standardQuestionTag) {
         if (standardQuestionTag.getId() == null) {
+            // 先删除可能存在的关联
+            deleteByStandardQuestionAndTag(
+                standardQuestionTag.getStandardQuestion(),
+                standardQuestionTag.getTag()
+            );
             return insert(standardQuestionTag);
         } else {
-            // 由于标准问题标签是简单的关联实体，通常不需要更新，只需插入和删?
+            // 由于标准问题标签是简单的关联实体，通常不需要更新，只需插入和删除
             // 如果有需要，可以实现update方法
             return standardQuestionTag;
         }

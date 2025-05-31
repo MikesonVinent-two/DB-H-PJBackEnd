@@ -1,67 +1,8 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.entity.jdbc.Evaluation;
-import com.example.demo.entity.jdbc.Evaluation.EvaluationStatus;
-import com.example.demo.entity.jdbc.Evaluator;
-import com.example.demo.entity.jdbc.LlmAnswer;
-import com.example.demo.entity.jdbc.QuestionType;
-import com.example.demo.entity.jdbc.StandardObjectiveAnswer;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.StandardSimpleAnswer;
-import com.example.demo.entity.jdbc.User;
-import com.example.demo.entity.jdbc.EvaluationRun;
-import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
-import com.example.demo.entity.jdbc.ModelAnswerRun;
-import com.example.demo.entity.jdbc.EvaluationDetail;
-import com.example.demo.entity.jdbc.EvaluationCriterion;
-import com.example.demo.entity.jdbc.LlmModel;
-import com.example.demo.entity.jdbc.Tag;
-import com.example.demo.entity.jdbc.EvaluationTagPrompt;
-import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
-import com.example.demo.entity.jdbc.EvaluationSubjectivePrompt;
-import com.example.demo.entity.jdbc.StandardSubjectiveAnswer;
-import com.example.demo.entity.jdbc.EvaluationType;
-import com.example.demo.repository.jdbc.EvaluationRepository;
-import com.example.demo.repository.jdbc.EvaluatorRepository;
-import com.example.demo.repository.jdbc.StandardObjectiveAnswerRepository;
-import com.example.demo.repository.jdbc.StandardQuestionRepository;
-import com.example.demo.repository.jdbc.StandardSimpleAnswerRepository;
-import com.example.demo.repository.jdbc.UserRepository;
-import com.example.demo.repository.jdbc.LlmAnswerRepository;
-import com.example.demo.repository.jdbc.ModelAnswerRunRepository;
-import com.example.demo.repository.jdbc.EvaluationRunRepository;
-import com.example.demo.repository.jdbc.EvaluationDetailRepository;
-import com.example.demo.repository.jdbc.EvaluationCriterionRepository;
-import com.example.demo.repository.jdbc.EvaluationTagPromptRepository;
-import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
-import com.example.demo.repository.jdbc.EvaluationSubjectivePromptRepository;
-import com.example.demo.repository.jdbc.StandardSubjectiveAnswerRepository;
-import com.example.demo.repository.jdbc.AnswerScoreRepository;
-import com.example.demo.repository.jdbc.LlmModelRepository;
-import com.example.demo.entity.jdbc.AnswerScore;
-import com.example.demo.service.EvaluationService;
-import com.example.demo.dto.Option;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
-
-import com.example.demo.exception.EntityNotFoundException;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,26 +11,79 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.springframework.scheduling.annotation.Async;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.transaction.annotation.Propagation;
-import java.util.Optional;
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
-import org.redisson.api.RLock;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.redisson.api.RedissonClient;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+
+import com.example.demo.dto.Option;
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.Evaluation.EvaluationStatus;
+import com.example.demo.entity.jdbc.EvaluationCriterion;
+import com.example.demo.entity.jdbc.EvaluationDetail;
+import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
+import com.example.demo.entity.jdbc.EvaluationSubjectivePrompt;
+import com.example.demo.entity.jdbc.EvaluationTagPrompt;
+import com.example.demo.entity.jdbc.EvaluationType;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.LlmModel;
+import com.example.demo.entity.jdbc.ModelAnswerRun;
+import com.example.demo.entity.jdbc.QuestionType;
+import com.example.demo.entity.jdbc.StandardObjectiveAnswer;
+import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.StandardSimpleAnswer;
+import com.example.demo.entity.jdbc.StandardSubjectiveAnswer;
+import com.example.demo.entity.jdbc.Tag;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.exception.EntityNotFoundException;
+import com.example.demo.repository.jdbc.EvaluationCriterionRepository;
+import com.example.demo.repository.jdbc.EvaluationDetailRepository;
+import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository;
+import com.example.demo.repository.jdbc.EvaluationRepository;
+import com.example.demo.repository.jdbc.EvaluationRunRepository;
+import com.example.demo.repository.jdbc.EvaluationSubjectivePromptRepository;
+import com.example.demo.repository.jdbc.EvaluationTagPromptRepository;
+import com.example.demo.repository.jdbc.EvaluatorRepository;
+import com.example.demo.repository.jdbc.LlmAnswerRepository;
+import com.example.demo.repository.jdbc.LlmModelRepository;
+import com.example.demo.repository.jdbc.ModelAnswerRunRepository;
+import com.example.demo.repository.jdbc.StandardObjectiveAnswerRepository;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
+import com.example.demo.repository.jdbc.StandardSimpleAnswerRepository;
+import com.example.demo.repository.jdbc.StandardSubjectiveAnswerRepository;
+import com.example.demo.repository.jdbc.UserRepository;
+import com.example.demo.service.EvaluationService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class EvaluationServiceImpl implements EvaluationService {
@@ -3409,20 +3403,11 @@ public class EvaluationServiceImpl implements EvaluationService {
                 answer.getId(), evaluator.getId());
             
             if (exists) {
-                logger.warn("该主观题回答已被同一评测者评测过，跳过重复评测，回答ID: {}, 重复索引: {}, 评测者ID: {}", 
+                logger.info("该主观题回答已被同一评测者评测过，将覆盖原有评测记录，回答ID: {}, 重复索引: {}, 评测者ID: {}", 
                         answer.getId(), repeatIndex, evaluator.getId());
                 
-                // 查找并返回现有评测记录的分数
-                List<Evaluation> existingEvaluations = evaluationRepository.findByLlmAnswerIdAndEvaluatorId(
-                        answer.getId(), evaluator.getId());
-                
-                if (!existingEvaluations.isEmpty()) {
-                    BigDecimal existingScore = existingEvaluations.get(0).getRawScore();
-                    if (existingScore != null) {
-                        logger.info("返回已有评测记录的分数: {}, 重复索引: {}", existingScore, repeatIndex);
-                        return existingScore;
-                    }
-                }
+                // 删除现有评测记录
+                deleteExistingEvaluations(answer.getId(), evaluator.getId());
             }
             
             // 获取标准答案
@@ -3935,5 +3920,80 @@ public class EvaluationServiceImpl implements EvaluationService {
             logger.error("创建并提交人工评测失败", e);
             throw new RuntimeException("创建并提交人工评测失败: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * 检查回答是否已被指定评测员评测
+     */
+    @Override
+    public boolean isAnswerEvaluatedByEvaluator(Long answerId, Long evaluatorId) {
+        return evaluationRepository.existsByLlmAnswerIdAndEvaluatorId(answerId, evaluatorId);
+    }
+    
+    /**
+     * 获取标准问题对应的标准答案
+     */
+    @Override
+    public Map<String, Object> getStandardAnswerForQuestion(Long questionId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        // 查询标准问题
+        Optional<StandardQuestion> questionOpt = standardQuestionRepository.findById(questionId);
+        if (!questionOpt.isPresent()) {
+            logger.warn("找不到标准问题: {}", questionId);
+            return result;
+        }
+        
+        StandardQuestion question = questionOpt.get();
+        QuestionType questionType = question.getQuestionType();
+        
+        // 根据问题类型查询对应的标准答案
+        switch (questionType) {
+            case SINGLE_CHOICE:
+            case MULTIPLE_CHOICE:
+                Optional<StandardObjectiveAnswer> objectiveAnswerOpt = 
+                    objectiveAnswerRepository.findByStandardQuestionId(questionId);
+                if (objectiveAnswerOpt.isPresent()) {
+                    StandardObjectiveAnswer answer = objectiveAnswerOpt.get();
+                    result.put("type", questionType.name());
+                    result.put("options", answer.getOptions());
+                    result.put("correctIds", answer.getCorrectIds());
+                }
+                break;
+                
+            case SIMPLE_FACT:
+                Optional<StandardSimpleAnswer> simpleAnswerOpt = 
+                    simpleAnswerRepository.findByStandardQuestionId(questionId);
+                if (simpleAnswerOpt.isPresent()) {
+                    StandardSimpleAnswer answer = simpleAnswerOpt.get();
+                    result.put("type", questionType.name());
+                    result.put("answerText", answer.getAnswerText());
+                    result.put("alternativeAnswers", answer.getAlternativeAnswers());
+                }
+                break;
+                
+            case SUBJECTIVE:
+                Optional<StandardSubjectiveAnswer> subjectiveAnswerOpt = 
+                    standardSubjectiveAnswerRepository.findByStandardQuestionId(questionId);
+                if (subjectiveAnswerOpt.isPresent()) {
+                    StandardSubjectiveAnswer answer = subjectiveAnswerOpt.get();
+                    result.put("type", questionType.name());
+                    result.put("answerText", answer.getAnswerText());
+                    result.put("scoringGuidance", answer.getScoringGuidance());
+                    
+                    // 获取评测标准
+                    List<EvaluationCriterion> criteria = evaluationCriterionRepository
+                        .findByQuestionType(QuestionType.SUBJECTIVE);
+                    if (!criteria.isEmpty()) {
+                        result.put("criteria", criteria);
+                    }
+                }
+                break;
+                
+            default:
+                logger.warn("未知的问题类型: {}", questionType);
+        }
+        
+        return result;
     }
 } 

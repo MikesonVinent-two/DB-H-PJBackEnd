@@ -23,9 +23,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.demo.dto.UserDTO;
 import com.example.demo.dto.UserDTO.LoginValidation;
 import com.example.demo.dto.UserDTO.RegisterValidation;
-import com.example.demo.entity.jdbc.User;
-import com.example.demo.service.UserService;
 import com.example.demo.dto.UserProfileDTO;
+import com.example.demo.entity.jdbc.User;
+import com.example.demo.service.EvaluatorService;
+import com.example.demo.service.UserService;
 
 @RestController
 @RequestMapping("/users")
@@ -34,10 +35,12 @@ public class UserController {
 
     private static final Logger logger = LoggerFactory.getLogger(UserController.class);
     private final UserService userService;
+    private final EvaluatorService evaluatorService;
 
     @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, EvaluatorService evaluatorService) {
         this.userService = userService;
+        this.evaluatorService = evaluatorService;
     }
 
     @PostMapping("/register")
@@ -114,8 +117,18 @@ public class UserController {
                         response.put("contactInfo", user.getContactInfo());
                         response.put("role", user.getRole());
                         
-                        logger.info("用户登录成功 - ID: {}, 用户名: {}, 角色: {}", 
-                            user.getId(), user.getUsername(), user.getRole());
+                        // 添加用户是否为评测员的判断
+                        boolean isEvaluator = evaluatorService.getEvaluatorByUserId(user.getId()).isPresent();
+                        response.put("isEvaluator", isEvaluator);
+                        
+                        // 如果是评测员，添加评测员ID
+                        if (isEvaluator) {
+                            evaluatorService.getEvaluatorByUserId(user.getId())
+                                .ifPresent(evaluator -> response.put("evaluatorId", evaluator.getId()));
+                        }
+                        
+                        logger.info("用户登录成功 - ID: {}, 用户名: {}, 角色: {}, 是否为评测者: {}", 
+                            user.getId(), user.getUsername(), user.getRole(), isEvaluator);
                         
                         return new ResponseEntity<>(response, HttpStatus.OK);
                     })

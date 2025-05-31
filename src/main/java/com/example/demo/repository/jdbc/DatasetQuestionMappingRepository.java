@@ -1,18 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.DatasetQuestionMapping;
-import com.example.demo.entity.jdbc.DatasetVersion;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.User;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,6 +9,17 @@ import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.DatasetQuestionMapping;
+import com.example.demo.entity.jdbc.DatasetVersion;
 
 /**
  * 基于JDBC的数据集问题映射仓库实现
@@ -50,6 +48,9 @@ public class DatasetQuestionMappingRepository {
     
     private static final String SQL_FIND_BY_DATASET_VERSION_ID_ORDER_BY_ORDER = 
             "SELECT * FROM DATASET_QUESTION_MAPPING WHERE DATASET_VERSION_ID=? ORDER BY ORDER_IN_DATASET";
+    
+    private static final String SQL_FIND_BY_DATASET_VERSION_ID_PAGEABLE = 
+            "SELECT * FROM DATASET_QUESTION_MAPPING WHERE DATASET_VERSION_ID=? ORDER BY ORDER_IN_DATASET LIMIT ? OFFSET ?";
     
     private static final String SQL_EXISTS_BY_DATASET_VERSION_ID_AND_STANDARD_QUESTION_ID = 
             "SELECT COUNT(*) FROM DATASET_QUESTION_MAPPING WHERE DATASET_VERSION_ID=? AND STANDARD_QUESTION_ID=?";
@@ -80,9 +81,9 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 保存数据集问题映?
+     * 保存数据集问题映射
      *
-     * @param datasetQuestionMapping 数据集问题映射对?
+     * @param datasetQuestionMapping 数据集问题映射对象
      * @return 带有ID的数据集问题映射对象
      */
     public DatasetQuestionMapping save(DatasetQuestionMapping datasetQuestionMapping) {
@@ -96,7 +97,7 @@ public class DatasetQuestionMappingRepository {
     /**
      * 插入新数据集问题映射
      *
-     * @param datasetQuestionMapping 数据集问题映射对?
+     * @param datasetQuestionMapping 数据集问题映射对象
      * @return 带有ID的数据集问题映射对象
      */
     private DatasetQuestionMapping insert(DatasetQuestionMapping datasetQuestionMapping) {
@@ -116,7 +117,7 @@ public class DatasetQuestionMappingRepository {
             // 设置标准问题ID
             ps.setLong(2, datasetQuestionMapping.getStandardQuestion().getId());
             
-            // 设置数据集中的顺?
+            // 设置数据集中的顺序
             if (datasetQuestionMapping.getOrderInDataset() != null) {
                 ps.setInt(3, datasetQuestionMapping.getOrderInDataset());
             } else {
@@ -152,10 +153,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 更新数据集问题映?
+     * 更新数据集问题映射
      *
-     * @param datasetQuestionMapping 数据集问题映射对?
-     * @return 更新后的数据集问题映射对?
+     * @param datasetQuestionMapping 数据集问题映射对象
+     * @return 更新后的数据集问题映射对象
      */
     private DatasetQuestionMapping update(DatasetQuestionMapping datasetQuestionMapping) {
         jdbcTemplate.update(connection -> {
@@ -167,7 +168,7 @@ public class DatasetQuestionMappingRepository {
             // 设置标准问题ID
             ps.setLong(2, datasetQuestionMapping.getStandardQuestion().getId());
             
-            // 设置数据集中的顺?
+            // 设置数据集中的顺序
             if (datasetQuestionMapping.getOrderInDataset() != null) {
                 ps.setInt(3, datasetQuestionMapping.getOrderInDataset());
             } else {
@@ -201,10 +202,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据ID查找数据集问题映?
+     * 根据ID查找数据集问题映射
      *
      * @param id 数据集问题映射ID
-     * @return 数据集问题映射对?
+     * @return 数据集问题映射对象
      */
     public Optional<DatasetQuestionMapping> findById(Long id) {
         try {
@@ -220,10 +221,10 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据数据集版本查找所有问题映射，按顺序排?
+     * 根据数据集版本查找所有问题映射，按顺序排序
      *
-     * @param datasetVersion 数据集版本对?
-     * @return 数据集问题映射列?
+     * @param datasetVersion 数据集版本对象
+     * @return 数据集问题映射列表
      */
     public List<DatasetQuestionMapping> findByDatasetVersionOrderByOrderInDataset(DatasetVersion datasetVersion) {
         return jdbcTemplate.query(
@@ -234,16 +235,32 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 根据数据集版本ID查找所有问题映射，按顺序排?
+     * 根据数据集版本ID查找所有问题映射，按顺序排序
      *
      * @param datasetVersionId 数据集版本ID
-     * @return 数据集问题映射列?
+     * @return 数据集问题映射列表
      */
     public List<DatasetQuestionMapping> findByDatasetVersionId(Long datasetVersionId) {
         return jdbcTemplate.query(
             SQL_FIND_BY_DATASET_VERSION_ID_ORDER_BY_ORDER, 
             new DatasetQuestionMappingRowMapper(), 
             datasetVersionId
+        );
+    }
+
+    /**
+     * 根据数据集版本ID查找所有问题映射，按顺序排序并分页
+     *
+     * @param datasetVersionId 数据集版本ID
+     * @param limit 每页记录数
+     * @param offset 偏移量
+     * @return 数据集问题映射列表
+     */
+    public List<DatasetQuestionMapping> findByDatasetVersionIdPageable(Long datasetVersionId, int limit, int offset) {
+        return jdbcTemplate.query(
+            SQL_FIND_BY_DATASET_VERSION_ID_PAGEABLE, 
+            new DatasetQuestionMappingRowMapper(), 
+            datasetVersionId, limit, offset
         );
     }
 
@@ -265,7 +282,7 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 获取数据集版本中的问题数?
+     * 获取数据集版本中的问题数量
      *
      * @param datasetVersionId 数据集版本ID
      * @return 问题数量
@@ -303,26 +320,26 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
-     * 删除数据集问题映?
+     * 删除数据集问题映射
      *
-     * @param datasetQuestionMapping 数据集问题映射对?
+     * @param datasetQuestionMapping 数据集问题映射对象
      */
     public void delete(DatasetQuestionMapping datasetQuestionMapping) {
         jdbcTemplate.update(SQL_DELETE, datasetQuestionMapping.getId());
     }
 
     /**
-     * 数据集问题映射行映射?
+     * 数据集问题映射行映射器
      */
     private class DatasetQuestionMappingRowMapper implements RowMapper<DatasetQuestionMapping> {
         @Override
         public DatasetQuestionMapping mapRow(ResultSet rs, int rowNum) throws SQLException {
             DatasetQuestionMapping datasetQuestionMapping = new DatasetQuestionMapping();
             
-            // 设置ID和基本属?
+            // 设置ID和基本属性
             datasetQuestionMapping.setId(rs.getLong("ID"));
             
-            // 设置数据集中的顺?
+            // 设置数据集中的顺序
             Integer orderInDataset = rs.getInt("ORDER_IN_DATASET");
             if (!rs.wasNull()) {
                 datasetQuestionMapping.setOrderInDataset(orderInDataset);
@@ -341,21 +358,21 @@ public class DatasetQuestionMappingRepository {
                     .ifPresent(datasetQuestionMapping::setDatasetVersion);
             }
             
-            // 获取并设置标准问?
+            // 获取并设置标准问题
             Long standardQuestionId = rs.getLong("STANDARD_QUESTION_ID");
             if (!rs.wasNull()) {
                 standardQuestionRepository.findById(standardQuestionId)
                     .ifPresent(datasetQuestionMapping::setStandardQuestion);
             }
             
-            // 获取并设置创建者用?
+            // 获取并设置创建者用户
             Long createdByUserId = rs.getLong("CREATED_BY_USER_ID");
             if (!rs.wasNull()) {
                 userRepository.findById(createdByUserId)
                     .ifPresent(datasetQuestionMapping::setCreatedByUser);
             }
             
-            // 获取并设置创建变更日?
+            // 获取并设置创建变更日志
             Long createdChangeLogId = rs.getLong("CREATED_CHANGE_LOG_ID");
             if (!rs.wasNull()) {
                 changeLogRepository.findById(createdChangeLogId)

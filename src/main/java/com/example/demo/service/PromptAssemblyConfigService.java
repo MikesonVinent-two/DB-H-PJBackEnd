@@ -1,9 +1,12 @@
 package com.example.demo.service;
 
+import java.util.List;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import com.example.demo.dto.AnswerPromptAssemblyConfigDTO;
 import com.example.demo.dto.EvaluationPromptAssemblyConfigDTO;
-
-import java.util.List;
 
 /**
  * 提示词组装配置服务接口
@@ -50,6 +53,14 @@ public interface PromptAssemblyConfigService {
      * @return 配置DTO列表
      */
     List<AnswerPromptAssemblyConfigDTO> getAllActiveAnswerConfigs();
+    
+    /**
+     * 获取所有活跃的回答提示词组装配置（分页版本）
+     * 
+     * @param pageable 分页参数
+     * @return 配置DTO分页列表
+     */
+    Page<AnswerPromptAssemblyConfigDTO> getAllActiveAnswerConfigsPageable(Pageable pageable);
     
     /**
      * 获取所有活跃的评测提示词组装配置

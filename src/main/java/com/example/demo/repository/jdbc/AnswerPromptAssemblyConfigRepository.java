@@ -1,16 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
-import com.example.demo.entity.jdbc.User;
-import com.example.demo.entity.jdbc.ChangeLog;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -20,6 +9,21 @@ import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.User;
 
 /**
  * 基于JDBC的回答场景prompt组装配置仓库实现
@@ -49,6 +53,12 @@ public class AnswerPromptAssemblyConfigRepository {
     
     private static final String SQL_FIND_BY_IS_ACTIVE_TRUE = 
             "SELECT * FROM answer_prompt_assembly_configs WHERE is_active=true";
+    
+    private static final String SQL_FIND_BY_IS_ACTIVE_TRUE_PAGEABLE = 
+            "SELECT * FROM answer_prompt_assembly_configs WHERE is_active=true LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_BY_IS_ACTIVE_TRUE = 
+            "SELECT COUNT(*) FROM answer_prompt_assembly_configs WHERE is_active=true";
     
     private static final String SQL_FIND_BY_NAME = 
             "SELECT * FROM answer_prompt_assembly_configs WHERE name=?";
@@ -263,6 +273,30 @@ public class AnswerPromptAssemblyConfigRepository {
      */
     public List<AnswerPromptAssemblyConfig> findByIsActiveTrue() {
         return jdbcTemplate.query(SQL_FIND_BY_IS_ACTIVE_TRUE, new AnswerPromptAssemblyConfigRowMapper());
+    }
+    
+    /**
+     * 查找所有激活状态的配置（分页）
+     *
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    public Page<AnswerPromptAssemblyConfig> findByIsActiveTruePageable(Pageable pageable) {
+        // 查询总数
+        Integer total = jdbcTemplate.queryForObject(
+            SQL_COUNT_BY_IS_ACTIVE_TRUE,
+            Integer.class
+        );
+        
+        // 查询数据
+        List<AnswerPromptAssemblyConfig> content = jdbcTemplate.query(
+            SQL_FIND_BY_IS_ACTIVE_TRUE_PAGEABLE,
+            new AnswerPromptAssemblyConfigRowMapper(),
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
     
     /**

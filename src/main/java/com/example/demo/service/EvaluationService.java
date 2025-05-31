@@ -1,17 +1,16 @@
 package com.example.demo.service;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
 import com.example.demo.entity.jdbc.Evaluation;
 import com.example.demo.entity.jdbc.EvaluationCriterion;
 import com.example.demo.entity.jdbc.EvaluationDetail;
 import com.example.demo.entity.jdbc.EvaluationRun;
 import com.example.demo.entity.jdbc.LlmAnswer;
-import com.example.demo.entity.jdbc.StandardQuestion;
 import com.example.demo.entity.jdbc.QuestionType;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 评测服务接口
@@ -284,4 +283,21 @@ public interface EvaluationService {
     Evaluation createAndSubmitHumanEvaluation(Long llmAnswerId, Long evaluatorId, 
                                            BigDecimal overallScore, String comments, 
                                            List<Map<String, Object>> detailScores, Long userId);
+    
+    /**
+     * 检查回答是否已被指定评测员评测
+     *
+     * @param answerId 回答ID
+     * @param evaluatorId 评测员ID
+     * @return 是否已评测
+     */
+    boolean isAnswerEvaluatedByEvaluator(Long answerId, Long evaluatorId);
+    
+    /**
+     * 获取标准问题对应的标准答案
+     *
+     * @param questionId 标准问题ID
+     * @return 包含标准答案信息的Map
+     */
+    Map<String, Object> getStandardAnswerForQuestion(Long questionId);
 } 

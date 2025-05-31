@@ -101,4 +101,12 @@ public class StandardObjectiveAnswer {
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
     }
+
+    /**
+     * 获取正确选项ID（作为getCorrectOptionIds的别名）
+     * @return 正确选项ID
+     */
+    public String getCorrectIds() {
+        return getCorrectOptionIds();
+    }
 } 
