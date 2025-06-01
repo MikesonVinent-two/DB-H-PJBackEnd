@@ -1,17 +1,5 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.LLMModelDTO;
-import com.example.demo.dto.LLMModelRegistrationRequest;
-import com.example.demo.dto.LLMModelRegistrationResponse;
-import com.example.demo.service.LLMModelService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
-
-import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -19,6 +7,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.demo.dto.LLMModelDTO;
+import com.example.demo.dto.LLMModelRegistrationRequest;
+import com.example.demo.dto.LLMModelRegistrationResponse;
+import com.example.demo.service.LLMModelService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/llm-models")
@@ -365,6 +374,38 @@ public class LLMModelController {
             response.put("modelId", modelId);
             response.put("questionId", questionId);
             response.put("message", "获取模型问题详细评分信息时发生错误");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+    
+    /**
+     * 删除指定的LLM模型
+     * 
+     * @param modelId 要删除的模型ID
+     * @return 删除操作的结果
+     */
+    @DeleteMapping("/{modelId}")
+    public ResponseEntity<?> deleteModel(@PathVariable Long modelId) {
+        logger.info("接收到删除模型的请求，模型ID: {}", modelId);
+        
+        try {
+            Map<String, Object> response = llmModelService.deleteModel(modelId);
+            
+            if ((Boolean) response.get("success")) {
+                logger.info("成功删除模型，ID: {}", modelId);
+                return ResponseEntity.ok(response);
+            } else {
+                logger.warn("删除模型失败，ID: {}, 原因: {}", modelId, response.get("message"));
+                return ResponseEntity.badRequest().body(response);
+            }
+        } catch (Exception e) {
+            logger.error("删除模型时发生错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "删除模型时发生错误");
             response.put("error", e.getMessage());
             
             return ResponseEntity.internalServerError().body(response);

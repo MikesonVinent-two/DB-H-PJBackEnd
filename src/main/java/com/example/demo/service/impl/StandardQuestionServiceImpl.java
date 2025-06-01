@@ -1,17 +1,24 @@
 package com.example.demo.service.impl;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,6 +32,7 @@ import com.example.demo.dto.TagOperationDTO;
 import com.example.demo.entity.jdbc.ChangeLog;
 import com.example.demo.entity.jdbc.ChangeLogDetail;
 import com.example.demo.entity.jdbc.ChangeType;
+import com.example.demo.entity.jdbc.DifficultyLevel;
 import com.example.demo.entity.jdbc.EntityType;
 import com.example.demo.entity.jdbc.QuestionType;
 import com.example.demo.entity.jdbc.RawAnswer;
@@ -36,6 +44,7 @@ import com.example.demo.entity.jdbc.User;
 import com.example.demo.repository.jdbc.ChangeLogDetailRepository;
 import com.example.demo.repository.jdbc.ChangeLogRepository;
 import com.example.demo.repository.jdbc.CrowdsourcedAnswerRepository;
+import com.example.demo.repository.jdbc.DatasetQuestionMappingRepository;
 import com.example.demo.repository.jdbc.ExpertCandidateAnswerRepository;
 import com.example.demo.repository.jdbc.RawQuestionRepository;
 import com.example.demo.repository.jdbc.StandardObjectiveAnswerRepository;
@@ -67,6 +76,7 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     private final StandardObjectiveAnswerRepository standardObjectiveAnswerRepository;
     private final StandardSimpleAnswerRepository standardSimpleAnswerRepository;
     private final StandardSubjectiveAnswerRepository standardSubjectiveAnswerRepository;
+    private final DatasetQuestionMappingRepository datasetQuestionMappingRepository;
     
     // 显式构造函数
     public StandardQuestionServiceImpl(
@@ -82,7 +92,8 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             ExpertCandidateAnswerRepository expertCandidateAnswerRepository,
             StandardObjectiveAnswerRepository standardObjectiveAnswerRepository,
             StandardSimpleAnswerRepository standardSimpleAnswerRepository,
-            StandardSubjectiveAnswerRepository standardSubjectiveAnswerRepository) {
+            StandardSubjectiveAnswerRepository standardSubjectiveAnswerRepository,
+            DatasetQuestionMappingRepository datasetQuestionMappingRepository) {
         this.standardQuestionRepository = standardQuestionRepository;
         this.rawQuestionRepository = rawQuestionRepository;
         this.userRepository = userRepository;
@@ -96,6 +107,7 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         this.standardObjectiveAnswerRepository = standardObjectiveAnswerRepository;
         this.standardSimpleAnswerRepository = standardSimpleAnswerRepository;
         this.standardSubjectiveAnswerRepository = standardSubjectiveAnswerRepository;
+        this.datasetQuestionMappingRepository = datasetQuestionMappingRepository;
     }
 
     @Override
@@ -436,32 +448,159 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     public List<QuestionHistoryDTO> getQuestionHistory(Long questionId) {
         logger.debug("开始获取问题修改历史 - 问题ID: {}", questionId);
         
+        // 尝试使用递归SQL获取完整的问题历史
+        try {
+            List<QuestionHistoryDTO> recursiveHistory = getQuestionHistoryWithRecursiveQuery(questionId);
+            if (!recursiveHistory.isEmpty()) {
+                logger.info("成功使用递归查询获取问题历史 - 问题ID: {}, 版本数量: {}", 
+                    questionId, recursiveHistory.size());
+                return recursiveHistory;
+            }
+        } catch (Exception e) {
+            logger.warn("递归查询问题历史失败，回退到原始实现 - 问题ID: {}, 错误: {}", 
+                questionId, e.getMessage());
+        }
+        
+        // 如果递归查询失败，回退到原始实现
+        logger.info("使用原始方法获取问题历史 - 问题ID: {}", questionId);
+        
         StandardQuestion currentQuestion = standardQuestionRepository.findById(questionId)
             .orElseThrow(() -> new IllegalArgumentException("问题不存在"));
 
         List<QuestionHistoryDTO> history = new ArrayList<>();
         collectQuestionHistory(currentQuestion, history);
         
-        history.sort((a, b) -> b.getCreationTime().compareTo(a.getCreationTime()));
+        // 去重处理，确保每个问题ID只出现一次
+        Map<Long, QuestionHistoryDTO> uniqueNodes = new HashMap<>();
+        for (QuestionHistoryDTO node : history) {
+            uniqueNodes.put(node.getId(), node);
+        }
         
-        logger.debug("成功获取问题修改历史 - 问题ID: {}, 版本数量: {}", questionId, history.size());
-        return history;
+        List<QuestionHistoryDTO> uniqueHistory = new ArrayList<>(uniqueNodes.values());
+        
+        // 按创建时间排序，最新的在前面
+        uniqueHistory.sort((a, b) -> b.getCreationTime().compareTo(a.getCreationTime()));
+        
+        // 记录更多详细信息，特别是父子关系
+        logger.debug("成功获取问题修改历史 - 问题ID: {}, 原始版本数量: {}, 去重后版本数量: {}", 
+            questionId, history.size(), uniqueHistory.size());
+        
+        for (QuestionHistoryDTO version : uniqueHistory) {
+            logger.info("历史版本 - ID: {}, 父ID: {}, 创建时间: {}", 
+                version.getId(), version.getParentQuestionId(), version.getCreationTime());
+        }
+        
+        return uniqueHistory;
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<QuestionHistoryDTO> getVersionTree(Long questionId) {
-        logger.debug("开始获取问题版本树 - 问题ID: {}", questionId);
+    /**
+     * 使用递归SQL查询获取问题历史
+     * 
+     * @param questionId 问题ID
+     * @return 问题历史列表
+     */
+    private List<QuestionHistoryDTO> getQuestionHistoryWithRecursiveQuery(Long questionId) {
+        logger.debug("开始使用递归SQL获取问题历史 - 问题ID: {}", questionId);
         
-        StandardQuestion currentQuestion = standardQuestionRepository.findById(questionId)
-            .orElseThrow(() -> new IllegalArgumentException("问题不存在"));
-
-        StandardQuestion rootQuestion = findRootQuestion(currentQuestion);
-        List<QuestionHistoryDTO> versionTree = new ArrayList<>();
-        buildVersionTree(rootQuestion, versionTree);
+        // 查询从当前问题向上追溯的所有父问题
+        String sql = 
+            "WITH RECURSIVE question_history AS (" +
+            "  SELECT sq.* " +
+            "  FROM standard_questions sq " +
+            "  WHERE sq.id = ? AND sq.deleted_at IS NULL " +
+            "  UNION ALL " +
+            "  SELECT p.* " +
+            "  FROM standard_questions p " +
+            "  JOIN question_history q ON p.id = q.parent_standard_question_id " +
+            "  WHERE p.deleted_at IS NULL" +
+            ") " +
+            "SELECT * FROM question_history";
         
-        logger.debug("成功获取问题版本树 - 问题ID: {}", questionId);
-        return versionTree;
+        List<StandardQuestion> historyQuestions;
+        try {
+            // 创建一个RowMapper来处理结果集
+            RowMapper<StandardQuestion> rowMapper = new RowMapper<StandardQuestion>() {
+                @Override
+                public StandardQuestion mapRow(ResultSet rs, int rowNum) throws SQLException {
+                    StandardQuestion question = new StandardQuestion();
+                    question.setId(rs.getLong("id"));
+                    question.setQuestionText(rs.getString("question_text"));
+                    
+                    // 解析枚举
+                    String questionTypeStr = rs.getString("question_type");
+                    if (questionTypeStr != null) {
+                        question.setQuestionType(QuestionType.valueOf(questionTypeStr));
+                    }
+                    
+                    String difficultyStr = rs.getString("difficulty");
+                    if (difficultyStr != null) {
+                        question.setDifficulty(DifficultyLevel.valueOf(difficultyStr));
+                    }
+                    
+                    // 设置时间
+                    Timestamp creationTime = rs.getTimestamp("creation_time");
+                    if (creationTime != null) {
+                        question.setCreationTime(creationTime.toLocalDateTime());
+                    }
+                    
+                    // 设置父问题ID
+                    Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
+                    if (!rs.wasNull()) {
+                        StandardQuestion parentQuestion = new StandardQuestion();
+                        parentQuestion.setId(parentStandardQuestionId);
+                        question.setParentStandardQuestion(parentQuestion);
+                    }
+                    
+                    // 设置创建者用户ID
+                    Long createdByUserId = rs.getLong("created_by_user_id");
+                    if (!rs.wasNull()) {
+                        User user = new User();
+                        user.setId(createdByUserId);
+                        question.setCreatedByUser(user);
+                    }
+                    
+                    // 设置变更日志ID
+                    Long createdChangeLogId = rs.getLong("created_change_log_id");
+                    if (!rs.wasNull()) {
+                        ChangeLog changeLog = new ChangeLog();
+                        changeLog.setId(createdChangeLogId);
+                        question.setCreatedChangeLog(changeLog);
+                    }
+                    
+                    return question;
+                }
+            };
+            
+            // 使用自定义查询执行递归SQL
+            historyQuestions = standardQuestionRepository.findHistoryWithRecursiveQuery(questionId, sql, rowMapper);
+        } catch (Exception e) {
+            logger.error("递归SQL查询问题历史失败 - 问题ID: {}", questionId, e);
+            return new ArrayList<>();
+        }
+        
+        if (historyQuestions.isEmpty()) {
+            logger.warn("递归SQL查询问题历史未找到结果 - 问题ID: {}", questionId);
+            return new ArrayList<>();
+        }
+        
+        // 转换为DTO
+        List<QuestionHistoryDTO> history = new ArrayList<>();
+        for (StandardQuestion question : historyQuestions) {
+            QuestionHistoryDTO dto = convertToHistoryDTO(question);
+            history.add(dto);
+            logger.debug("历史问题 - ID: {}, 父ID: {}", 
+                question.getId(), 
+                question.getParentStandardQuestion() != null ? 
+                    question.getParentStandardQuestion().getId() : null);
+        }
+        
+        // 按创建时间排序，最新的在前面
+        history.sort((a, b) -> b.getCreationTime().compareTo(a.getCreationTime()));
+        
+        logger.info("成功使用递归SQL获取问题历史 - 问题ID: {}, 版本数量: {}", 
+            questionId, history.size());
+        
+        return history;
     }
 
     private void collectQuestionHistory(StandardQuestion question, List<QuestionHistoryDTO> history) {
@@ -485,52 +624,105 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         return current;
     }
 
-    private void buildVersionTree(StandardQuestion question, List<QuestionHistoryDTO> versionTree) {
-        if (question == null) {
-            return;
-        }
-
-        QuestionHistoryDTO node = convertToHistoryDTO(question);
-        versionTree.add(node);
-
-        List<StandardQuestion> children = standardQuestionRepository.findByParentStandardQuestionId(question.getId());
-        for (StandardQuestion child : children) {
-            buildVersionTree(child, versionTree);
-        }
-    }
-
     private QuestionHistoryDTO convertToHistoryDTO(StandardQuestion question) {
         QuestionHistoryDTO dto = new QuestionHistoryDTO();
         dto.setId(question.getId());
         dto.setQuestionText(question.getQuestionText());
-        dto.setQuestionType(question.getQuestionType().toString());
-        dto.setDifficulty(question.getDifficulty().toString());
-        dto.setCreationTime(question.getCreationTime());
-        dto.setCreatedByUserId(question.getCreatedByUser().getId());
         
-        // 添加用户详细信息
-        User createdByUser = question.getCreatedByUser();
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("id", createdByUser.getId());
-        userInfo.put("username", createdByUser.getUsername());
-        userInfo.put("name", createdByUser.getName());
-        userInfo.put("role", createdByUser.getRole());
-        userInfo.put("contactInfo", createdByUser.getContactInfo());
-        dto.setCreatedByUser(userInfo);
-        
-        if (question.getParentStandardQuestion() != null) {
-            dto.setParentQuestionId(question.getParentStandardQuestion().getId());
+        // 处理 questionType 可能为 null 的情况
+        if (question.getQuestionType() != null) {
+            dto.setQuestionType(question.getQuestionType().toString());
+        } else {
+            dto.setQuestionType("未知");
+            logger.warn("问题类型为空 - 问题ID: {}", question.getId());
         }
         
-        List<String> tags = question.getQuestionTags().stream()
-            .map(tag -> tag.getTag().getTagName())
-            .collect(Collectors.toList());
-        dto.setTags(tags);
+        // 处理 difficulty 可能为 null 的情况
+        if (question.getDifficulty() != null) {
+            dto.setDifficulty(question.getDifficulty().toString());
+        } else {
+            dto.setDifficulty("未知");
+            logger.warn("难度级别为空 - 问题ID: {}", question.getId());
+        }
+        
+        dto.setCreationTime(question.getCreationTime());
+        
+        // 处理 createdByUser 可能为 null 的情况
+        if (question.getCreatedByUser() != null) {
+            dto.setCreatedByUserId(question.getCreatedByUser().getId());
+            
+            // 添加用户详细信息
+            User createdByUser = question.getCreatedByUser();
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("id", createdByUser.getId());
+            userInfo.put("username", createdByUser.getUsername());
+            userInfo.put("name", createdByUser.getName());
+            userInfo.put("role", createdByUser.getRole());
+            userInfo.put("contactInfo", createdByUser.getContactInfo());
+            dto.setCreatedByUser(userInfo);
+        } else {
+            logger.warn("创建用户为空 - 问题ID: {}", question.getId());
+            Map<String, Object> emptyUserInfo = new HashMap<>();
+            emptyUserInfo.put("id", null);
+            emptyUserInfo.put("username", "未知用户");
+            emptyUserInfo.put("name", "未知");
+            emptyUserInfo.put("role", "未知");
+            emptyUserInfo.put("contactInfo", "");
+            dto.setCreatedByUser(emptyUserInfo);
+        }
+        
+        // 处理 parentStandardQuestion 可能为null或者只包含ID的情况
+        if (question.getParentStandardQuestion() != null) {
+            Long parentId = question.getParentStandardQuestion().getId();
+            if (parentId != null) {
+                // 添加更多调试日志
+                logger.debug("设置父问题ID - 当前问题ID: {}, 父问题ID: {}", question.getId(), parentId);
+                dto.setParentQuestionId(parentId);
+            } else {
+                logger.warn("父问题对象存在但ID为null - 问题ID: {}", question.getId());
+                
+                // 尝试从数据库中查找父问题关系
+                List<StandardQuestion> childQuestions = standardQuestionRepository.findByParentStandardQuestionId(question.getId());
+                if (!childQuestions.isEmpty()) {
+                    for (StandardQuestion child : childQuestions) {
+                        logger.info("找到子问题关系 - 父ID: {}, 子ID: {}", question.getId(), child.getId());
+                    }
+                }
+            }
+        } else {
+            // 明确记录父问题为null的情况
+            logger.debug("问题没有父问题对象 - 问题ID: {}", question.getId());
+            
+            // 尝试从数据库验证是否真的没有父问题
+            try {
+                StandardQuestion fullQuestion = standardQuestionRepository.findById(question.getId()).orElse(null);
+                if (fullQuestion != null && fullQuestion.getParentStandardQuestion() != null) {
+                    Long actualParentId = fullQuestion.getParentStandardQuestion().getId();
+                    logger.warn("数据库中存在父问题但未加载 - 问题ID: {}, 实际父ID: {}", 
+                        question.getId(), actualParentId);
+                    dto.setParentQuestionId(actualParentId);
+                }
+            } catch (Exception e) {
+                logger.error("验证父问题关系时出错 - 问题ID: {}", question.getId(), e);
+            }
+        }
+        
+        // 处理标签，避免 NPE
+        if (question.getQuestionTags() != null) {
+            List<String> tags = question.getQuestionTags().stream()
+                .filter(tag -> tag != null && tag.getTag() != null)
+                .map(tag -> tag.getTag().getTagName())
+                .collect(Collectors.toList());
+            dto.setTags(tags);
+        } else {
+            dto.setTags(new ArrayList<>());
+        }
         
         // 获取变更日志
         ChangeLog changeLog = changeLogRepository.findByAssociatedStandardQuestionId(question.getId());
         if (changeLog != null) {
             dto.setCommitMessage(changeLog.getCommitMessage());
+            dto.setChangeLogId(changeLog.getId()); // 添加变更日志ID
             
             // 获取变更详情
             List<ChangeDetailDTO> changes = changeLogDetailRepository.findByChangeLogId(changeLog.getId())
@@ -567,8 +759,42 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             pageable.getPageNumber(), pageable.getPageSize());
         
         try {
-            Page<StandardQuestion> standardQuestions = standardQuestionRepository.findAll(pageable);
-            return standardQuestions.map(this::convertToDTO);
+            Page<StandardQuestion> standardQuestionsPage = standardQuestionRepository.findAll(pageable);
+            
+            // 对问题进行去重处理
+            List<StandardQuestion> questions = standardQuestionsPage.getContent();
+            Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
+            
+            // 使用Map来去重，保留每个ID的唯一实例
+            for (StandardQuestion question : questions) {
+                // 如果已存在该ID的问题，确保合并标签
+                if (uniqueQuestionsMap.containsKey(question.getId())) {
+                    StandardQuestion existingQuestion = uniqueQuestionsMap.get(question.getId());
+                    // 合并标签，保留所有标签
+                    for (StandardQuestionTag tag : question.getQuestionTags()) {
+                        if (!existingQuestion.getQuestionTags().contains(tag)) {
+                            existingQuestion.getQuestionTags().add(tag);
+                        }
+                    }
+                } else {
+                    uniqueQuestionsMap.put(question.getId(), question);
+                }
+            }
+            
+            // 创建新的列表，保持排序顺序
+            List<StandardQuestion> uniqueQuestions = new ArrayList<>(uniqueQuestionsMap.values());
+            
+            // 创建新的Page对象
+            Page<StandardQuestion> uniqueQuestionsPage = new PageImpl<>(
+                uniqueQuestions, 
+                pageable, 
+                standardQuestionsPage.getTotalElements()
+            );
+            
+            logger.info("成功获取标准问题 - 原始总数: {}, 去重后总数: {}", 
+                questions.size(), uniqueQuestions.size());
+            
+            return uniqueQuestionsPage.map(this::convertToDTO);
         } catch (Exception e) {
             logger.error("获取所有标准问题失败", e);
             throw new RuntimeException("获取标准问题列表失败: " + e.getMessage());
@@ -582,9 +808,42 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             pageable.getPageNumber(), pageable.getPageSize());
         
         try {
-            Page<StandardQuestion> latestQuestions = standardQuestionRepository.findLatestVersions(pageable);
-            logger.info("成功获取最新版本标准问题 - 总数: {}", latestQuestions.getTotalElements());
-            return latestQuestions.map(this::convertToDTO);
+            Page<StandardQuestion> latestQuestionsPage = standardQuestionRepository.findLatestVersions(pageable);
+            
+            // 对问题进行去重处理
+            List<StandardQuestion> questions = latestQuestionsPage.getContent();
+            Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
+            
+            // 使用Map来去重，保留每个ID的唯一实例
+            for (StandardQuestion question : questions) {
+                // 如果已存在该ID的问题，确保合并标签
+                if (uniqueQuestionsMap.containsKey(question.getId())) {
+                    StandardQuestion existingQuestion = uniqueQuestionsMap.get(question.getId());
+                    // 合并标签，保留所有标签
+                    for (StandardQuestionTag tag : question.getQuestionTags()) {
+                        if (!existingQuestion.getQuestionTags().contains(tag)) {
+                            existingQuestion.getQuestionTags().add(tag);
+                        }
+                    }
+                } else {
+                    uniqueQuestionsMap.put(question.getId(), question);
+                }
+            }
+            
+            // 创建新的列表，保持排序顺序
+            List<StandardQuestion> uniqueQuestions = new ArrayList<>(uniqueQuestionsMap.values());
+            
+            // 创建新的Page对象
+            Page<StandardQuestion> uniqueQuestionsPage = new PageImpl<>(
+                uniqueQuestions, 
+                pageable, 
+                latestQuestionsPage.getTotalElements()
+            );
+            
+            logger.info("成功获取最新版本标准问题 - 原始总数: {}, 去重后总数: {}, 总记录数: {}", 
+                questions.size(), uniqueQuestions.size(), uniqueQuestionsPage.getTotalElements());
+            
+            return uniqueQuestionsPage.map(this::convertToDTO);
         } catch (Exception e) {
             logger.error("获取最新版本标准问题失败", e);
             throw new RuntimeException("获取最新版本标准问题列表失败: " + e.getMessage());
@@ -803,8 +1062,9 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     }
 
     @Override
-    public Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Pageable pageable) {
-        logger.info("搜索标准问题 - 标签: {}, 关键词: {}, 用户ID: {}", tags, keyword, userId);
+    public Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Boolean onlyLatest, Pageable pageable) {
+        logger.info("搜索标准问题 - 标签: {}, 关键词: {}, 用户ID: {}, 仅最新版本: {}", 
+            tags, keyword, userId, onlyLatest);
         
         // 1. 根据条件获取问题列表
         List<StandardQuestion> questions = new ArrayList<>();
@@ -816,7 +1076,8 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             
             // 在标签过滤结果中进一步按关键词过滤
             for (StandardQuestion question : tagFilteredQuestions) {
-                if (question.getQuestionText().toLowerCase().contains(keyword.toLowerCase())) {
+                if (question != null && question.getQuestionText() != null && 
+                    question.getQuestionText().toLowerCase().contains(keyword.toLowerCase())) {
                     questions.add(question);
                 }
             }
@@ -827,17 +1088,39 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         }
         // 只有关键词
         else if (keyword != null && !keyword.trim().isEmpty()) {
-            questions = standardQuestionRepository.findByQuestionTextContaining("%" + keyword + "%");
+            // 注意：不要再添加百分号，因为Repository实现中已经添加了
+            questions = standardQuestionRepository.findByQuestionTextContaining(keyword);
         }
-        // 没有搜索条件，返回所有问题（而不仅是最新版本）
+        // 没有搜索条件，返回所有问题或最新版本
         else {
+            // 先获取所有问题
             questions = standardQuestionRepository.findAll();
+            
+            // 如果需要最新版本，后续会过滤
+        }
+        
+        // 如果需要过滤出叶子节点（没有子问题的节点）
+        if (Boolean.TRUE.equals(onlyLatest)) {
+            // 创建一个辅助Set用于快速检查问题是否有子问题
+            Set<Long> questionsWithChildren = new HashSet<>();
+            for (StandardQuestion question : standardQuestionRepository.findAll()) {
+                if (question != null && question.getParentStandardQuestion() != null) {
+                    questionsWithChildren.add(question.getParentStandardQuestion().getId());
+                }
+            }
+            
+            // 过滤出没有子问题的节点（叶子节点）
+            questions = questions.stream()
+                .filter(q -> q != null && q.getId() != null && !questionsWithChildren.contains(q.getId()))
+                .collect(Collectors.toList());
         }
         
         // 去重处理，确保每个问题ID只出现一次
         Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
         for (StandardQuestion question : questions) {
-            uniqueQuestionsMap.put(question.getId(), question);
+            if (question != null && question.getId() != null) {
+                uniqueQuestionsMap.put(question.getId(), question);
+            }
         }
         questions = new ArrayList<>(uniqueQuestionsMap.values());
         
@@ -846,7 +1129,7 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         int end = Math.min((start + pageable.getPageSize()), questions.size());
         
         List<StandardQuestion> pagedQuestions;
-        if (start <= end) {
+        if (start <= end && start < questions.size()) {
             pagedQuestions = questions.subList(start, end);
         } else {
             pagedQuestions = new ArrayList<>();
@@ -865,21 +1148,27 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             questionDTO.put("difficulty", question.getDifficulty());
             questionDTO.put("creationTime", question.getCreationTime());
             
-            // 标签信息
-            List<String> questionTags = question.getQuestionTags().stream()
-                    .map(tag -> tag.getTag().getTagName())
-                    .collect(Collectors.toList());
+            // 标签信息 - 添加空值检查
+            List<String> questionTags = new ArrayList<>();
+            if (question.getQuestionTags() != null) {
+                questionTags = question.getQuestionTags().stream()
+                        .filter(tag -> tag != null && tag.getTag() != null && tag.getTag().getTagName() != null)
+                        .map(tag -> tag.getTag().getTagName())
+                        .collect(Collectors.toList());
+            }
             questionDTO.put("tags", questionTags);
             
-            // 检查是否有标准回答
+            // 检查是否有标准回答 - 添加问题类型的空值检查
             boolean hasStandardAnswer = false;
             
-            if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
-                hasStandardAnswer = standardObjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
-            } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
-                hasStandardAnswer = standardSimpleAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
-            } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
-                hasStandardAnswer = standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+            if (question.getQuestionType() != null) {
+                if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
+                    hasStandardAnswer = standardObjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
+                    hasStandardAnswer = standardSimpleAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                    hasStandardAnswer = standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                }
             }
             
             questionDTO.put("hasStandardAnswer", hasStandardAnswer);
@@ -899,6 +1188,23 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
                 questionDTO.put("hasCrowdsourcedAnswer", false);
                 questionDTO.put("hasExpertAnswer", false);
             }
+            
+            // 添加父子关系信息
+            if (question.getParentStandardQuestion() != null) {
+                questionDTO.put("parentQuestionId", question.getParentStandardQuestion().getId());
+            }
+            
+            // 添加叶子节点标识 - 检查是否有以此ID为父ID的问题
+            boolean isLeafNode = true;
+            for (StandardQuestion potentialChild : standardQuestionRepository.findAll()) {
+                if (potentialChild.getParentStandardQuestion() != null && 
+                    potentialChild.getParentStandardQuestion().getId() != null && 
+                    potentialChild.getParentStandardQuestion().getId().equals(question.getId())) {
+                    isLeafNode = false;
+                    break;
+                }
+            }
+            questionDTO.put("isLatestVersion", isLeafNode);
             
             questionDTOs.add(questionDTO);
         }
@@ -926,22 +1232,41 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             return new ArrayList<>();
         }
         
-        // 获取所有标准问题
-        List<StandardQuestion> allQuestions = standardQuestionRepository.findAll();
-        
-        // 过滤出包含所有指定标签的问题
-        return allQuestions.stream()
-                .filter(question -> {
-                    List<String> questionTagNames = question.getTags().stream()
-                            .map(tag -> tag.getTagName().toLowerCase())
-                            .collect(Collectors.toList());
-                    
-                    // 检查问题是否包含所有指定标签
-                    return tags.stream()
-                            .map(String::toLowerCase)
-                            .allMatch(tag -> questionTagNames.contains(tag));
-                })
-                .collect(Collectors.toList());
+        try {
+            // 使用优化的数据库查询方法，避免在内存中过滤
+            return standardQuestionRepository.findByAllTagNames(tags);
+        } catch (Exception e) {
+            logger.error("根据标签查询问题失败，回退到内存过滤", e);
+            
+            // 如果数据库查询失败，回退到内存过滤
+            List<StandardQuestion> allQuestions = standardQuestionRepository.findAll();
+            
+            // 过滤出包含所有指定标签的问题
+            return allQuestions.stream()
+                    .filter(question -> {
+                        if (question == null) {
+                            return false;
+                        }
+                        
+                        // 获取问题标签名称 - 修改为final变量
+                        final List<String> questionTagNames;
+                        if (question.getQuestionTags() != null) {
+                            questionTagNames = question.getQuestionTags().stream()
+                                    .filter(tag -> tag != null && tag.getTag() != null && tag.getTag().getTagName() != null)
+                                    .map(tag -> tag.getTag().getTagName().toLowerCase())
+                                    .collect(Collectors.toList());
+                        } else {
+                            questionTagNames = new ArrayList<>();
+                        }
+                        
+                        // 检查问题是否包含所有指定标签
+                        return tags.stream()
+                                .filter(tag -> tag != null)
+                                .map(tag -> tag.toLowerCase())
+                                .allMatch(tag -> questionTagNames.contains(tag));
+                    })
+                    .collect(Collectors.toList());
+        }
     }
 
     @Override
@@ -1024,9 +1349,9 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
     }
     
     @Override
-    public Map<String, Object> findQuestionsWithoutStandardAnswers(Pageable pageable) {
-        logger.debug("开始查找无标准回答的问题 - 页码: {}, 每页大小: {}", 
-            pageable.getPageNumber(), pageable.getPageSize());
+    public Map<String, Object> findQuestionsWithoutStandardAnswers(Boolean onlyLatest, Boolean onlyLatestVersion, Pageable pageable) {
+        logger.debug("开始查找无标准回答的问题 - 仅最新版本: {}, 仅最新标准问题: {}, 页码: {}, 每页大小: {}", 
+            onlyLatest, onlyLatestVersion, pageable.getPageNumber(), pageable.getPageSize());
         
         try {
             // 获取所有标准问题
@@ -1047,6 +1372,45 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
                     return true;  // 未知类型，默认视为没有回答
                 })
                 .collect(Collectors.toList());
+            
+            // 如果需要过滤出叶子节点（没有子问题的节点）
+            if (Boolean.TRUE.equals(onlyLatest)) {
+                logger.debug("过滤出最新版本（叶子节点）标准问题");
+                
+                // 创建一个辅助Set用于快速检查问题是否有子问题
+                Set<Long> questionsWithChildren = new HashSet<>();
+                for (StandardQuestion question : allQuestions) {
+                    if (question != null && question.getParentStandardQuestion() != null) {
+                        questionsWithChildren.add(question.getParentStandardQuestion().getId());
+                    }
+                }
+                
+                // 过滤出没有子问题的节点（叶子节点）
+                questionsWithoutAnswers = questionsWithoutAnswers.stream()
+                    .filter(q -> q != null && q.getId() != null && !questionsWithChildren.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新版本无标准回答问题数量: {}", questionsWithoutAnswers.size());
+            }
+            
+            // 如果需要只显示最新的标准问题（没有子版本的问题）
+            if (Boolean.TRUE.equals(onlyLatestVersion)) {
+                logger.debug("过滤出最新标准问题（没有子版本的问题）");
+                
+                // 获取所有最新版本的标准问题
+                List<StandardQuestion> latestVersionQuestions = standardQuestionRepository.findAllLatestVersions();
+                
+                // 过滤出同时满足"无标准答案"和"是最新版本"的问题
+                Set<Long> latestVersionIds = latestVersionQuestions.stream()
+                    .map(StandardQuestion::getId)
+                    .collect(Collectors.toSet());
+                
+                questionsWithoutAnswers = questionsWithoutAnswers.stream()
+                    .filter(q -> latestVersionIds.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新标准问题数量: {}", questionsWithoutAnswers.size());
+            }
             
             // 去重处理
             Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
@@ -1079,9 +1443,11 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             result.put("page", pageable.getPageNumber());
             result.put("size", pageable.getPageSize());
             result.put("totalPages", (int) Math.ceil((double) questionsWithoutAnswers.size() / pageable.getPageSize()));
+            result.put("onlyLatest", onlyLatest);  // 添加过滤条件信息
+            result.put("onlyLatestVersion", onlyLatestVersion);  // 添加新的过滤条件信息
             
-            logger.info("成功获取无标准回答问题 - 总数: {}, 当前页: {}", 
-                questionsWithoutAnswers.size(), questionDTOs.size());
+            logger.info("成功获取无标准回答问题 - 仅最新版本: {}, 仅最新标准问题: {}, 总数: {}, 当前页: {}", 
+                onlyLatest, onlyLatestVersion, questionsWithoutAnswers.size(), questionDTOs.size());
             
             return result;
         } catch (Exception e) {
@@ -1119,6 +1485,654 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
             .collect(Collectors.toList());
         dto.put("tags", tags);
         
+        // 添加是否有标准答案的信息
+        boolean hasStandardAnswer = false;
+        if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || 
+            question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
+            hasStandardAnswer = standardObjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+        } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
+            hasStandardAnswer = standardSimpleAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+        } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+            hasStandardAnswer = standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+        }
+        dto.put("hasStandardAnswer", hasStandardAnswer);
+        
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public StandardQuestionDTO rollbackQuestion(Long versionId, Long userId, String commitMessage) {
+        logger.debug("开始回退标准问题到指定版本 - 版本ID: {}, 用户ID: {}", versionId, userId);
+        
+        if (versionId == null || userId == null) {
+            logger.error("回退标准问题失败 - 参数为空");
+            throw new IllegalArgumentException("版本ID和用户ID不能为空");
+        }
+
+        try {
+            // 获取要回退到的版本
+            ChangeLog targetVersion = changeLogRepository.findById(versionId)
+                .orElseThrow(() -> {
+                    logger.error("回退标准问题失败 - 找不到版本ID: {}", versionId);
+                    return new IllegalArgumentException("找不到指定的版本（ID: " + versionId + "）");
+                });
+            
+            // 获取标准问题
+            StandardQuestion targetQuestion = targetVersion.getAssociatedStandardQuestion();
+            if (targetQuestion == null) {
+                logger.error("回退标准问题失败 - 版本没有关联的标准问题");
+                throw new IllegalStateException("该版本没有关联的标准问题");
+            }
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> {
+                    logger.error("回退标准问题失败 - 找不到用户ID: {}", userId);
+                    return new IllegalArgumentException("找不到指定的用户（ID: " + userId + "）");
+                });
+            
+            // 根据目标问题的问题文本、问题类型和难度创建新版本问题
+            StandardQuestion newVersion = new StandardQuestion();
+            newVersion.setQuestionText(targetQuestion.getQuestionText());
+            newVersion.setQuestionType(targetQuestion.getQuestionType());
+            newVersion.setDifficulty(targetQuestion.getDifficulty());
+            newVersion.setCreatedByUser(user);
+            newVersion.setOriginalRawQuestion(targetQuestion.getOriginalRawQuestion());
+            
+            // 找到最新版本作为父问题
+            StandardQuestion latestVersion = findLatestVersionOfQuestion(targetQuestion);
+            newVersion.setParentStandardQuestion(latestVersion);
+            
+            // 保存新版本
+            try {
+                newVersion = standardQuestionRepository.save(newVersion);
+                logger.debug("已保存回退后的标准问题 - ID: {}", newVersion.getId());
+            } catch (Exception e) {
+                logger.error("回退标准问题失败 - 保存新版本时出错", e);
+                throw new RuntimeException("保存新版本时出错: " + e.getMessage());
+            }
+            
+            // 创建变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.ROLLBACK_STANDARD_QUESTION);
+            changeLog.setUser(user);
+            changeLog.setCommitMessage(StringUtils.hasText(commitMessage) ? 
+                                      commitMessage : "回退到版本 " + versionId);
+            changeLog.setAssociatedStandardQuestion(newVersion);
+            
+            // 保存变更日志
+            try {
+                changeLog = changeLogRepository.save(changeLog);
+            } catch (Exception e) {
+                logger.error("回退标准问题失败 - 保存变更日志时出错", e);
+                throw new RuntimeException("保存变更日志时出错: " + e.getMessage());
+            }
+            
+            // 设置变更日志关联并更新标准问题
+            newVersion.setCreatedChangeLog(changeLog);
+            try {
+                newVersion = standardQuestionRepository.save(newVersion);
+            } catch (Exception e) {
+                logger.error("回退标准问题失败 - 更新标准问题变更日志关联时出错", e);
+                throw new RuntimeException("更新标准问题变更日志关联时出错: " + e.getMessage());
+            }
+            
+            // 处理标签 - 复制目标版本的标签
+            List<StandardQuestionTag> targetTags = standardQuestionTagRepository.findByStandardQuestion(targetQuestion);
+            for (StandardQuestionTag targetTag : targetTags) {
+                StandardQuestionTag newTag = new StandardQuestionTag(newVersion, targetTag.getTag(), user);
+                newTag.setCreatedChangeLog(changeLog);
+                standardQuestionTagRepository.save(newTag);
+                
+                // 记录变更日志详情
+                ChangeLogDetail tagDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION_TAGS,
+                    newVersion.getId(),
+                    "tag_id",
+                    null,
+                    targetTag.getTag().getId()
+                );
+                changeLogDetailRepository.save(tagDetail);
+            }
+            
+            // 创建变更详情
+            // 记录回退操作详情
+            ChangeLogDetail rollbackDetail = ChangeLogUtils.createDetail(
+                changeLog,
+                EntityType.STANDARD_QUESTION,
+                newVersion.getId(),
+                "rollback_from_version",
+                null,
+                versionId
+            );
+            changeLogDetailRepository.save(rollbackDetail);
+            
+            // 记录问题文本变更
+            ChangeLogDetail textDetail = ChangeLogUtils.createDetail(
+                changeLog,
+                EntityType.STANDARD_QUESTION,
+                newVersion.getId(),
+                "questionText",
+                latestVersion.getQuestionText(),
+                newVersion.getQuestionText()
+            );
+            changeLogDetailRepository.save(textDetail);
+            
+            // 记录问题类型变更
+            if (!latestVersion.getQuestionType().equals(newVersion.getQuestionType())) {
+                ChangeLogDetail typeDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION,
+                    newVersion.getId(),
+                    "questionType",
+                    latestVersion.getQuestionType(),
+                    newVersion.getQuestionType()
+                );
+                changeLogDetailRepository.save(typeDetail);
+            }
+            
+            // 记录难度变更
+            if ((latestVersion.getDifficulty() == null && newVersion.getDifficulty() != null) ||
+                (latestVersion.getDifficulty() != null && !latestVersion.getDifficulty().equals(newVersion.getDifficulty()))) {
+                ChangeLogDetail difficultyDetail = ChangeLogUtils.createDetail(
+                    changeLog,
+                    EntityType.STANDARD_QUESTION,
+                    newVersion.getId(),
+                    "difficulty",
+                    latestVersion.getDifficulty(),
+                    newVersion.getDifficulty()
+                );
+                changeLogDetailRepository.save(difficultyDetail);
+            }
+            
+            logger.info("成功回退标准问题 - 目标版本ID: {}, 新版本ID: {}, 用户ID: {}", 
+                versionId, newVersion.getId(), userId);
+            
+            return convertToDTO(newVersion);
+            
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("回退标准问题时发生错误", e);
+            throw new RuntimeException("回退标准问题时发生错误: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 查找问题的最新版本
+     * @param question 标准问题
+     * @return 最新版本的标准问题
+     */
+    private StandardQuestion findLatestVersionOfQuestion(StandardQuestion question) {
+        // 获取问题的根节点
+        StandardQuestion root = findRootQuestion(question);
+        
+        // 使用DFS查找最新版本
+        return findLatestVersionRecursive(root);
+    }
+    
+    /**
+     * 递归查找最新版本
+     * @param question 当前问题
+     * @return 最新版本的标准问题
+     */
+    private StandardQuestion findLatestVersionRecursive(StandardQuestion question) {
+        List<StandardQuestion> children = standardQuestionRepository.findByParentStandardQuestionId(question.getId());
+        
+        // 如果没有子节点，这就是最新版本
+        if (children == null || children.isEmpty()) {
+            return question;
+        }
+        
+        // 找出最新的子节点（按创建时间排序）
+        StandardQuestion latestChild = children.stream()
+            .sorted((a, b) -> b.getCreationTime().compareTo(a.getCreationTime()))
+            .findFirst()
+            .orElse(question);
+        
+        // 递归查找该子节点的最新版本
+        return findLatestVersionRecursive(latestChild);
+    }
+
+    /**
+     * 获取新版的版本树
+     * 使用递归SQL查询直接获取完整版本树
+     */
+    private List<QuestionHistoryDTO> getVersionTreeWithRecursiveQuery(Long questionId) {
+        logger.debug("开始使用递归SQL获取问题版本树 - 问题ID: {}", questionId);
+        
+        // 使用新的查询方法获取完整版本树
+        List<StandardQuestion> allVersions = standardQuestionRepository.findCompleteVersionTreeById(questionId);
+        logger.debug("使用递归查询获取的版本树节点数量: {}", allVersions.size());
+        
+        if (allVersions.isEmpty()) {
+            logger.warn("递归查询版本树未找到结果 - 问题ID: {}", questionId);
+            return new ArrayList<>();
+        }
+        
+        // 构建版本树DTO
+        List<QuestionHistoryDTO> versionTree = new ArrayList<>();
+        
+        for (StandardQuestion question : allVersions) {
+            QuestionHistoryDTO node = convertToHistoryDTO(question);
+            versionTree.add(node);
+            
+            // 额外记录日志，确保父ID正确设置
+            if (question.getParentStandardQuestion() != null) {
+                logger.debug("版本树节点父关系 - 问题ID: {}, 父ID: {}", 
+                    question.getId(), question.getParentStandardQuestion().getId());
+            }
+        }
+        
+        logger.info("成功通过递归SQL查询获取问题版本树 - 问题ID: {}, 版本数量: {}", 
+            questionId, versionTree.size());
+        
+        return versionTree;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuestionHistoryDTO> getVersionTree(Long questionId) {
+        logger.debug("开始获取问题版本树 - 问题ID: {}", questionId);
+        
+        try {
+            // 先尝试使用递归SQL查询方法
+            List<QuestionHistoryDTO> recursiveResult = getVersionTreeWithRecursiveQuery(questionId);
+            if (!recursiveResult.isEmpty()) {
+                logger.info("使用递归SQL查询成功获取版本树 - 问题ID: {}, 版本数量: {}", 
+                    questionId, recursiveResult.size());
+                    
+                // 记录每个版本的详细信息
+                for (QuestionHistoryDTO version : recursiveResult) {
+                    logger.info("版本节点 - ID: {}, 父ID: {}, 创建时间: {}, 变更日志ID: {}", 
+                        version.getId(), 
+                        version.getParentQuestionId(), 
+                        version.getCreationTime(),
+                        version.getChangeLogId());
+                }
+                
+                return recursiveResult;
+            }
+        } catch (Exception e) {
+            logger.warn("递归SQL查询版本树失败，回退到原始方法 - 问题ID: {}, 错误: {}", 
+                questionId, e.getMessage());
+        }
+        
+        // 如果递归查询失败，回退到原始方法
+        logger.info("回退到原始版本树查询方法 - 问题ID: {}", questionId);
+        
+        // 以下是原始实现的代码
+        // 先获取指定的问题
+        StandardQuestion currentQuestion = standardQuestionRepository.findById(questionId)
+            .orElseThrow(() -> new IllegalArgumentException("问题不存在"));
+        
+        // 获取所有标准问题
+        List<StandardQuestion> allQuestions = standardQuestionRepository.findAll();
+        logger.debug("数据库中所有标准问题数量: {}", allQuestions.size());
+        
+        // 记录所有标准问题的父子关系
+        logger.debug("记录所有问题的父子关系:");
+        for (StandardQuestion q : allQuestions) {
+            if (q.getParentStandardQuestion() != null) {
+                logger.debug("问题ID: {}, 父问题ID: {}", q.getId(), q.getParentStandardQuestion().getId());
+            } else {
+                logger.debug("问题ID: {}, 没有父问题", q.getId());
+            }
+        }
+        
+        // 构建问题ID到问题的映射，方便查找
+        Map<Long, StandardQuestion> questionMap = new HashMap<>();
+        for (StandardQuestion question : allQuestions) {
+            questionMap.put(question.getId(), question);
+        }
+        
+        // 构建父ID到子问题列表的映射
+        Map<Long, List<StandardQuestion>> parentToChildrenMap = new HashMap<>();
+        for (StandardQuestion question : allQuestions) {
+            if (question.getParentStandardQuestion() != null && question.getParentStandardQuestion().getId() != null) {
+                Long parentId = question.getParentStandardQuestion().getId();
+                if (!parentToChildrenMap.containsKey(parentId)) {
+                    parentToChildrenMap.put(parentId, new ArrayList<>());
+                }
+                parentToChildrenMap.get(parentId).add(question);
+            }
+        }
+        
+        // 找到根问题
+        StandardQuestion rootQuestion = findRootQuestion(currentQuestion);
+        logger.debug("找到根问题 - 根问题ID: {}, 当前问题ID: {}", rootQuestion.getId(), questionId);
+        
+        // 构建版本树
+        List<QuestionHistoryDTO> versionTree = new ArrayList<>();
+        
+        // 从根问题开始，使用广度优先搜索构建完整版本树
+        Queue<StandardQuestion> queue = new LinkedList<>();
+        Set<Long> visitedIds = new HashSet<>();
+        queue.add(rootQuestion);
+        visitedIds.add(rootQuestion.getId());
+        
+        while (!queue.isEmpty()) {
+            StandardQuestion question = queue.poll();
+            QuestionHistoryDTO node = convertToHistoryDTO(question);
+            versionTree.add(node);
+            
+            // 添加子问题到队列
+            List<StandardQuestion> children = parentToChildrenMap.getOrDefault(question.getId(), new ArrayList<>());
+            logger.debug("问题ID: {} 的子问题数量: {}", question.getId(), children.size());
+            for (StandardQuestion child : children) {
+                logger.debug("子问题ID: {}, 父问题ID: {}", child.getId(), question.getId());
+                if (!visitedIds.contains(child.getId())) {
+                    queue.add(child);
+                    visitedIds.add(child.getId());
+                }
+            }
+        }
+        
+        // 记录详细的版本树信息
+        logger.info("成功获取问题版本树 - 问题ID: {}, 版本数量: {}, 根问题ID: {}", 
+            questionId, versionTree.size(), rootQuestion.getId());
+        
+        // 记录每个版本的详细信息
+        for (QuestionHistoryDTO version : versionTree) {
+            logger.info("版本节点 - ID: {}, 父ID: {}, 创建时间: {}, 变更日志ID: {}", 
+                version.getId(), 
+                version.getParentQuestionId(), 
+                version.getCreationTime(),
+                version.getChangeLogId());
+        }
+        
+        return versionTree;
+    }
+
+    @Override
+    public Map<String, Object> findQuestionsWithStandardAnswers(Boolean onlyLatest, Boolean onlyLatestVersion, Pageable pageable) {
+        logger.debug("开始查找有标准回答的问题 - 仅最新版本: {}, 仅最新标准问题: {}, 页码: {}, 每页大小: {}", 
+            onlyLatest, onlyLatestVersion, pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            // 获取所有标准问题
+            List<StandardQuestion> allQuestions = standardQuestionRepository.findAll();
+            
+            // 过滤出有标准回答的问题
+            List<StandardQuestion> questionsWithAnswers = allQuestions.stream()
+                .filter(question -> {
+                    // 检查不同类型问题的标准回答
+                    if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || 
+                        question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
+                        return standardObjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                    } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
+                        return standardSimpleAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                    } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                        return standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                    }
+                    return false;  // 未知类型，默认视为没有回答
+                })
+                .collect(Collectors.toList());
+            
+            // 如果需要过滤出叶子节点（没有子问题的节点）
+            if (Boolean.TRUE.equals(onlyLatest)) {
+                logger.debug("过滤出最新版本（叶子节点）标准问题");
+                
+                // 创建一个辅助Set用于快速检查问题是否有子问题
+                Set<Long> questionsWithChildren = new HashSet<>();
+                for (StandardQuestion question : allQuestions) {
+                    if (question != null && question.getParentStandardQuestion() != null) {
+                        questionsWithChildren.add(question.getParentStandardQuestion().getId());
+                    }
+                }
+                
+                // 过滤出没有子问题的节点（叶子节点）
+                questionsWithAnswers = questionsWithAnswers.stream()
+                    .filter(q -> q != null && q.getId() != null && !questionsWithChildren.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新版本有标准回答问题数量: {}", questionsWithAnswers.size());
+            }
+            
+            // 如果需要只显示最新的标准问题（没有子版本的问题）
+            if (Boolean.TRUE.equals(onlyLatestVersion)) {
+                logger.debug("过滤出最新标准问题（没有子版本的问题）");
+                
+                // 获取所有最新版本的标准问题
+                List<StandardQuestion> latestVersionQuestions = standardQuestionRepository.findAllLatestVersions();
+                
+                // 过滤出同时满足"有标准答案"和"是最新版本"的问题
+                Set<Long> latestVersionIds = latestVersionQuestions.stream()
+                    .map(StandardQuestion::getId)
+                    .collect(Collectors.toSet());
+                
+                questionsWithAnswers = questionsWithAnswers.stream()
+                    .filter(q -> latestVersionIds.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新标准问题数量: {}", questionsWithAnswers.size());
+            }
+            
+            // 去重处理
+            Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
+            for (StandardQuestion question : questionsWithAnswers) {
+                uniqueQuestionsMap.put(question.getId(), question);
+            }
+            questionsWithAnswers = new ArrayList<>(uniqueQuestionsMap.values());
+            
+            // 分页处理
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), questionsWithAnswers.size());
+            
+            List<StandardQuestion> pagedQuestions;
+            if (start <= end && start < questionsWithAnswers.size()) {
+                pagedQuestions = questionsWithAnswers.subList(start, end);
+            } else {
+                pagedQuestions = new ArrayList<>();
+            }
+            
+            // 转换为DTO
+            List<Map<String, Object>> questionDTOs = pagedQuestions.stream()
+                .map(this::convertToDTOWithTags)
+                .collect(Collectors.toList());
+            
+            // 构建结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("questions", questionDTOs);
+            result.put("total", questionsWithAnswers.size());
+            result.put("page", pageable.getPageNumber());
+            result.put("size", pageable.getPageSize());
+            result.put("totalPages", (int) Math.ceil((double) questionsWithAnswers.size() / pageable.getPageSize()));
+            result.put("onlyLatest", onlyLatest);  // 添加过滤条件信息
+            
+            logger.info("成功获取有标准回答问题 - 仅最新版本: {}, 总数: {}, 当前页: {}", 
+                onlyLatest, questionsWithAnswers.size(), questionDTOs.size());
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("查找有标准回答问题时发生错误", e);
+            throw new RuntimeException("查找有标准回答问题时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public Map<String, Object> findQuestionsByDataset(Long datasetId, Boolean isInDataset, Boolean onlyLatest, 
+                                                 Boolean onlyLatestVersion, Boolean onlyWithStandardAnswers,
+                                                 List<String> tags, String keyword, Pageable pageable) {
+        logger.debug("开始查找基于数据集的问题 - 数据集ID: {}, 是否数据集内: {}, 仅最新版本: {}, 仅最新标准问题: {}, 仅有标准答案: {}, 标签: {}, 关键词: {}", 
+            datasetId, isInDataset, onlyLatest, onlyLatestVersion, onlyWithStandardAnswers, tags, keyword);
+        
+        try {
+            // 获取所有标准问题
+            List<StandardQuestion> allQuestions = standardQuestionRepository.findAll();
+            
+            // 根据是否只需要有标准答案的问题进行筛选
+            List<StandardQuestion> filteredByAnswers;
+            if (Boolean.TRUE.equals(onlyWithStandardAnswers)) {
+                // 过滤出有标准答案的问题
+                filteredByAnswers = allQuestions.stream()
+                    .filter(question -> {
+                        // 检查不同类型问题的标准回答
+                        if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || 
+                            question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
+                            return standardObjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                        } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
+                            return standardSimpleAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                        } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                            return standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId()).isPresent();
+                        }
+                        return false;  // 未知类型，默认视为没有回答
+                    })
+                    .collect(Collectors.toList());
+                
+                logger.debug("有标准答案的问题数量: {}", filteredByAnswers.size());
+            } else {
+                // 不过滤，使用所有问题
+                filteredByAnswers = allQuestions;
+                logger.debug("不过滤标准答案，使用所有问题: {}", filteredByAnswers.size());
+            }
+            
+            // 获取数据集内的问题ID列表
+            List<Long> datasetQuestionIds = datasetQuestionMappingRepository.findByDatasetVersionId(datasetId)
+                .stream()
+                .map(mapping -> mapping.getStandardQuestion().getId())
+                .collect(Collectors.toList());
+            
+            logger.debug("数据集 {} 内的问题数量: {}", datasetId, datasetQuestionIds.size());
+            
+            // 根据 isInDataset 参数筛选问题
+            List<StandardQuestion> filteredQuestions;
+            if (Boolean.TRUE.equals(isInDataset)) {
+                // 筛选数据集内的问题
+                filteredQuestions = filteredByAnswers.stream()
+                    .filter(q -> datasetQuestionIds.contains(q.getId()))
+                    .collect(Collectors.toList());
+                logger.debug("筛选后数据集内的问题数量: {}", filteredQuestions.size());
+            } else {
+                // 筛选数据集外的问题
+                filteredQuestions = filteredByAnswers.stream()
+                    .filter(q -> !datasetQuestionIds.contains(q.getId()))
+                    .collect(Collectors.toList());
+                logger.debug("筛选后数据集外的问题数量: {}", filteredQuestions.size());
+            }
+            
+            // 如果需要过滤出叶子节点（没有子问题的节点）
+            if (Boolean.TRUE.equals(onlyLatest)) {
+                logger.debug("过滤出最新版本（叶子节点）标准问题");
+                
+                // 创建一个辅助Set用于快速检查问题是否有子问题
+                Set<Long> questionsWithChildren = new HashSet<>();
+                for (StandardQuestion question : allQuestions) {
+                    if (question != null && question.getParentStandardQuestion() != null) {
+                        questionsWithChildren.add(question.getParentStandardQuestion().getId());
+                    }
+                }
+                
+                // 过滤出没有子问题的节点（叶子节点）
+                filteredQuestions = filteredQuestions.stream()
+                    .filter(q -> q != null && q.getId() != null && !questionsWithChildren.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新版本问题数量: {}", filteredQuestions.size());
+            }
+            
+            // 如果需要只显示最新的标准问题（没有子版本的问题）
+            if (Boolean.TRUE.equals(onlyLatestVersion)) {
+                logger.debug("过滤出最新标准问题（没有子版本的问题）");
+                
+                // 获取所有最新版本的标准问题
+                List<StandardQuestion> latestVersionQuestions = standardQuestionRepository.findAllLatestVersions();
+                
+                // 过滤出是最新版本的问题
+                Set<Long> latestVersionIds = latestVersionQuestions.stream()
+                    .map(StandardQuestion::getId)
+                    .collect(Collectors.toSet());
+                
+                filteredQuestions = filteredQuestions.stream()
+                    .filter(q -> latestVersionIds.contains(q.getId()))
+                    .collect(Collectors.toList());
+                
+                logger.debug("过滤后的最新标准问题数量: {}", filteredQuestions.size());
+            }
+            
+            // 如果有标签筛选条件
+            if (tags != null && !tags.isEmpty()) {
+                logger.debug("按标签筛选问题 - 标签: {}", tags);
+                
+                // 过滤出包含所有指定标签的问题
+                filteredQuestions = filteredQuestions.stream()
+                    .filter(question -> {
+                        // 获取问题标签名称
+                        List<String> questionTagNames = question.getQuestionTags().stream()
+                            .map(tag -> tag.getTag().getTagName().toLowerCase())
+                            .collect(Collectors.toList());
+                        
+                        // 检查问题是否包含所有指定标签
+                        return tags.stream()
+                            .map(String::toLowerCase)
+                            .allMatch(questionTagNames::contains);
+                    })
+                    .collect(Collectors.toList());
+                
+                logger.debug("标签筛选后的问题数量: {}", filteredQuestions.size());
+            }
+            
+            // 如果有关键词筛选条件
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                logger.debug("按关键词筛选问题 - 关键词: {}", keyword);
+                
+                // 按关键词筛选问题
+                String lowerKeyword = keyword.toLowerCase();
+                filteredQuestions = filteredQuestions.stream()
+                    .filter(q -> q.getQuestionText() != null && 
+                                q.getQuestionText().toLowerCase().contains(lowerKeyword))
+                    .collect(Collectors.toList());
+                
+                logger.debug("关键词筛选后的问题数量: {}", filteredQuestions.size());
+            }
+            
+            // 去重处理
+            Map<Long, StandardQuestion> uniqueQuestionsMap = new HashMap<>();
+            for (StandardQuestion question : filteredQuestions) {
+                uniqueQuestionsMap.put(question.getId(), question);
+            }
+            filteredQuestions = new ArrayList<>(uniqueQuestionsMap.values());
+            
+            // 分页处理
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), filteredQuestions.size());
+            
+            List<StandardQuestion> pagedQuestions;
+            if (start <= end && start < filteredQuestions.size()) {
+                pagedQuestions = filteredQuestions.subList(start, end);
+            } else {
+                pagedQuestions = new ArrayList<>();
+            }
+            
+            // 转换为DTO
+            List<Map<String, Object>> questionDTOs = pagedQuestions.stream()
+                .map(this::convertToDTOWithTags)
+                .collect(Collectors.toList());
+            
+            // 构建结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("questions", questionDTOs);
+            result.put("total", filteredQuestions.size());
+            result.put("page", pageable.getPageNumber());
+            result.put("size", pageable.getPageSize());
+            result.put("totalPages", (int) Math.ceil((double) filteredQuestions.size() / pageable.getPageSize()));
+            result.put("datasetId", datasetId);
+            result.put("isInDataset", isInDataset);
+            result.put("onlyLatest", onlyLatest);
+            result.put("onlyLatestVersion", onlyLatestVersion);
+            result.put("onlyWithStandardAnswers", onlyWithStandardAnswers);
+            
+            logger.info("成功获取基于数据集的问题 - 数据集ID: {}, 是否数据集内: {}, 仅有标准答案: {}, 总数: {}, 当前页: {}", 
+                datasetId, isInDataset, onlyWithStandardAnswers, filteredQuestions.size(), questionDTOs.size());
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("查找基于数据集的问题时发生错误", e);
+            throw new RuntimeException("查找基于数据集的问题时发生错误: " + e.getMessage());
+        }
     }
 } 

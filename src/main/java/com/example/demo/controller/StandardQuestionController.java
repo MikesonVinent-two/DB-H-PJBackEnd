@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -28,18 +29,25 @@ import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.StandardQuestionDTO;
 import com.example.demo.dto.TagOperationDTO;
 import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.repository.jdbc.DatasetQuestionMappingRepository;
 import com.example.demo.service.StandardQuestionService;
 
 import jakarta.validation.Valid;
 
+/**
+ * 标准问题管理控制器
+ */
 @RestController
 @RequestMapping("/standard-questions")
-@CrossOrigin
+@CrossOrigin(origins = "*")
 public class StandardQuestionController {
     
     private static final Logger logger = LoggerFactory.getLogger(StandardQuestionController.class);
     
     private final StandardQuestionService standardQuestionService;
+    
+    @Autowired
+    private DatasetQuestionMappingRepository datasetQuestionMappingRepository;
     
     // 显式构造函数
     public StandardQuestionController(StandardQuestionService standardQuestionService) {
@@ -148,7 +156,34 @@ public class StandardQuestionController {
                 logger.warn("未找到问题的版本树 - 问题ID: {}", questionId);
                 return ResponseEntity.notFound().build();
             }
-            logger.info("成功获取问题版本树 - 问题ID: {}", questionId);
+            
+            // 添加详细日志，记录版本树的节点信息
+            logger.info("成功获取问题版本树 - 问题ID: {}, 版本数量: {}", questionId, versionTree.size());
+            for (QuestionHistoryDTO version : versionTree) {
+                logger.info("版本节点 - ID: {}, 父ID: {}, 创建时间: {}, 变更日志ID: {}", 
+                    version.getId(), 
+                    version.getParentQuestionId(), 
+                    version.getCreationTime(),
+                    version.getChangeLogId());
+            }
+            
+            // 记录版本树的具体父子关系
+            logger.info("版本树父子关系:");
+            Map<Long, List<Long>> childrenMap = new HashMap<>();
+            for (QuestionHistoryDTO version : versionTree) {
+                Long parentId = version.getParentQuestionId();
+                if (parentId != null) {
+                    if (!childrenMap.containsKey(parentId)) {
+                        childrenMap.put(parentId, new ArrayList<>());
+                    }
+                    childrenMap.get(parentId).add(version.getId());
+                }
+            }
+            
+            for (Map.Entry<Long, List<Long>> entry : childrenMap.entrySet()) {
+                logger.info("父节点ID: {}, 子节点IDs: {}", entry.getKey(), entry.getValue());
+            }
+            
             return ResponseEntity.ok(versionTree);
         } catch (IllegalArgumentException e) {
             logger.error("获取问题版本树失败 - 参数错误", e);
@@ -254,6 +289,7 @@ public class StandardQuestionController {
      * @param tags 标签列表，多个标签用逗号分隔
      * @param keyword 关键词
      * @param userId 当前用户ID，用于判断用户是否已回答
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
      * @param pageable 分页参数
      * @return 匹配的标准问题列表，包含额外信息
      */
@@ -262,8 +298,10 @@ public class StandardQuestionController {
             @RequestParam(required = false) String tags,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long userId,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatest,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-        logger.info("接收到搜索标准问题请求 - 标签: {}, 关键词: {}, 用户ID: {}", tags, keyword, userId);
+        logger.info("接收到搜索标准问题请求 - 标签: {}, 关键词: {}, 用户ID: {}, 仅最新版本: {}", 
+            tags, keyword, userId, onlyLatest);
         
         try {
             // 将逗号分隔的标签转换为列表
@@ -274,7 +312,7 @@ public class StandardQuestionController {
             
             // 调用服务层方法执行搜索
             Map<String, Object> result = standardQuestionService.searchQuestions(
-                    tagList, keyword, userId, pageable);
+                    tagList, keyword, userId, onlyLatest, pageable);
             
             logger.info("成功搜索标准问题 - 总数: {}", result.get("total"));
             return ResponseEntity.ok(result);
@@ -337,17 +375,21 @@ public class StandardQuestionController {
     /**
      * 获取所有没有标准回答的标准问题
      * 
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
      * @param pageable 分页参数
      * @return 没有标准回答的标准问题列表
      */
     @GetMapping("/without-standard-answers")
     public ResponseEntity<?> getQuestionsWithoutStandardAnswers(
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatest,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatestVersion,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-        logger.info("接收到获取无标准回答问题请求 - 页码: {}, 每页大小: {}", 
-            pageable.getPageNumber(), pageable.getPageSize());
+        logger.info("接收到获取无标准回答问题请求 - 仅最新版本: {}, 仅最新标准问题: {}, 页码: {}, 每页大小: {}", 
+            onlyLatest, onlyLatestVersion, pageable.getPageNumber(), pageable.getPageSize());
         
         try {
-            Map<String, Object> result = standardQuestionService.findQuestionsWithoutStandardAnswers(pageable);
+            Map<String, Object> result = standardQuestionService.findQuestionsWithoutStandardAnswers(onlyLatest, onlyLatestVersion, pageable);
             
             logger.info("成功获取无标准回答问题 - 总数: {}", result.get("total"));
             return ResponseEntity.ok(result);
@@ -357,6 +399,153 @@ public class StandardQuestionController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "获取无标准回答问题时发生错误");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * 回退标准问题到指定版本
+     * 
+     * @param versionId 要回退到的版本ID（变更日志ID）
+     * @param questionDTO 包含用户ID和提交信息的DTO
+     * @return 回退后的标准问题
+     */
+    @PostMapping("/version/{versionId}/rollback")
+    public ResponseEntity<?> rollbackQuestion(
+            @PathVariable Long versionId,
+            @RequestBody StandardQuestionDTO questionDTO) {
+        logger.debug("接收到回退标准问题请求 - 目标版本ID: {}, 用户ID: {}", 
+            versionId, questionDTO.getUserId());
+        try {
+            // 设置默认的提交信息
+            if (questionDTO.getCommitMessage() == null || questionDTO.getCommitMessage().trim().isEmpty()) {
+                questionDTO.setCommitMessage("回退到版本 " + versionId);
+            }
+
+            StandardQuestionDTO result = standardQuestionService.rollbackQuestion(versionId, 
+                questionDTO.getUserId(), questionDTO.getCommitMessage());
+            
+            logger.info("成功回退标准问题 - 版本ID: {}, 用户ID: {}", versionId, questionDTO.getUserId());
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("回退标准问题失败 - 参数错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            
+            return ResponseEntity.badRequest().body(response);
+        } catch (IllegalStateException e) {
+            logger.error("回退标准问题失败 - 状态错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            
+            return ResponseEntity.status(409).body(response);
+        } catch (Exception e) {
+            logger.error("回退标准问题失败 - 服务器错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "回退标准问题时发生错误");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * 获取所有有标准答案的标准问题，支持分页
+     * 
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
+     * @param pageable 分页参数
+     * @return 有标准答案的标准问题列表
+     */
+    @GetMapping("/with-standard-answers")
+    public ResponseEntity<?> getQuestionsWithStandardAnswers(
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatest,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatestVersion,
+            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+        logger.info("接收到获取有标准回答问题请求 - 仅最新版本: {}, 仅最新标准问题: {}, 页码: {}, 每页大小: {}", 
+            onlyLatest, onlyLatestVersion, pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            Map<String, Object> result = standardQuestionService.findQuestionsWithStandardAnswers(onlyLatest, onlyLatestVersion, pageable);
+            
+            logger.info("成功获取有标准回答问题 - 总数: {}", result.get("total"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("获取有标准回答问题失败", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "获取有标准回答问题时发生错误");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * 根据数据集ID查询问题，支持数据集内或数据集外的查询
+     * 
+     * @param datasetId 数据集ID
+     * @param inOrOut 查询方向 (in - 数据集内, out - 数据集外)
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
+     * @param onlyWithStandardAnswers 是否只返回有标准答案的问题
+     * @param tags 标签列表，多个标签用逗号分隔
+     * @param keyword 关键词
+     * @param pageable 分页参数
+     * @return 匹配的标准问题列表
+     */
+    @GetMapping("/by-dataset/{datasetId}")
+    public ResponseEntity<?> getQuestionsByDataset(
+            @PathVariable Long datasetId,
+            @RequestParam(required = true) String inOrOut,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatest,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyLatestVersion,
+            @RequestParam(required = false, defaultValue = "true") Boolean onlyWithStandardAnswers,
+            @RequestParam(required = false) String tags,
+            @RequestParam(required = false) String keyword,
+            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+        
+        logger.info("接收到基于数据集的问题查询请求 - 数据集ID: {}, 查询方向: {}, 仅最新版本: {}, 仅最新标准问题: {}, 仅有标准答案: {}, 标签: {}, 关键词: {}", 
+            datasetId, inOrOut, onlyLatest, onlyLatestVersion, onlyWithStandardAnswers, tags, keyword);
+        
+        try {
+            // 验证 inOrOut 参数
+            if (!"in".equals(inOrOut) && !"out".equals(inOrOut)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "inOrOut 参数必须是 'in' 或 'out'"
+                ));
+            }
+            
+            // 将逗号分隔的标签转换为列表
+            List<String> tagList = null;
+            if (tags != null && !tags.trim().isEmpty()) {
+                tagList = Arrays.asList(tags.split(","));
+            }
+            
+            // 调用服务层方法执行查询
+            Map<String, Object> result = standardQuestionService.findQuestionsByDataset(
+                    datasetId, Boolean.valueOf("in".equals(inOrOut)), onlyLatest, onlyLatestVersion, onlyWithStandardAnswers, tagList, keyword, pageable);
+            
+            logger.info("成功查询基于数据集的问题 - 数据集ID: {}, 查询方向: {}, 总数: {}", 
+                datasetId, inOrOut, result.get("total"));
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("查询基于数据集的问题失败", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "查询基于数据集的问题时发生错误");
             response.put("error", e.getMessage());
             
             return ResponseEntity.internalServerError().body(response);

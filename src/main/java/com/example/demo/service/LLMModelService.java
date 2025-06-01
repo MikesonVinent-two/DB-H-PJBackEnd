@@ -1,10 +1,11 @@
 package com.example.demo.service;
 
+import java.util.List;
+import java.util.Map;
+
 import com.example.demo.dto.LLMModelDTO;
 import com.example.demo.dto.LLMModelRegistrationRequest;
 import com.example.demo.dto.LLMModelRegistrationResponse;
-
-import java.util.List;
 
 public interface LLMModelService {
     /**
@@ -20,4 +21,11 @@ public interface LLMModelService {
      * @return 已注册模型列表
      */
     List<LLMModelDTO> getAllModels();
+    
+    /**
+     * 删除指定的LLM模型
+     * @param modelId 要删除的模型ID
+     * @return 包含操作结果的响应
+     */
+    Map<String, Object> deleteModel(Long modelId);
 } 

@@ -16,6 +16,7 @@ public class QuestionHistoryDTO {
     private List<String> tags;          // 标签列表
     private String commitMessage;        // 变更说明
     private List<ChangeDetailDTO> changes; // 具体变更详情
+    private Long changeLogId;           // 变更日志ID，用于回退功能
 
     public Long getId() {
         return id;
@@ -103,5 +104,13 @@ public class QuestionHistoryDTO {
 
     public void setChanges(List<ChangeDetailDTO> changes) {
         this.changes = changes;
+    }
+    
+    public Long getChangeLogId() {
+        return changeLogId;
+    }
+
+    public void setChangeLogId(Long changeLogId) {
+        this.changeLogId = changeLogId;
     }
 } 

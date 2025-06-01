@@ -1,5 +1,24 @@
 package com.example.demo.service.impl;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+
 import com.example.demo.dto.LLMModelDTO;
 import com.example.demo.dto.LLMModelRegistrationRequest;
 import com.example.demo.dto.LLMModelRegistrationResponse;
@@ -8,19 +27,6 @@ import com.example.demo.entity.jdbc.User;
 import com.example.demo.repository.jdbc.LlmModelRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.LLMModelService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class LLMModelServiceImpl implements LLMModelService {
@@ -161,6 +167,44 @@ public class LLMModelServiceImpl implements LLMModelService {
         } catch (Exception e) {
             logger.error("获取已注册的LLM模型时发生错误", e);
             return new ArrayList<>();
+        }
+    }
+    
+    @Override
+    @Transactional
+    public Map<String, Object> deleteModel(Long modelId) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            logger.info("尝试删除模型，ID: {}", modelId);
+            
+            // 1. 检查模型是否存在
+            if (!llmModelRepository.findById(modelId).isPresent()) {
+                logger.warn("模型不存在，ID: {}", modelId);
+                response.put("success", false);
+                response.put("message", "模型不存在");
+                return response;
+            }
+            
+            // 2. 执行软删除操作
+            boolean deleted = llmModelRepository.softDelete(modelId);
+            
+            if (deleted) {
+                logger.info("成功删除模型，ID: {}", modelId);
+                response.put("success", true);
+                response.put("message", "模型已成功删除");
+            } else {
+                logger.error("删除模型失败，ID: {}", modelId);
+                response.put("success", false);
+                response.put("message", "删除模型失败");
+            }
+            
+            return response;
+        } catch (Exception e) {
+            logger.error("删除模型时发生错误", e);
+            response.put("success", false);
+            response.put("message", "删除模型时发生错误: " + e.getMessage());
+            return response;
         }
     }
 } 

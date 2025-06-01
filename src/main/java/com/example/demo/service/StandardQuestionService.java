@@ -77,10 +77,11 @@ public interface StandardQuestionService {
      * @param tags 标签列表
      * @param keyword 关键词
      * @param userId 当前用户ID，用于判断用户是否已回答
+     * @param onlyLatest 是否只返回叶子节点（最新版本，没有子问题的版本）
      * @param pageable 分页参数
      * @return 搜索结果，包含问题列表和额外信息
      */
-    Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Pageable pageable);
+    Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Boolean onlyLatest, Pageable pageable);
     
     /**
      * 根据标准问题ID获取原始问题和原始回答列表
@@ -92,8 +93,49 @@ public interface StandardQuestionService {
     
     /**
      * 查找所有没有标准回答的标准问题
+     * 
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
      * @param pageable 分页参数
      * @return 无标准回答的问题列表
      */
-    Map<String, Object> findQuestionsWithoutStandardAnswers(Pageable pageable);
+    Map<String, Object> findQuestionsWithoutStandardAnswers(Boolean onlyLatest, Boolean onlyLatestVersion, Pageable pageable);
+    
+    /**
+     * 回退标准问题到指定版本
+     * @param versionId 要回退到的版本ID（变更日志ID）
+     * @param userId 操作用户ID
+     * @param commitMessage 回退说明信息
+     * @return 回退后的标准问题DTO
+     * @throws IllegalArgumentException 如果参数无效
+     * @throws IllegalStateException 如果版本冲突
+     */
+    StandardQuestionDTO rollbackQuestion(Long versionId, Long userId, String commitMessage);
+
+    /**
+     * 查找所有有标准答案的标准问题
+     * 
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
+     * @param pageable 分页参数
+     * @return 包含问题列表和分页信息的Map
+     */
+    Map<String, Object> findQuestionsWithStandardAnswers(Boolean onlyLatest, Boolean onlyLatestVersion, Pageable pageable);
+
+    /**
+     * 根据数据集ID查询问题，支持数据集内或数据集外的查询
+     * 
+     * @param datasetId 数据集ID
+     * @param isInDataset 是否查询数据集内的问题 (true - 数据集内, false - 数据集外)
+     * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyLatestVersion 是否只显示最新的标准问题（没有子版本的问题）
+     * @param onlyWithStandardAnswers 是否只返回有标准答案的问题
+     * @param tags 标签列表
+     * @param keyword 关键词
+     * @param pageable 分页参数
+     * @return 包含问题列表和分页信息的Map
+     */
+    Map<String, Object> findQuestionsByDataset(Long datasetId, Boolean isInDataset, Boolean onlyLatest, 
+                                          Boolean onlyLatestVersion, Boolean onlyWithStandardAnswers, 
+                                          List<String> tags, String keyword, Pageable pageable);
 } 

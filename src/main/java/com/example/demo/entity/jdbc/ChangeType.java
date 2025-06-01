@@ -32,7 +32,12 @@ public enum ChangeType {
     /**
      * 回滚标准答案
      */
-    ROLLBACK_STANDARD_ANSWER("回滚标准答案");
+    ROLLBACK_STANDARD_ANSWER("回滚标准答案"),
+    
+    /**
+     * 回滚标准问题
+     */
+    ROLLBACK_STANDARD_QUESTION("回滚标准问题");
 
     private final String value;
 

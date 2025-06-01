@@ -6,6 +6,8 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +41,7 @@ public class UserServiceImpl implements UserService {
             // 检查用户名是否已存在
             if (existsByUsername(userDTO.getUsername())) {
                 logger.warn("用户注册失败 - 用户名: {} 已存在", userDTO.getUsername());
-                throw new RuntimeException("用户名已存在");
+                throw new RuntimeException("用户名 '" + userDTO.getUsername() + "' 已被注册，请选择其他用户名");
             }
 
             // 创建新用户实体
@@ -121,6 +123,22 @@ public class UserServiceImpl implements UserService {
         logger.debug("成功获取用户列表 - 用户数量: {}", users.size());
         return users;
     }
+    
+    @Override
+    public Page<User> getAllUsers(Pageable pageable) {
+        logger.debug("分页获取用户列表 - 页码: {}, 每页大小: {}", 
+            pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            Page<User> usersPage = userRepository.findAll(pageable);
+            logger.debug("成功分页获取用户列表 - 总用户数: {}, 当前页用户数: {}", 
+                usersPage.getTotalElements(), usersPage.getNumberOfElements());
+            return usersPage;
+        } catch (Exception e) {
+            logger.error("分页获取用户列表失败", e);
+            throw new RuntimeException("获取用户列表时发生错误: " + e.getMessage());
+        }
+    }
 
     @Override
     public Optional<User> getUserById(Long id) {
@@ -178,5 +196,27 @@ public class UserServiceImpl implements UserService {
         dto.setCreatedAt(user.getCreatedAt());
         dto.setUpdatedAt(user.getUpdatedAt());
         return dto;
+    }
+
+    @Override
+    public Page<User> searchUsers(String keyword, Pageable pageable) {
+        logger.debug("根据关键词搜索用户 - 关键词: {}, 页码: {}, 每页大小: {}", 
+            keyword, pageable.getPageNumber(), pageable.getPageSize());
+        
+        try {
+            if (keyword == null || keyword.trim().isEmpty()) {
+                // 如果关键词为空，则返回所有用户
+                logger.debug("关键词为空，返回所有用户");
+                return getAllUsers(pageable);
+            }
+            
+            Page<User> usersPage = userRepository.searchByKeyword(keyword.trim(), pageable);
+            logger.debug("成功搜索用户 - 关键词: {}, 总结果数: {}, 当前页结果数: {}", 
+                keyword, usersPage.getTotalElements(), usersPage.getNumberOfElements());
+            return usersPage;
+        } catch (Exception e) {
+            logger.error("搜索用户失败 - 关键词: {}", keyword, e);
+            throw new RuntimeException("搜索用户时发生错误: " + e.getMessage());
+        }
     }
 } 

@@ -4,6 +4,9 @@ import com.example.demo.entity.jdbc.User;
 import com.example.demo.entity.jdbc.UserRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -47,6 +50,20 @@ public class UserRepository {
     
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM users WHERE deleted_at IS NULL";
+    
+    private static final String SQL_FIND_ALL_PAGEABLE = 
+            "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY id LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_ALL = 
+            "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL";
+    
+    private static final String SQL_SEARCH_BY_KEYWORD = 
+            "SELECT * FROM users WHERE (username LIKE ? OR name LIKE ? OR contact_info LIKE ?) " +
+            "AND deleted_at IS NULL ORDER BY id LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_SEARCH_BY_KEYWORD = 
+            "SELECT COUNT(*) FROM users WHERE (username LIKE ? OR name LIKE ? OR contact_info LIKE ?) " +
+            "AND deleted_at IS NULL";
     
     private static final String SQL_SOFT_DELETE = 
             "UPDATE users SET deleted_at=? WHERE id=?";
@@ -174,6 +191,48 @@ public class UserRepository {
      */
     public List<User> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new UserRowMapper());
+    }
+    
+    /**
+     * 分页查询所有用户
+     *
+     * @param pageable 分页参数
+     * @return 用户分页数据
+     */
+    public Page<User> findAll(Pageable pageable) {
+        List<User> users = jdbcTemplate.query(
+                SQL_FIND_ALL_PAGEABLE,
+                new Object[]{pageable.getPageSize(), pageable.getOffset()},
+                new UserRowMapper()
+        );
+        
+        Integer count = jdbcTemplate.queryForObject(SQL_COUNT_ALL, Integer.class);
+        return new PageImpl<>(users, pageable, count != null ? count : 0);
+    }
+    
+    /**
+     * 根据关键词搜索用户并分页
+     *
+     * @param keyword 搜索关键词
+     * @param pageable 分页参数
+     * @return 用户分页数据
+     */
+    public Page<User> searchByKeyword(String keyword, Pageable pageable) {
+        String searchTerm = "%" + keyword + "%";
+        
+        List<User> users = jdbcTemplate.query(
+                SQL_SEARCH_BY_KEYWORD,
+                new Object[]{searchTerm, searchTerm, searchTerm, pageable.getPageSize(), pageable.getOffset()},
+                new UserRowMapper()
+        );
+        
+        Integer count = jdbcTemplate.queryForObject(
+                SQL_COUNT_SEARCH_BY_KEYWORD, 
+                Integer.class, 
+                searchTerm, searchTerm, searchTerm
+        );
+        
+        return new PageImpl<>(users, pageable, count != null ? count : 0);
     }
 
     /**

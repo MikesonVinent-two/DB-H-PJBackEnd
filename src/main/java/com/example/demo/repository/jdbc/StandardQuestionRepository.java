@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
@@ -37,6 +39,8 @@ import com.example.demo.entity.jdbc.Tag;
 @Repository
 public class StandardQuestionRepository {
 
+    private static final Logger logger = LoggerFactory.getLogger(StandardQuestionRepository.class);
+    
     private final JdbcTemplate jdbcTemplate;
     private final UserRepository userRepository;
     private final StandardQuestionTagRepository standardQuestionTagRepository;
@@ -340,7 +344,7 @@ public class StandardQuestionRepository {
         return jdbcTemplate.query(
                 SQL_FIND_BY_PARENT_STANDARD_QUESTION_ID,
                 new Object[]{parentId},
-                new StandardQuestionRowMapper()
+                new StandardQuestionRowMapperWithoutTags()
         );
     }
     
@@ -354,7 +358,7 @@ public class StandardQuestionRepository {
         return jdbcTemplate.query(
                 SQL_FIND_BY_ORIGINAL_RAW_QUESTION_ID,
                 new Object[]{rawQuestionId},
-                new StandardQuestionRowMapper()
+                new StandardQuestionRowMapperWithoutTags()
         );
     }
     
@@ -442,6 +446,87 @@ public class StandardQuestionRepository {
     }
 
     /**
+     * 根据标签列表查询标准问题
+     * 这个方法会返回包含所有指定标签的标准问题
+     * 
+     * @param tagNames 标签名称列表
+     * @return 满足条件的标准问题列表
+     */
+    public List<StandardQuestion> findByAllTagNames(List<String> tagNames) {
+        if (tagNames == null || tagNames.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // 构建查询SQL
+        // 使用GROUP BY和HAVING COUNT确保问题包含所有指定的标签
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT sq.* FROM standard_questions sq ")
+           .append("JOIN standard_question_tags sqt ON sq.id = sqt.standard_question_id ")
+           .append("JOIN tags t ON sqt.tag_id = t.id ")
+           .append("WHERE LOWER(t.tag_name) IN (");
+        
+        // 添加标签名占位符
+        for (int i = 0; i < tagNames.size(); i++) {
+            if (i > 0) {
+                sql.append(",");
+            }
+            sql.append("LOWER(?)");
+        }
+        
+        sql.append(") AND sq.deleted_at IS NULL ")
+           .append("GROUP BY sq.id ")
+           .append("HAVING COUNT(DISTINCT LOWER(t.tag_name)) = ?");
+        
+        // 准备参数
+        Object[] params = new Object[tagNames.size() + 1];
+        for (int i = 0; i < tagNames.size(); i++) {
+            params[i] = tagNames.get(i);
+        }
+        // 最后一个参数是标签数量，用于HAVING子句
+        params[tagNames.size()] = tagNames.size();
+        
+        // 执行查询
+        return jdbcTemplate.query(sql.toString(), params, new StandardQuestionRowMapperWithoutTags());
+    }
+
+    /**
+     * 获取所有最新版本的标准问题（没有子问题的问题，即版本树的叶子节点）
+     * 
+     * @return 最新版本的标准问题列表
+     */
+    public List<StandardQuestion> findAllLatestVersions() {
+        return jdbcTemplate.query(
+            "SELECT sq.* FROM standard_questions sq " +
+            "WHERE NOT EXISTS (" +
+            "  SELECT 1 FROM standard_questions child " +
+            "  WHERE child.parent_standard_question_id = sq.id AND child.deleted_at IS NULL" +
+            ") AND sq.deleted_at IS NULL",
+            new StandardQuestionRowMapperWithoutTags()
+        );
+    }
+
+    /**
+     * 检查是否存在指定父ID的标准问题
+     * 
+     * @param parentId 父标准问题ID
+     * @return 是否存在子问题
+     */
+    public boolean existsByParentStandardQuestionId(Long parentId) {
+        if (parentId == null) {
+            return false;
+        }
+        
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM standard_questions " +
+            "WHERE parent_standard_question_id = ? AND deleted_at IS NULL",
+            new Object[]{parentId},
+            Integer.class
+        );
+        
+        return count != null && count > 0;
+    }
+
+    /**
      * 标准问题行映射器（不包含标签信息）
      */
     private class StandardQuestionRowMapperWithoutTags implements RowMapper<StandardQuestion> {
@@ -493,10 +578,17 @@ public class StandardQuestionRepository {
                     userRepository.findById(createdByUserId).ifPresent(user -> newQuestion.setCreatedByUser(user));
                 }
                 
+                // 修改处理父标准问题的方式，确保设置正确的父ID
                 Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
                 if (!rs.wasNull()) {
-                    StandardQuestion parentQuestion = new StandardQuestion();
-                    parentQuestion.setId(parentStandardQuestionId);
+                    // 如果父问题已经在Map中，直接使用
+                    StandardQuestion parentQuestion = questionMap.get(parentStandardQuestionId);
+                    if (parentQuestion == null) {
+                        // 否则创建一个新的父问题对象
+                        parentQuestion = new StandardQuestion();
+                        parentQuestion.setId(parentStandardQuestionId);
+                        // 不要将父问题添加到questionMap中，避免潜在的循环引用问题
+                    }
                     newQuestion.setParentStandardQuestion(parentQuestion);
                 }
                 
@@ -567,10 +659,17 @@ public class StandardQuestionRepository {
                     userRepository.findById(createdByUserId).ifPresent(user -> newQuestion.setCreatedByUser(user));
                 }
                 
+                // 修改处理父标准问题的方式，确保设置正确的父ID
                 Long parentStandardQuestionId = rs.getLong("parent_standard_question_id");
                 if (!rs.wasNull()) {
-                    StandardQuestion parentQuestion = new StandardQuestion();
-                    parentQuestion.setId(parentStandardQuestionId);
+                    // 如果父问题已经在Map中，直接使用
+                    StandardQuestion parentQuestion = questionMap.get(parentStandardQuestionId);
+                    if (parentQuestion == null) {
+                        // 否则创建一个新的父问题对象
+                        parentQuestion = new StandardQuestion();
+                        parentQuestion.setId(parentStandardQuestionId);
+                        // 不要将父问题添加到questionMap中，避免潜在的循环引用问题
+                    }
                     newQuestion.setParentStandardQuestion(parentQuestion);
                 }
                 
@@ -601,6 +700,102 @@ public class StandardQuestionRepository {
             }
             
             return question;
+        }
+    }
+
+    /**
+     * 查找指定ID的标准问题，同时预加载父问题
+     * 
+     * @param questionId 标准问题ID
+     * @return 标准问题（可能为空）
+     */
+    public Optional<StandardQuestion> findByIdWithParent(Long questionId) {
+        String sql = 
+            "WITH RECURSIVE question_hierarchy AS (" +
+            "  SELECT sq.* " +
+            "  FROM standard_questions sq " +
+            "  WHERE sq.id = ? AND sq.deleted_at IS NULL " +
+            "  UNION ALL " +
+            "  SELECT p.* " +
+            "  FROM standard_questions p " +
+            "  JOIN question_hierarchy q ON p.id = q.parent_standard_question_id " +
+            "  WHERE p.deleted_at IS NULL" +
+            ") " +
+            "SELECT qh.*, t.id as tag_id, t.tag_name, t.tag_type " +
+            "FROM question_hierarchy qh " +
+            "LEFT JOIN standard_question_tags sqt ON qh.id = sqt.standard_question_id " +
+            "LEFT JOIN tags t ON sqt.tag_id = t.id";
+        
+        try {
+            List<StandardQuestion> results = jdbcTemplate.query(
+                sql,
+                new Object[]{questionId},
+                new StandardQuestionRowMapper()
+            );
+            
+            if (results.isEmpty()) {
+                return Optional.empty();
+            }
+            
+            // 组织父子关系
+            Map<Long, StandardQuestion> questionMap = new HashMap<>();
+            for (StandardQuestion question : results) {
+                questionMap.put(question.getId(), question);
+            }
+            
+            return Optional.ofNullable(questionMap.get(questionId));
+        } catch (Exception e) {
+            logger.error("查询标准问题及其父问题失败 - 问题ID: {}", questionId, e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 使用递归SQL查询问题历史或版本树
+     * 
+     * @param questionId 问题ID
+     * @param sql 递归SQL查询语句
+     * @param rowMapper 行映射器
+     * @return 查询结果列表
+     */
+    public <T> List<T> findHistoryWithRecursiveQuery(Long questionId, String sql, RowMapper<T> rowMapper) {
+        return jdbcTemplate.query(sql, new Object[]{questionId}, rowMapper);
+    }
+
+    /**
+     * 使用递归SQL查询问题的完整版本树
+     * 
+     * @param questionId 问题ID
+     * @return 版本树中的所有问题
+     */
+    public List<StandardQuestion> findCompleteVersionTreeById(Long questionId) {
+        String sql = 
+            "WITH RECURSIVE version_tree AS (" +
+            "  SELECT sq.* " +
+            "  FROM standard_questions sq " +
+            "  WHERE sq.id IN (" +
+            "    WITH RECURSIVE parent_hierarchy AS (" +
+            "      SELECT id FROM standard_questions WHERE id = ? AND deleted_at IS NULL " +
+            "      UNION ALL " +
+            "      SELECT p.id FROM standard_questions p JOIN parent_hierarchy ph ON p.id = " +
+            "      (SELECT parent_standard_question_id FROM standard_questions WHERE id = ph.id AND deleted_at IS NULL)" +
+            "      WHERE p.deleted_at IS NULL" +
+            "    ) " +
+            "    SELECT id FROM parent_hierarchy WHERE id = (SELECT MIN(id) FROM parent_hierarchy)" +
+            "  ) AND sq.deleted_at IS NULL " +
+            "  UNION ALL " +
+            "  SELECT c.* " +
+            "  FROM standard_questions c " +
+            "  JOIN version_tree vt ON c.parent_standard_question_id = vt.id " +
+            "  WHERE c.deleted_at IS NULL" +
+            ") " +
+            "SELECT vt.* FROM version_tree vt";
+        
+        try {
+            return jdbcTemplate.query(sql, new Object[]{questionId}, new StandardQuestionRowMapperWithoutTags());
+        } catch (Exception e) {
+            logger.error("使用递归SQL查询版本树失败 - 问题ID: {}", questionId, e);
+            return new ArrayList<>();
         }
     }
 } 
