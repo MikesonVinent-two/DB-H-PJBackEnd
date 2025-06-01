@@ -329,6 +329,22 @@ public class DatasetQuestionMappingRepository {
     }
 
     /**
+     * 检查是否存在使用指定标准问题ID的数据集映射
+     * 
+     * @param standardQuestionId 标准问题ID
+     * @return 是否存在
+     */
+    public boolean existsByStandardQuestionId(Long standardQuestionId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM dataset_question_mapping WHERE standard_question_id = ?",
+            new Object[]{standardQuestionId},
+            Integer.class
+        );
+        
+        return count != null && count > 0;
+    }
+
+    /**
      * 数据集问题映射行映射器
      */
     private class DatasetQuestionMappingRowMapper implements RowMapper<DatasetQuestionMapping> {

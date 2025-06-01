@@ -255,6 +255,18 @@ public class StandardQuestionTagRepository {
     }
 
     /**
+     * 删除指定标准问题ID的所有标签关联
+     *
+     * @param standardQuestionId 标准问题ID
+     */
+    public void deleteByStandardQuestionId(Long standardQuestionId) {
+        jdbcTemplate.update(
+            "DELETE FROM standard_question_tags WHERE standard_question_id = ?", 
+            standardQuestionId
+        );
+    }
+
+    /**
      * 标准问题标签行映射器
      */
     private class StandardQuestionTagRowMapper implements RowMapper<StandardQuestionTag> {

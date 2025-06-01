@@ -798,4 +798,29 @@ public class StandardQuestionRepository {
             return new ArrayList<>();
         }
     }
+
+    /**
+     * 永久删除标准问题
+     * 
+     * @param questionId 标准问题ID
+     */
+    public void deleteById(Long questionId) {
+        jdbcTemplate.update("DELETE FROM standard_questions WHERE id=?", questionId);
+    }
+    
+    /**
+     * 检查是否存在指定ID的标准问题
+     * 
+     * @param questionId 标准问题ID
+     * @return 是否存在
+     */
+    public boolean existsById(Long questionId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM standard_questions WHERE id = ? AND deleted_at IS NULL",
+            new Object[]{questionId},
+            Integer.class
+        );
+        
+        return count != null && count > 0;
+    }
 } 

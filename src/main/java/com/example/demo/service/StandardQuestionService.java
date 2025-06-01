@@ -59,6 +59,15 @@ public interface StandardQuestionService {
     Page<StandardQuestionDTO> findLatestStandardQuestions(Pageable pageable);
     
     /**
+     * 删除标准问题
+     * @param questionId 要删除的问题ID
+     * @param userId 执行删除操作的用户ID
+     * @param permanent 是否永久删除，true为物理删除，false为逻辑删除（默认）
+     * @return 删除结果，包含成功状态和消息
+     */
+    Map<String, Object> deleteStandardQuestion(Long questionId, Long userId, boolean permanent);
+
+    /**
      * 操作单个标准问题的标签
      * @param operationDTO 标签操作请求
      * @return 更新后的标准问题DTO

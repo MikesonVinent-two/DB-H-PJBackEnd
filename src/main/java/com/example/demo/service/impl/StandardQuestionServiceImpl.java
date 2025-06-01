@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -2133,6 +2134,102 @@ public class StandardQuestionServiceImpl implements StandardQuestionService {
         } catch (Exception e) {
             logger.error("查找基于数据集的问题时发生错误", e);
             throw new RuntimeException("查找基于数据集的问题时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public Map<String, Object> deleteStandardQuestion(Long questionId, Long userId, boolean permanent) {
+        logger.info("开始删除标准问题 - ID: {}, 用户ID: {}, 永久删除: {}", questionId, userId, permanent);
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // 1. 检查问题是否存在
+            Optional<StandardQuestion> questionOpt = standardQuestionRepository.findById(questionId);
+            if (!questionOpt.isPresent()) {
+                logger.warn("标准问题不存在 - ID: {}", questionId);
+                result.put("success", false);
+                result.put("message", "标准问题不存在");
+                return result;
+            }
+
+            StandardQuestion question = questionOpt.get();
+            
+            // 2. 检查用户是否存在
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (!userOpt.isPresent()) {
+                logger.warn("用户不存在 - ID: {}", userId);
+                result.put("success", false);
+                result.put("message", "用户不存在");
+                return result;
+            }
+            
+            User user = userOpt.get();
+
+            // 3. 检查是否有子问题
+            boolean hasChildQuestions = standardQuestionRepository.existsByParentStandardQuestionId(questionId);
+            if (hasChildQuestions) {
+                logger.warn("无法删除标准问题，存在子问题 - ID: {}", questionId);
+                result.put("success", false);
+                result.put("message", "无法删除标准问题，存在子问题版本");
+                return result;
+            }
+
+            // 4. 检查是否有关联的数据集映射
+            boolean hasDatasetMappings = datasetQuestionMappingRepository.existsByStandardQuestionId(questionId);
+            if (hasDatasetMappings) {
+                logger.warn("标准问题已关联到数据集 - ID: {}", questionId);
+                // 这里可以选择阻止删除或者继续删除
+                // 我们选择提示但仍然允许删除
+                result.put("warning", "此问题已关联到数据集，删除可能影响数据集完整性");
+            }
+
+            // 5. 创建变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.DELETE_STANDARD_QUESTION);
+            changeLog.setUser(user);
+            changeLog.setCommitMessage("删除标准问题: " + question.getQuestionText());
+            changeLog.setAssociatedStandardQuestion(question);
+            
+            // 保存变更日志
+            changeLog = changeLogRepository.save(changeLog);
+            Long changeLogId = changeLog.getId();
+
+            // 6. 执行删除操作
+            if (permanent) {
+                // 永久删除前，先删除关联的标签关系
+                standardQuestionTagRepository.deleteByStandardQuestionId(questionId);
+                
+                // 删除关联的标准答案
+                if (question.getQuestionType() == QuestionType.SINGLE_CHOICE || 
+                    question.getQuestionType() == QuestionType.MULTIPLE_CHOICE) {
+                    standardObjectiveAnswerRepository.deleteByStandardQuestionId(questionId);
+                } else if (question.getQuestionType() == QuestionType.SIMPLE_FACT) {
+                    standardSimpleAnswerRepository.deleteByStandardQuestionId(questionId);
+                } else if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                    standardSubjectiveAnswerRepository.deleteByStandardQuestionId(questionId);
+                }
+                
+                // 永久删除问题
+                standardQuestionRepository.deleteById(questionId);
+                logger.info("永久删除标准问题 - ID: {}", questionId);
+            } else {
+                // 逻辑删除
+                standardQuestionRepository.softDelete(questionId);
+                logger.info("逻辑删除标准问题 - ID: {}", questionId);
+            }
+
+            // 7. 构建返回结果
+            result.put("success", true);
+            result.put("message", permanent ? "标准问题已永久删除" : "标准问题已删除");
+            result.put("questionId", questionId);
+            result.put("changeLogId", changeLogId);
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("删除标准问题时发生错误 - ID: {}", questionId, e);
+            result.put("success", false);
+            result.put("message", "删除标准问题时发生错误: " + e.getMessage());
+            return result;
         }
     }
 } 

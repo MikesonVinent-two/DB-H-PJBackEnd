@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -546,6 +547,44 @@ public class StandardQuestionController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "查询基于数据集的问题时发生错误");
+            response.put("error", e.getMessage());
+            
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    /**
+     * 删除标准问题
+     * 
+     * @param questionId 要删除的问题ID
+     * @param userId 执行删除操作的用户ID
+     * @param permanent 是否永久删除，true为物理删除，false为逻辑删除（默认）
+     * @return 删除结果
+     */
+    @DeleteMapping("/{questionId}")
+    public ResponseEntity<?> deleteStandardQuestion(
+            @PathVariable Long questionId,
+            @RequestParam Long userId,
+            @RequestParam(required = false, defaultValue = "false") boolean permanent) {
+        logger.info("接收到删除标准问题请求 - 问题ID: {}, 用户ID: {}, 永久删除: {}", 
+            questionId, userId, permanent);
+        
+        try {
+            Map<String, Object> result = standardQuestionService.deleteStandardQuestion(questionId, userId, permanent);
+            
+            if ((Boolean) result.get("success")) {
+                logger.info("成功删除标准问题 - 问题ID: {}", questionId);
+                return ResponseEntity.ok(result);
+            } else {
+                logger.warn("删除标准问题失败 - 问题ID: {}, 原因: {}", questionId, result.get("message"));
+                return ResponseEntity.badRequest().body(result);
+            }
+        } catch (Exception e) {
+            logger.error("删除标准问题时发生错误 - 问题ID: {}", questionId, e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "删除标准问题时发生错误");
             response.put("error", e.getMessage());
             
             return ResponseEntity.internalServerError().body(response);
