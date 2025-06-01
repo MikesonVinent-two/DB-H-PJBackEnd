@@ -1,136 +1,151 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.ChangeType;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.User;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.ChangeType;
 
 /**
- * 基于JDBC的变更日志仓库实?
+ * 基于JDBC的变更日志仓库实现
  */
 @Repository
 public class ChangeLogRepository {
 
+    private static final Logger logger = LoggerFactory.getLogger(ChangeLogRepository.class);
+
     private final JdbcTemplate jdbcTemplate;
-    private final UserRepository UserRepository;
+    private final UserRepository userRepository;
+    private final StandardQuestionRepository standardQuestionRepository;
 
     private static final String SQL_INSERT = 
-            "INSERT INTO change_log (change_type, changed_by_user_id, change_time, commit_message, associated_standard_question_id) " +
+            "INSERT INTO CHANGE_LOG (COMMIT_MESSAGE, CHANGE_TIME, CHANGED_BY_USER_ID, ASSOCIATED_STANDARD_QUESTION_ID, CHANGE_TYPE) " +
             "VALUES (?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
-            "UPDATE change_log SET change_type=?, changed_by_user_id=?, change_time=?, commit_message=?, associated_standard_question_id=? " +
+            "UPDATE CHANGE_LOG SET COMMIT_MESSAGE=?, CHANGE_TIME=?, CHANGED_BY_USER_ID=?, ASSOCIATED_STANDARD_QUESTION_ID=?, CHANGE_TYPE=? " +
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
-            "SELECT * FROM change_log WHERE id=?";
+            "SELECT * FROM CHANGE_LOG WHERE id=?";
     
+    private static final String SQL_FIND_BY_ANSWER_ID = 
+            "SELECT cl.* FROM CHANGE_LOG cl " +
+            "LEFT JOIN standard_objective_answers soa ON soa.created_change_log_id = cl.id " +
+            "LEFT JOIN standard_simple_answers ssa ON ssa.created_change_log_id = cl.id " +
+            "LEFT JOIN standard_subjective_answers ssua ON ssua.created_change_log_id = cl.id " +
+            "WHERE soa.id = ? OR ssa.id = ? OR ssua.id = ? " +
+            "ORDER BY cl.CHANGE_TIME DESC";
+    
+    private static final String SQL_FIND_ROOT_VERSION = 
+            "SELECT cl.* FROM CHANGE_LOG cl " +
+            "LEFT JOIN standard_objective_answers soa ON soa.created_change_log_id = cl.id " +
+            "LEFT JOIN standard_simple_answers ssa ON ssa.created_change_log_id = cl.id " +
+            "LEFT JOIN standard_subjective_answers ssua ON ssua.created_change_log_id = cl.id " +
+            "WHERE (soa.id = ? OR ssa.id = ? OR ssua.id = ?) " +
+            "ORDER BY cl.CHANGE_TIME ASC LIMIT 1";
+    
+    private static final String SQL_FIND_CHILD_VERSIONS = 
+            "SELECT cl2.* FROM CHANGE_LOG cl1 " +
+            "JOIN CHANGE_LOG cl2 ON cl1.ASSOCIATED_STANDARD_QUESTION_ID = cl2.ASSOCIATED_STANDARD_QUESTION_ID " +
+            "WHERE cl1.id = ? AND cl2.CHANGE_TIME > cl1.CHANGE_TIME " +
+            "ORDER BY cl2.CHANGE_TIME ASC";
+
     private static final String SQL_FIND_ALL = 
-            "SELECT * FROM change_log";
-    
-    private static final String SQL_DELETE = 
-            "DELETE FROM change_log WHERE id=?";
-    
-    private static final String SQL_FIND_BY_ASSOCIATED_STANDARD_QUESTION = 
-            "SELECT cl.* FROM change_log cl " +
-            "INNER JOIN standard_questions sq ON sq.created_change_log_id = cl.id " +
-            "WHERE sq.id = ?";
+            "SELECT * FROM CHANGE_LOG ORDER BY CHANGE_TIME DESC";
 
     @Autowired
-    public ChangeLogRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository) {
+    public ChangeLogRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository, StandardQuestionRepository standardQuestionRepository) {
         this.jdbcTemplate = jdbcTemplate;
-        this.UserRepository = UserRepository;
+        this.userRepository = userRepository;
+        this.standardQuestionRepository = standardQuestionRepository;
     }
 
     /**
      * 保存变更日志
      *
      * @param changeLog 变更日志对象
-     * @return 带有ID的变更日志对?
+     * @return 带有ID的变更日志对象
      */
     public ChangeLog save(ChangeLog changeLog) {
+        // 参数校验
+        if (changeLog == null) {
+            throw new IllegalArgumentException("变更日志对象不能为空");
+        }
+        
+        // 检查并确保commitTime不为空
+        if (changeLog.getCommitTime() == null) {
+            logger.debug("提交时间为空，设置为当前时间");
+            changeLog.setCommitTime(LocalDateTime.now());
+        }
+        
+        // 检查用户对象
+        if (changeLog.getUser() == null) {
+            throw new IllegalArgumentException("变更日志的用户不能为空");
+        }
+        
+        if (changeLog.getUser().getId() == null) {
+            throw new IllegalArgumentException("变更日志的用户ID不能为空");
+        }
+        
+        // 检查关联的标准问题
+        if (changeLog.getAssociatedStandardQuestion() == null) {
+            throw new IllegalArgumentException("变更日志关联的标准问题不能为空");
+        }
+        
+        if (changeLog.getAssociatedStandardQuestion().getId() == null) {
+            throw new IllegalArgumentException("变更日志关联的标准问题ID不能为空");
+        }
+        
+        // 检查变更类型
+        if (changeLog.getChangeType() == null) {
+            throw new IllegalArgumentException("变更日志的变更类型不能为空");
+        }
+        
         if (changeLog.getId() == null) {
-            return insert(changeLog);
+            // 新增
+            try {
+                jdbcTemplate.update(SQL_INSERT,
+                    changeLog.getCommitMessage(),
+                    Timestamp.valueOf(changeLog.getCommitTime()),
+                    changeLog.getUser().getId(),
+                    changeLog.getAssociatedStandardQuestion().getId(),
+                    changeLog.getChangeType().toString());
+                
+                Long id = jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+                changeLog.setId(id);
+            } catch (Exception e) {
+                logger.error("保存变更日志失败", e);
+                throw new RuntimeException("保存变更日志失败: " + e.getMessage(), e);
+            }
         } else {
-            return update(changeLog);
+            // 更新
+            try {
+                jdbcTemplate.update(SQL_UPDATE,
+                    changeLog.getCommitMessage(),
+                    Timestamp.valueOf(changeLog.getCommitTime()),
+                    changeLog.getUser().getId(),
+                    changeLog.getAssociatedStandardQuestion().getId(),
+                    changeLog.getChangeType().toString(),
+                    changeLog.getId());
+            } catch (Exception e) {
+                logger.error("更新变更日志失败", e);
+                throw new RuntimeException("更新变更日志失败: " + e.getMessage(), e);
+            }
         }
-    }
-
-    /**
-     * 插入新变更日?
-     *
-     * @param changeLog 变更日志对象
-     * @return 带有ID的变更日志对?
-     */
-    private ChangeLog insert(ChangeLog changeLog) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(SQL_INSERT, Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, changeLog.getChangeType().name());
-            
-            if (changeLog.getChangedByUser() != null && changeLog.getChangedByUser().getId() != null) {
-                ps.setLong(2, changeLog.getChangedByUser().getId());
-            } else {
-                ps.setNull(2, java.sql.Types.BIGINT);
-            }
-            
-            if (changeLog.getChangeTime() != null) {
-                ps.setTimestamp(3, Timestamp.valueOf(changeLog.getChangeTime()));
-            } else {
-                ps.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
-            }
-            
-            ps.setString(4, changeLog.getCommitMessage());
-            
-            // 设置关联的标准问题ID
-            if (changeLog.getAssociatedStandardQuestion() != null && changeLog.getAssociatedStandardQuestion().getId() != null) {
-                ps.setLong(5, changeLog.getAssociatedStandardQuestion().getId());
-            } else {
-                ps.setNull(5, java.sql.Types.BIGINT);
-            }
-            
-            return ps;
-        }, keyHolder);
-
-        Number key = keyHolder.getKey();
-        if (key != null) {
-            changeLog.setId(key.longValue());
-        }
-        return changeLog;
-    }
-
-    /**
-     * 更新变更日志
-     *
-     * @param changeLog 变更日志对象
-     * @return 更新后的变更日志对象
-     */
-    private ChangeLog update(ChangeLog changeLog) {
-        jdbcTemplate.update(SQL_UPDATE,
-                changeLog.getChangeType().name(),
-                changeLog.getChangedByUser() != null ? changeLog.getChangedByUser().getId() : null,
-                changeLog.getChangeTime() != null ? Timestamp.valueOf(changeLog.getChangeTime()) : Timestamp.valueOf(LocalDateTime.now()),
-                changeLog.getCommitMessage(),
-                changeLog.getAssociatedStandardQuestion() != null ? changeLog.getAssociatedStandardQuestion().getId() : null,
-                changeLog.getId());
-
         return changeLog;
     }
 
@@ -142,47 +157,82 @@ public class ChangeLogRepository {
      */
     public Optional<ChangeLog> findById(Long id) {
         try {
-            ChangeLog changeLog = jdbcTemplate.queryForObject(SQL_FIND_BY_ID, new Object[]{id}, new ChangeLogRowMapper());
+            ChangeLog changeLog = jdbcTemplate.queryForObject(SQL_FIND_BY_ID, new ChangeLogRowMapper(), id);
             return Optional.ofNullable(changeLog);
-        } catch (EmptyResultDataAccessException e) {
+        } catch (Exception e) {
             return Optional.empty();
         }
     }
-    
-    /**
-     * 根据关联的标准问题查找变更日?
-     *
-     * @param question 标准问题对象
-     * @return 变更日志
-     */
-    public ChangeLog findByAssociatedStandardQuestion(StandardQuestion question) {
+
+    public List<ChangeLog> findByAnswerId(Long answerId) {
+        return jdbcTemplate.query(SQL_FIND_BY_ANSWER_ID, new ChangeLogRowMapper(), answerId, answerId, answerId);
+    }
+
+    public ChangeLog findRootVersionByAnswerId(Long answerId) {
         try {
-            return jdbcTemplate.queryForObject(SQL_FIND_BY_ASSOCIATED_STANDARD_QUESTION, 
-                    new Object[]{question.getId()}, 
-                    new ChangeLogRowMapper());
+            return jdbcTemplate.queryForObject(SQL_FIND_ROOT_VERSION, new ChangeLogRowMapper(), answerId, answerId, answerId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public List<ChangeLog> findChildVersions(Long changeLogId) {
+        return jdbcTemplate.query(SQL_FIND_CHILD_VERSIONS, new ChangeLogRowMapper(), changeLogId);
+    }
+
+    /**
+     * 查找比指定版本更新的版本
+     * @param versionId 版本ID
+     * @return 更新的版本列表
+     */
+    public List<ChangeLog> findNewerVersions(Long versionId) {
+        String sql = "SELECT cl.* FROM CHANGE_LOG cl "
+                + "JOIN CHANGE_LOG target ON cl.ASSOCIATED_STANDARD_QUESTION_ID = target.ASSOCIATED_STANDARD_QUESTION_ID "
+                + "WHERE target.id = ? AND cl.CHANGE_TIME > (SELECT CHANGE_TIME FROM CHANGE_LOG WHERE id = ?) "
+                + "ORDER BY cl.CHANGE_TIME DESC";
+        
+        try {
+            return jdbcTemplate.query(sql, new Object[]{versionId, versionId}, new ChangeLogRowMapper());
+        } catch (Exception e) {
+            logger.error("查询更新版本失败", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 根据关联标准问题ID查找变更日志
+     * @param standardQuestionId 标准问题ID
+     * @return 变更日志对象
+     */
+    public ChangeLog findByAssociatedStandardQuestionId(Long standardQuestionId) {
+        String sql = "SELECT * FROM CHANGE_LOG WHERE ASSOCIATED_STANDARD_QUESTION_ID = ? ORDER BY CHANGE_TIME DESC LIMIT 1";
+        try {
+            return jdbcTemplate.queryForObject(sql, new ChangeLogRowMapper(), standardQuestionId);
         } catch (EmptyResultDataAccessException e) {
             return null;
         }
     }
 
     /**
-     * 查找所有变更日?
-     *
+     * 查找所有变更日志
      * @return 变更日志列表
      */
     public List<ChangeLog> findAll() {
-        return jdbcTemplate.query(SQL_FIND_ALL, new ChangeLogRowMapper());
+        try {
+            return jdbcTemplate.query(SQL_FIND_ALL, new ChangeLogRowMapper());
+        } catch (Exception e) {
+            logger.error("查询所有变更日志失败", e);
+            return Collections.emptyList();
+        }
     }
 
     /**
-     * 删除变更日志
-     *
+     * 根据ID删除变更日志
      * @param id 变更日志ID
-     * @return 是否成功
      */
-    public boolean delete(Long id) {
-        int affected = jdbcTemplate.update(SQL_DELETE, id);
-        return affected > 0;
+    public void deleteById(Long id) {
+        String sql = "DELETE FROM CHANGE_LOG WHERE id = ?";
+        jdbcTemplate.update(sql, id);
     }
 
     /**
@@ -193,37 +243,35 @@ public class ChangeLogRepository {
         public ChangeLog mapRow(ResultSet rs, int rowNum) throws SQLException {
             ChangeLog changeLog = new ChangeLog();
             changeLog.setId(rs.getLong("id"));
+            changeLog.setCommitMessage(rs.getString("COMMIT_MESSAGE"));
             
-            // 解析枚举
-            String changeTypeStr = rs.getString("change_type");
+            Timestamp commitTime = rs.getTimestamp("CHANGE_TIME");
+            if (commitTime != null) {
+                changeLog.setCommitTime(commitTime.toLocalDateTime());
+            }
+            
+            // 设置变更类型
+            String changeTypeStr = rs.getString("CHANGE_TYPE");
             if (changeTypeStr != null) {
-                changeLog.setChangeType(ChangeType.valueOf(changeTypeStr));
+                try {
+                    changeLog.setChangeType(ChangeType.valueOf(changeTypeStr));
+                } catch (IllegalArgumentException e) {
+                    logger.warn("未识别的变更类型: {}", changeTypeStr);
+                }
             }
             
-            // 设置时间
-            Timestamp changeTime = rs.getTimestamp("change_time");
-            if (changeTime != null) {
-                changeLog.setChangeTime(changeTime.toLocalDateTime());
-            }
-            
-            changeLog.setCommitMessage(rs.getString("commit_message"));
-            
-            // 处理外键关联
-            Long changedByUserId = rs.getLong("changed_by_user_id");
+            // 设置用户
+            Long userId = rs.getLong("CHANGED_BY_USER_ID");
             if (!rs.wasNull()) {
-                UserRepository.findById(changedByUserId).ifPresent(changeLog::setChangedByUser);
+                userRepository.findById(userId).ifPresent(user -> changeLog.setUser(user));
             }
             
-            // 设置关联的标准问?
-            Long associatedStandardQuestionId = rs.getLong("associated_standard_question_id");
+            // 设置关联的标准问题
+            Long standardQuestionId = rs.getLong("ASSOCIATED_STANDARD_QUESTION_ID");
             if (!rs.wasNull()) {
-                StandardQuestion question = new StandardQuestion();
-                question.setId(associatedStandardQuestionId);
-                changeLog.setAssociatedStandardQuestion(question);
+                standardQuestionRepository.findById(standardQuestionId)
+                    .ifPresent(question -> changeLog.setAssociatedStandardQuestion(question));
             }
-            
-            // 注意：这里没有加载关联的details和其他关联对?
-            // 这些关联对象需要在服务层按需加载
             
             return changeLog;
         }

@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import com.example.demo.dto.ExpertCandidateAnswerDTO;
 
 public interface ExpertCandidateAnswerService {
@@ -39,4 +40,26 @@ public interface ExpertCandidateAnswerService {
      * @throws IllegalStateException 如果用户无权删除
      */
     boolean deleteExpertCandidateAnswer(Long answerId, Long userId);
+    
+    /**
+     * 获取所有专家候选回答（分页）
+     * @param pageable 分页参数
+     * @return 分页专家候选回答列表
+     */
+    Page<ExpertCandidateAnswerDTO> getAllAnswers(Pageable pageable);
+    
+    /**
+     * 获取所有未评分的专家候选回答（分页）
+     * @param pageable 分页参数
+     * @return 分页未评分专家候选回答列表
+     */
+    Page<ExpertCandidateAnswerDTO> getUnratedAnswers(Pageable pageable);
+    
+    /**
+     * 获取指定用户已评分的专家候选回答（分页）
+     * @param userId 用户ID
+     * @param pageable 分页参数
+     * @return 分页已评分专家候选回答列表
+     */
+    Page<ExpertCandidateAnswerDTO> getRatedAnswersByUserId(Long userId, Pageable pageable);
 } 

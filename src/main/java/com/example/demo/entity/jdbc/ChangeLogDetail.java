@@ -2,11 +2,11 @@ package com.example.demo.entity.jdbc;
 
 /**
  * 变更日志详情实体类 - JDBC版本
- * 对应数据库表: change_log_details
+ * 对应数据库表: CHANGE_LOG_DETAILS
  */
 public class ChangeLogDetail {
     // 表名常量
-    public static final String TABLE_NAME = "change_log_details";
+    public static final String TABLE_NAME = "CHANGE_LOG_DETAILS";
     
     // 列名常量
     public static final String COLUMN_ID = "id";

@@ -27,7 +27,12 @@ public enum ChangeType {
     UPDATE_CHECKLIST_ITEM("更新评分检查项"),
     DELETE_CHECKLIST_ITEM("删除评分检查项"),
     
-    CREATE_PROMPT_ASSEMBLY_CONFIG("创建提示词组装配置");
+    CREATE_PROMPT_ASSEMBLY_CONFIG("创建提示词组装配置"),
+    
+    /**
+     * 回滚标准答案
+     */
+    ROLLBACK_STANDARD_ANSWER("回滚标准答案");
 
     private final String value;
 

@@ -1,23 +1,33 @@
 package com.example.demo.controller;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.ExpertCandidateAnswerDTO;
 import com.example.demo.service.ExpertCandidateAnswerService;
-import org.springframework.http.HttpStatus;
-import java.util.HashMap;
-import java.util.Map;
-import jakarta.validation.constraints.NotNull;
+
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 @RestController
 @RequestMapping("/expert-candidate-answers")
@@ -63,6 +73,56 @@ public class ExpertCandidateAnswerController {
             @PageableDefault(size = 10, sort = "submissionTime") Pageable pageable) {
         logger.info("获取用户ID为 {} 的专家候选回答", userId);
         return ResponseEntity.ok(expertCandidateAnswerService.getAnswersByUserId(userId, pageable));
+    }
+    
+    /**
+     * 获取所有专家候选回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 专家候选回答分页列表
+     */
+    @GetMapping
+    public ResponseEntity<Page<ExpertCandidateAnswerDTO>> getAllAnswers(
+            @PageableDefault(size = 10, sort = "submissionTime") Pageable pageable) {
+        logger.info("获取所有专家候选回答，分页参数: {}", pageable);
+        return ResponseEntity.ok(expertCandidateAnswerService.getAllAnswers(pageable));
+    }
+    
+    /**
+     * 获取所有未评分的专家候选回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 未评分专家候选回答分页列表
+     */
+    @GetMapping("/unrated")
+    public ResponseEntity<Page<ExpertCandidateAnswerDTO>> getUnratedAnswers(
+            @PageableDefault(size = 10, sort = "submissionTime") Pageable pageable) {
+        logger.info("获取所有未评分专家候选回答，分页参数: {}", pageable);
+        return ResponseEntity.ok(expertCandidateAnswerService.getUnratedAnswers(pageable));
+    }
+    
+    /**
+     * 获取指定用户已评分的专家候选回答（分页）
+     * 
+     * @param userId 用户ID
+     * @param pageable 分页参数
+     * @return 已评分专家候选回答分页列表
+     */
+    @GetMapping("/rated/user/{userId}")
+    public ResponseEntity<Page<ExpertCandidateAnswerDTO>> getRatedAnswersByUserId(
+            @PathVariable Long userId,
+            @PageableDefault(size = 10, sort = "submissionTime") Pageable pageable) {
+        logger.info("获取用户ID为 {} 的已评分专家候选回答，分页参数: {}", userId, pageable);
+        try {
+            Page<ExpertCandidateAnswerDTO> answers = expertCandidateAnswerService.getRatedAnswersByUserId(userId, pageable);
+            return ResponseEntity.ok(answers);
+        } catch (IllegalArgumentException e) {
+            logger.error("获取已评分专家候选回答失败 - 参数错误", e);
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("获取已评分专家候选回答失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
     
     // 更新质量评分和反馈

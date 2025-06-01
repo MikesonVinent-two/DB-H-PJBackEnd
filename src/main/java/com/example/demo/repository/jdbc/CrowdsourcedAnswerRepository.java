@@ -1,8 +1,15 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.CrowdsourcedAnswer;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.User;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
@@ -14,15 +21,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.CrowdsourcedAnswer;
 
 /**
  * 基于JDBC的众包回答仓库实?
@@ -84,9 +83,22 @@ public class CrowdsourcedAnswerRepository {
     
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM CROWDSOURCED_ANSWERS ORDER BY SUBMISSION_TIME DESC";
+            
+    private static final String SQL_FIND_ALL_PAGEABLE = 
+            "SELECT * FROM CROWDSOURCED_ANSWERS ORDER BY SUBMISSION_TIME DESC LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_ALL = 
+            "SELECT COUNT(*) FROM CROWDSOURCED_ANSWERS";
     
     private static final String SQL_DELETE = 
             "DELETE FROM CROWDSOURCED_ANSWERS WHERE ID=?";
+
+    private static final String SQL_FIND_BY_REVIEWED_BY_USER_ID = 
+            "SELECT * FROM CROWDSOURCED_ANSWERS WHERE REVIEWED_BY_USER_ID=? " +
+            "ORDER BY REVIEW_TIME DESC LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_BY_REVIEWED_BY_USER_ID = 
+            "SELECT COUNT(*) FROM CROWDSOURCED_ANSWERS WHERE REVIEWED_BY_USER_ID=?";
 
     @Autowired
     public CrowdsourcedAnswerRepository(JdbcTemplate jdbcTemplate, 
@@ -435,12 +447,24 @@ public class CrowdsourcedAnswerRepository {
     }
 
     /**
-     * 查找所有众包回?
+     * 查找所有众包回答（分页）
      *
-     * @return 所有众包回答列?
+     * @param pageable 分页参数
+     * @return 分页众包回答列表
      */
-    public List<CrowdsourcedAnswer> findAll() {
-        return jdbcTemplate.query(SQL_FIND_ALL, new CrowdsourcedAnswerRowMapper());
+    public Page<CrowdsourcedAnswer> findAll(Pageable pageable) {
+        // 查询总数
+        Integer total = jdbcTemplate.queryForObject(SQL_COUNT_ALL, Integer.class);
+        
+        // 查询数据
+        List<CrowdsourcedAnswer> content = jdbcTemplate.query(
+            SQL_FIND_ALL_PAGEABLE,
+            new CrowdsourcedAnswerRowMapper(),
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
 
     /**
@@ -450,6 +474,28 @@ public class CrowdsourcedAnswerRepository {
      */
     public void delete(CrowdsourcedAnswer crowdsourcedAnswer) {
         jdbcTemplate.update(SQL_DELETE, crowdsourcedAnswer.getId());
+    }
+
+    /**
+     * 根据审核者用户ID查找众包回答（分页）
+     *
+     * @param reviewedByUserId 审核者用户ID
+     * @param pageable 分页参数
+     * @return 众包回答分页结果
+     */
+    public Page<CrowdsourcedAnswer> findByReviewedByUserId(Long reviewedByUserId, Pageable pageable) {
+        int total = jdbcTemplate.queryForObject(
+            SQL_COUNT_BY_REVIEWED_BY_USER_ID, Integer.class, reviewedByUserId);
+        
+        List<CrowdsourcedAnswer> answers = jdbcTemplate.query(
+            SQL_FIND_BY_REVIEWED_BY_USER_ID,
+            new CrowdsourcedAnswerRowMapper(),
+            reviewedByUserId,
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(answers, pageable, total);
     }
 
     /**

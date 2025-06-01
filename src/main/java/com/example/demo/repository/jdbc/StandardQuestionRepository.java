@@ -322,7 +322,7 @@ public class StandardQuestionRepository {
             StandardQuestion question = jdbcTemplate.queryForObject(
                     SQL_FIND_FIRST_BY_ORIGINAL_RAW_QUESTION_ID_ORDER_BY_CREATION_TIME_DESC,
                     new Object[]{rawQuestionId},
-                    new StandardQuestionRowMapper()
+                    new StandardQuestionRowMapperWithoutTags()
             );
             return Optional.ofNullable(question);
         } catch (EmptyResultDataAccessException e) {

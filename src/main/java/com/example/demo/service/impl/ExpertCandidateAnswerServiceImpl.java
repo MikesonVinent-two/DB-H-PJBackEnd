@@ -196,6 +196,34 @@ public class ExpertCandidateAnswerServiceImpl implements ExpertCandidateAnswerSe
         }
     }
     
+    @Override
+    public Page<ExpertCandidateAnswerDTO> getAllAnswers(Pageable pageable) {
+        logger.debug("获取所有专家候选回答，分页参数: {}", pageable);
+        return expertCandidateAnswerRepository.findAll(pageable)
+            .map(this::convertToDTO);
+    }
+    
+    @Override
+    public Page<ExpertCandidateAnswerDTO> getUnratedAnswers(Pageable pageable) {
+        logger.debug("获取所有未评分专家候选回答，分页参数: {}", pageable);
+        return expertCandidateAnswerRepository.findUnrated(pageable)
+            .map(this::convertToDTO);
+    }
+    
+    @Override
+    public Page<ExpertCandidateAnswerDTO> getRatedAnswersByUserId(Long userId, Pageable pageable) {
+        logger.debug("获取用户ID为{}的已评分专家候选回答，分页参数: {}", userId, pageable);
+        // 验证用户是否存在
+        userRepository.findById(userId)
+            .orElseThrow(() -> {
+                logger.error("获取已评分专家候选回答失败 - 用户不存在: {}", userId);
+                return new IllegalArgumentException("用户不存在");
+            });
+            
+        return expertCandidateAnswerRepository.findRatedByUser(userId, pageable)
+            .map(this::convertToDTO);
+    }
+    
     // 将实体转换为DTO
     private ExpertCandidateAnswerDTO convertToDTO(ExpertCandidateAnswer answer) {
         ExpertCandidateAnswerDTO dto = new ExpertCandidateAnswerDTO();

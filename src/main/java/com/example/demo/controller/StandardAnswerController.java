@@ -53,7 +53,6 @@ public class StandardAnswerController {
                 return ResponseEntity.badRequest().body("路径参数中的问题ID与请求体中的问题ID不匹配");
             }
             
-            // 使用专门的更新方法
             Object result = standardAnswerService.updateStandardAnswer(standardQuestionId, answerDTO, answerDTO.getUserId());
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
@@ -99,6 +98,92 @@ public class StandardAnswerController {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             logger.error("删除标准答案失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+
+    /**
+     * 获取标准答案的历史记录
+     */
+    @GetMapping("/{answerId}/history")
+    public ResponseEntity<?> getAnswerHistory(@PathVariable Long answerId) {
+        logger.debug("接收到获取标准答案历史记录请求 - 答案ID: {}", answerId);
+        try {
+            var result = standardAnswerService.getAnswerHistory(answerId);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("获取标准答案历史记录失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取标准答案历史记录失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+
+    /**
+     * 获取标准答案的版本树
+     */
+    @GetMapping("/{answerId}/version-tree")
+    public ResponseEntity<?> getAnswerVersionTree(@PathVariable Long answerId) {
+        logger.debug("接收到获取标准答案版本树请求 - 答案ID: {}", answerId);
+        try {
+            var result = standardAnswerService.getAnswerVersionTree(answerId);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("获取标准答案版本树失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("获取标准答案版本树失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+
+    /**
+     * 比较两个版本的标准答案
+     */
+    @GetMapping("/{baseVersionId}/compare/{compareVersionId}")
+    public ResponseEntity<?> compareAnswerVersions(
+            @PathVariable Long baseVersionId,
+            @PathVariable Long compareVersionId) {
+        logger.debug("接收到比较标准答案版本请求 - 基准版本ID: {}, 比较版本ID: {}", baseVersionId, compareVersionId);
+        try {
+            var result = standardAnswerService.compareAnswerVersions(baseVersionId, compareVersionId);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("比较标准答案版本失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("比较标准答案版本失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
+        }
+    }
+
+    /**
+     * 回滚标准答案到指定版本
+     */
+    @PostMapping("/{versionId}/rollback")
+    public ResponseEntity<?> rollbackAnswer(
+            @PathVariable Long versionId,
+            @RequestBody StandardAnswerDTO answerDTO) {
+        logger.debug("接收到回滚标准答案请求 - 目标版本ID: {}, 用户ID: {}", 
+            versionId, answerDTO.getUserId());
+        try {
+            // 设置默认的提交信息
+            if (answerDTO.getCommitMessage() == null || answerDTO.getCommitMessage().trim().isEmpty()) {
+                answerDTO.setCommitMessage("回滚到版本 " + versionId);
+            }
+
+            Object result = standardAnswerService.rollbackAnswer(versionId, answerDTO.getUserId(), 
+                answerDTO.getCommitMessage());
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            logger.error("回滚标准答案失败 - 参数错误", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IllegalStateException e) {
+            logger.error("回滚标准答案失败 - 版本冲突", e);
+            return ResponseEntity.status(409).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("回滚标准答案失败 - 服务器错误", e);
             return ResponseEntity.internalServerError().body("服务器处理请求时发生错误");
         }
     }

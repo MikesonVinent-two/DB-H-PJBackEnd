@@ -22,6 +22,9 @@ import com.example.demo.dto.TagDTO;
 import com.example.demo.entity.jdbc.Tag;
 import com.example.demo.service.TagService;
 import com.example.demo.exception.EntityNotFoundException;
+import com.example.demo.dto.TagRecommendRequest;
+import com.example.demo.dto.TagRecommendResponse;
+import com.example.demo.service.TagRecommendationService;
 
 @RestController
 @RequestMapping("/tags")
@@ -31,6 +34,9 @@ public class TagController {
     
     @Autowired
     private TagService tagService;
+    
+    @Autowired
+    private TagRecommendationService tagRecommendationService;
     
     /**
      * 获取所有标签，并包含是否有对应prompt的状态
@@ -127,5 +133,10 @@ public class TagController {
         logger.info("检查标签是否存在: {}", tagName);
         boolean exists = tagService.getTagByName(tagName).isPresent();
         return ResponseEntity.ok(exists);
+    }
+
+    @PostMapping("/recommend")
+    public TagRecommendResponse recommendTags(@RequestBody TagRecommendRequest request) {
+        return tagRecommendationService.recommendTags(request);
     }
 } 

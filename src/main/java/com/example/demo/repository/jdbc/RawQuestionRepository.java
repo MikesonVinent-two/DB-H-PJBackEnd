@@ -1,17 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.RawQuestion;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,6 +12,20 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.RawAnswer;
+import com.example.demo.entity.jdbc.RawQuestion;
+
 /**
  * 基于JDBC的原始问题仓库实?
  */
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class RawQuestionRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final RawAnswerRepository rawAnswerRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO RAW_QUESTIONS (TITLE, CONTENT, SOURCE_URL, SOURCE_SITE, CRAWL_TIME, " +
@@ -97,8 +100,9 @@ public class RawQuestionRepository {
             "DELETE FROM RAW_QUESTIONS WHERE ID=?";
 
     @Autowired
-    public RawQuestionRepository(JdbcTemplate jdbcTemplate) {
+    public RawQuestionRepository(JdbcTemplate jdbcTemplate, RawAnswerRepository rawAnswerRepository) {
         this.jdbcTemplate = jdbcTemplate;
+        this.rawAnswerRepository = rawAnswerRepository;
     }
 
     /**
@@ -543,5 +547,15 @@ public class RawQuestionRepository {
             
             return rawQuestion;
         }
+    }
+
+    /**
+     * 根据原始问题ID查找所有原始回答
+     * 
+     * @param rawQuestionId 原始问题ID
+     * @return 原始回答列表
+     */
+    public List<RawAnswer> findRawAnswersByQuestionId(Long rawQuestionId) {
+        return rawAnswerRepository.findByRawQuestionId(rawQuestionId);
     }
 } 

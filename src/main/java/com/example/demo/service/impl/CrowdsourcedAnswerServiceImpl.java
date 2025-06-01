@@ -1,5 +1,7 @@
 package com.example.demo.service.impl;
 
+import java.time.LocalDateTime;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +19,6 @@ import com.example.demo.repository.jdbc.CrowdsourcedAnswerRepository;
 import com.example.demo.repository.jdbc.StandardQuestionRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.CrowdsourcedAnswerService;
-
-import java.time.LocalDateTime;
 
 @Service
 public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService {
@@ -327,6 +327,59 @@ public class CrowdsourcedAnswerServiceImpl implements CrowdsourcedAnswerService 
         } catch (Exception e) {
             logger.error("删除众包回答失败", e);
             throw new RuntimeException("删除众包回答失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public Page<CrowdsourcedAnswerDTO> getAllAnswers(Pageable pageable) {
+        logger.debug("获取所有众包回答，分页参数: {}", pageable);
+        
+        try {
+            return crowdsourcedAnswerRepository.findAll(pageable)
+                .map(this::convertToDTO);
+        } catch (Exception e) {
+            logger.error("获取所有众包回答失败", e);
+            throw new RuntimeException("获取所有众包回答失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public Page<CrowdsourcedAnswerDTO> getPendingAnswers(Pageable pageable) {
+        logger.debug("获取所有未审核的众包回答，分页参数: {}", pageable);
+        
+        try {
+            return crowdsourcedAnswerRepository
+                .findByQualityReviewStatus(CrowdsourcedAnswer.QualityReviewStatus.PENDING, pageable)
+                .map(this::convertToDTO);
+        } catch (Exception e) {
+            logger.error("获取未审核众包回答失败", e);
+            throw new RuntimeException("获取未审核众包回答失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public Page<CrowdsourcedAnswerDTO> getAnswersReviewedByUser(Long reviewedByUserId, Pageable pageable) {
+        logger.debug("获取用户(ID:{})审核过的众包回答，分页参数: {}", reviewedByUserId, pageable);
+        
+        if (reviewedByUserId == null) {
+            throw new IllegalArgumentException("审核者用户ID不能为空");
+        }
+        
+        try {
+            // 确认用户存在
+            userRepository.findById(reviewedByUserId)
+                .orElseThrow(() -> {
+                    logger.error("获取用户审核过的众包回答失败 - 用户不存在: {}", reviewedByUserId);
+                    return new IllegalArgumentException("用户不存在");
+                });
+            
+            return crowdsourcedAnswerRepository.findByReviewedByUserId(reviewedByUserId, pageable)
+                .map(this::convertToDTO);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("获取用户审核过的众包回答失败", e);
+            throw new RuntimeException("获取用户审核过的众包回答失败: " + e.getMessage());
         }
     }
 } 

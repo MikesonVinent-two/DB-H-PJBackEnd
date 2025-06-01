@@ -1,8 +1,16 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ExpertCandidateAnswer;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.entity.jdbc.User;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
@@ -14,16 +22,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.ExpertCandidateAnswer;
 
 /**
  * 基于JDBC的专家候选答案仓库实?
@@ -74,6 +73,26 @@ public class ExpertCandidateAnswerRepository {
 
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM EXPERT_CANDIDATE_ANSWERS";
+            
+    private static final String SQL_FIND_ALL_PAGEABLE = 
+            "SELECT * FROM EXPERT_CANDIDATE_ANSWERS ORDER BY SUBMISSION_TIME DESC LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_ALL = 
+            "SELECT COUNT(*) FROM EXPERT_CANDIDATE_ANSWERS";
+            
+    private static final String SQL_FIND_UNRATED_PAGEABLE = 
+            "SELECT * FROM EXPERT_CANDIDATE_ANSWERS WHERE QUALITY_SCORE IS NULL " +
+            "ORDER BY SUBMISSION_TIME DESC LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_UNRATED = 
+            "SELECT COUNT(*) FROM EXPERT_CANDIDATE_ANSWERS WHERE QUALITY_SCORE IS NULL";
+            
+    private static final String SQL_FIND_RATED_BY_USER_PAGEABLE = 
+            "SELECT * FROM EXPERT_CANDIDATE_ANSWERS WHERE QUALITY_SCORE IS NOT NULL AND USER_ID=? " +
+            "ORDER BY SUBMISSION_TIME DESC LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_RATED_BY_USER = 
+            "SELECT COUNT(*) FROM EXPERT_CANDIDATE_ANSWERS WHERE QUALITY_SCORE IS NOT NULL AND USER_ID=?";
 
     private static final String SQL_DELETE = 
             "DELETE FROM EXPERT_CANDIDATE_ANSWERS WHERE ID=?";
@@ -364,6 +383,65 @@ public class ExpertCandidateAnswerRepository {
      */
     public void delete(ExpertCandidateAnswer expertCandidateAnswer) {
         jdbcTemplate.update(SQL_DELETE, expertCandidateAnswer.getId());
+    }
+
+    /**
+     * 获取所有专家候选回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 分页专家候选回答列表
+     */
+    public Page<ExpertCandidateAnswer> findAll(Pageable pageable) {
+        int total = jdbcTemplate.queryForObject(SQL_COUNT_ALL, Integer.class);
+        
+        List<ExpertCandidateAnswer> answers = jdbcTemplate.query(
+            SQL_FIND_ALL_PAGEABLE,
+            new ExpertCandidateAnswerRowMapper(),
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(answers, pageable, total);
+    }
+    
+    /**
+     * 获取所有未评分的专家候选回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 分页未评分专家候选回答列表
+     */
+    public Page<ExpertCandidateAnswer> findUnrated(Pageable pageable) {
+        int total = jdbcTemplate.queryForObject(SQL_COUNT_UNRATED, Integer.class);
+        
+        List<ExpertCandidateAnswer> answers = jdbcTemplate.query(
+            SQL_FIND_UNRATED_PAGEABLE,
+            new ExpertCandidateAnswerRowMapper(),
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(answers, pageable, total);
+    }
+    
+    /**
+     * 获取指定用户已评分的专家候选回答（分页）
+     * 
+     * @param userId 用户ID
+     * @param pageable 分页参数
+     * @return 分页已评分专家候选回答列表
+     */
+    public Page<ExpertCandidateAnswer> findRatedByUser(Long userId, Pageable pageable) {
+        int total = jdbcTemplate.queryForObject(SQL_COUNT_RATED_BY_USER, Integer.class, userId);
+        
+        List<ExpertCandidateAnswer> answers = jdbcTemplate.query(
+            SQL_FIND_RATED_BY_USER_PAGEABLE,
+            new ExpertCandidateAnswerRowMapper(),
+            userId,
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(answers, pageable, total);
     }
 
     /**

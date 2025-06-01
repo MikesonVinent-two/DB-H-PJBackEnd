@@ -1,23 +1,26 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.RawAnswer;
-import com.example.demo.entity.jdbc.RawQuestion;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.RawAnswer;
+import com.example.demo.entity.jdbc.RawQuestion;
 
 /**
  * 基于JDBC的原始回答仓库实?
@@ -40,6 +43,12 @@ public class RawAnswerRepository {
     
     private static final String SQL_FIND_BY_RAW_QUESTION_ID = 
             "SELECT * FROM raw_answers WHERE raw_question_id=?";
+    
+    private static final String SQL_FIND_BY_RAW_QUESTION_ID_PAGED = 
+            "SELECT * FROM raw_answers WHERE raw_question_id=? ORDER BY publish_time DESC LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_BY_RAW_QUESTION_ID = 
+            "SELECT COUNT(*) FROM raw_answers WHERE raw_question_id=?";
     
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM raw_answers";
@@ -150,6 +159,33 @@ public class RawAnswerRepository {
      */
     public List<RawAnswer> findByRawQuestionId(Long rawQuestionId) {
         return jdbcTemplate.query(SQL_FIND_BY_RAW_QUESTION_ID, new Object[]{rawQuestionId}, new RawAnswerRowMapper());
+    }
+    
+    /**
+     * 根据原始问题ID分页查询回答，按发布时间降序排序
+     *
+     * @param rawQuestionId 原始问题ID
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    public Page<RawAnswer> findByRawQuestionIdOrderByPublishTimeDesc(Long rawQuestionId, Pageable pageable) {
+        // 查询总数
+        Integer total = jdbcTemplate.queryForObject(
+            SQL_COUNT_BY_RAW_QUESTION_ID,
+            Integer.class,
+            rawQuestionId
+        );
+        
+        // 查询数据
+        List<RawAnswer> content = jdbcTemplate.query(
+            SQL_FIND_BY_RAW_QUESTION_ID_PAGED,
+            new RawAnswerRowMapper(),
+            rawQuestionId,
+            pageable.getPageSize(),
+            pageable.getOffset()
+        );
+        
+        return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
 
     /**

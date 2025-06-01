@@ -1,126 +1,83 @@
 package com.example.demo.entity.jdbc;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 变更日志实体类 - JDBC版本
- * 对应数据库表: change_log
+ * 对应数据库表: CHANGE_LOG
  */
 public class ChangeLog {
     // 表名常量
-    public static final String TABLE_NAME = "change_log";
+    public static final String TABLE_NAME = "CHANGE_LOG";
     
     // 列名常量
-    public static final String COLUMN_ID = "id";
-    public static final String COLUMN_CHANGE_TYPE = "change_type";
-    public static final String COLUMN_CHANGED_BY_USER_ID = "changed_by_user_id";
-    public static final String COLUMN_CHANGE_TIME = "change_time";
-    public static final String COLUMN_COMMIT_MESSAGE = "commit_message";
+    public static final String COLUMN_ID = "ID";
+    public static final String COLUMN_COMMIT_MESSAGE = "COMMIT_MESSAGE";
+    public static final String COLUMN_COMMIT_TIME = "CHANGE_TIME";
+    public static final String COLUMN_USER_ID = "CHANGED_BY_USER_ID";
+    public static final String COLUMN_CHANGE_TYPE = "CHANGE_TYPE";
+    public static final String COLUMN_STANDARD_QUESTION_ID = "ASSOCIATED_STANDARD_QUESTION_ID";
     
     private Long id;
-    private ChangeType changeType;
-    private User changedByUser;
-    private LocalDateTime changeTime = LocalDateTime.now();
     private String commitMessage;
-    
-    // 关联到各种实体的关系
+    private LocalDateTime commitTime;
+    private User user;
+    private ChangeType changeType;
     private StandardQuestion associatedStandardQuestion;
-    private StandardObjectiveAnswer associatedObjectiveAnswer;
-    private StandardSimpleAnswer associatedSimpleAnswer;
-    private StandardSubjectiveAnswer associatedSubjectiveAnswer;
-    private List<ChangeLogDetail> details = new ArrayList<>();
-
-    // Getters and Setters
+    
+    // Getter and Setter methods
     public Long getId() {
-        return id;
+        return this.id;
     }
-
+    
     public void setId(Long id) {
         this.id = id;
     }
-
-    public ChangeType getChangeType() {
-        return changeType;
-    }
-
-    public void setChangeType(ChangeType changeType) {
-        this.changeType = changeType;
-    }
-
-    public User getChangedByUser() {
-        return changedByUser;
-    }
-
-    public void setChangedByUser(User changedByUser) {
-        this.changedByUser = changedByUser;
-    }
-
-    public LocalDateTime getChangeTime() {
-        return changeTime;
-    }
-
-    public void setChangeTime(LocalDateTime changeTime) {
-        this.changeTime = changeTime;
-    }
-
+    
     public String getCommitMessage() {
-        return commitMessage;
+        return this.commitMessage;
     }
-
+    
     public void setCommitMessage(String commitMessage) {
         this.commitMessage = commitMessage;
     }
-
+    
+    public LocalDateTime getCommitTime() {
+        return this.commitTime;
+    }
+    
+    public void setCommitTime(LocalDateTime commitTime) {
+        this.commitTime = commitTime;
+    }
+    
+    public User getUser() {
+        return this.user;
+    }
+    
+    public void setUser(User user) {
+        this.user = user;
+    }
+    
+    public ChangeType getChangeType() {
+        return this.changeType;
+    }
+    
+    public void setChangeType(ChangeType changeType) {
+        this.changeType = changeType;
+    }
+    
     public StandardQuestion getAssociatedStandardQuestion() {
-        return associatedStandardQuestion;
+        return this.associatedStandardQuestion;
     }
-
-    public void setAssociatedStandardQuestion(StandardQuestion associatedStandardQuestion) {
-        this.associatedStandardQuestion = associatedStandardQuestion;
+    
+    public void setAssociatedStandardQuestion(StandardQuestion standardQuestion) {
+        this.associatedStandardQuestion = standardQuestion;
     }
-
-    public StandardObjectiveAnswer getAssociatedObjectiveAnswer() {
-        return associatedObjectiveAnswer;
-    }
-
-    public void setAssociatedObjectiveAnswer(StandardObjectiveAnswer associatedObjectiveAnswer) {
-        this.associatedObjectiveAnswer = associatedObjectiveAnswer;
-    }
-
-    public StandardSimpleAnswer getAssociatedSimpleAnswer() {
-        return associatedSimpleAnswer;
-    }
-
-    public void setAssociatedSimpleAnswer(StandardSimpleAnswer associatedSimpleAnswer) {
-        this.associatedSimpleAnswer = associatedSimpleAnswer;
-    }
-
-    public StandardSubjectiveAnswer getAssociatedSubjectiveAnswer() {
-        return associatedSubjectiveAnswer;
-    }
-
-    public void setAssociatedSubjectiveAnswer(StandardSubjectiveAnswer associatedSubjectiveAnswer) {
-        this.associatedSubjectiveAnswer = associatedSubjectiveAnswer;
-    }
-
-    public List<ChangeLogDetail> getDetails() {
-        return details;
-    }
-
-    public void setDetails(List<ChangeLogDetail> details) {
-        this.details = details;
-    }
-
-    // 辅助方法
-    public void addDetail(ChangeLogDetail detail) {
-        details.add(detail);
-        detail.setChangeLog(this);
-    }
-
-    public void removeDetail(ChangeLogDetail detail) {
-        details.remove(detail);
-        detail.setChangeLog(null);
+    
+    /**
+     * 设置更改操作的用户
+     */
+    public void setChangedByUser(User user) {
+        this.user = user;
     }
 } 

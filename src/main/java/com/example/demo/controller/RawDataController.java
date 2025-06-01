@@ -1,32 +1,42 @@
 package com.example.demo.controller;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.RawAnswerDTO;
 import com.example.demo.dto.RawQuestionDTO;
-import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.dto.RawQuestionDisplayDTO;
+import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.entity.jdbc.RawAnswer;
 import com.example.demo.entity.jdbc.RawQuestion;
+import com.example.demo.serializer.RawQuestionSerializer;
 import com.example.demo.service.RawDataService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.example.demo.serializer.RawQuestionSerializer;
 
 import jakarta.validation.Valid;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/raw-data")
@@ -274,5 +284,36 @@ public class RawDataController {
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
         logger.info("接收到获取原始问题DTO请求");
         return ResponseEntity.ok(rawDataService.findAllRawQuestions(pageable));
+    }
+    
+    /**
+     * 根据原始问题ID获取所有回答（分页）
+     * 
+     * @param questionId 原始问题ID
+     * @param pageable 分页参数
+     * @return 回答列表
+     */
+    @GetMapping("/questions/{questionId}/answers")
+    public ResponseEntity<?> getAnswersByQuestionId(
+            @PathVariable Long questionId,
+            @PageableDefault(size = 10, sort = "publishTime", direction = Sort.Direction.DESC) Pageable pageable) {
+        logger.info("接收到获取原始问题回答请求 - 问题ID: {}", questionId);
+        
+        try {
+            Page<RawAnswer> answers = rawDataService.findRawAnswersByQuestionId(questionId, pageable);
+            return ResponseEntity.ok(answers);
+        } catch (IllegalArgumentException e) {
+            logger.error("获取原始问题回答失败 - 参数错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("获取原始问题回答失败 - 服务器错误", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "服务器处理请求时发生错误");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 } 

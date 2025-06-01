@@ -1,5 +1,8 @@
 package com.example.demo.controller;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,14 +11,21 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import jakarta.validation.Valid;
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.CrowdsourcedAnswerDTO;
 import com.example.demo.service.CrowdsourcedAnswerService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/crowdsourced-answers")
@@ -26,6 +36,44 @@ public class CrowdsourcedAnswerController {
     
     @Autowired
     private CrowdsourcedAnswerService crowdsourcedAnswerService;
+    
+    /**
+     * 获取所有众包回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 众包回答分页列表
+     */
+    @GetMapping
+    public ResponseEntity<Page<CrowdsourcedAnswerDTO>> getAllAnswers(
+            @PageableDefault(size = 10, sort = "submissionTime,desc") Pageable pageable) {
+        logger.info("获取所有众包回答，分页参数: {}", pageable);
+        try {
+            Page<CrowdsourcedAnswerDTO> answers = crowdsourcedAnswerService.getAllAnswers(pageable);
+            return ResponseEntity.ok(answers);
+        } catch (Exception e) {
+            logger.error("获取所有众包回答失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * 获取所有未审核的众包回答（分页）
+     * 
+     * @param pageable 分页参数
+     * @return 未审核众包回答分页列表
+     */
+    @GetMapping("/pending")
+    public ResponseEntity<Page<CrowdsourcedAnswerDTO>> getPendingAnswers(
+            @PageableDefault(size = 10, sort = "submissionTime,desc") Pageable pageable) {
+        logger.info("获取所有未审核的众包回答，分页参数: {}", pageable);
+        try {
+            Page<CrowdsourcedAnswerDTO> answers = crowdsourcedAnswerService.getPendingAnswers(pageable);
+            return ResponseEntity.ok(answers);
+        } catch (Exception e) {
+            logger.error("获取未审核众包回答失败 - 服务器错误", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
     
     // 根据问题ID获取众包回答
     @GetMapping("/by-question/{questionId}")
@@ -220,6 +268,53 @@ public class CrowdsourcedAnswerController {
             response.put("code", "SERVER_ERROR");
             response.put("message", "服务器处理请求时发生错误");
             response.put("details", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * 获取由特定用户审核过的众包回答（分页）
+     * 
+     * @param reviewedByUserId 审核者用户ID
+     * @param pageable 分页参数
+     * @return 用户审核过的众包回答分页列表
+     */
+    @GetMapping("/reviewed-by/{reviewedByUserId}")
+    public ResponseEntity<?> getAnswersReviewedByUser(
+            @PathVariable Long reviewedByUserId,
+            @PageableDefault(size = 10, sort = "reviewTime,desc") Pageable pageable) {
+        logger.info("获取用户ID为 {} 审核过的众包回答", reviewedByUserId);
+        
+        try {
+            Page<CrowdsourcedAnswerDTO> answers = crowdsourcedAnswerService.getAnswersReviewedByUser(reviewedByUserId, pageable);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("data", answers.getContent());
+            response.put("totalElements", answers.getTotalElements());
+            response.put("totalPages", answers.getTotalPages());
+            response.put("currentPage", answers.getNumber());
+            response.put("size", answers.getSize());
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            logger.error("获取用户审核过的众包回答失败 - 参数错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "INVALID_PARAMETERS");
+            response.put("message", e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("获取用户审核过的众包回答失败 - 服务器错误", e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("code", "SERVER_ERROR");
+            response.put("message", "获取用户审核过的众包回答时发生错误");
+            response.put("details", e.getMessage());
+            
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

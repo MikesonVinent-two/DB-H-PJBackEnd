@@ -1,7 +1,14 @@
 package com.example.demo.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,10 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.dto.StandardAnswerDTO;
 import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.ChangeType;
 import com.example.demo.entity.jdbc.ChangeLogDetail;
+import com.example.demo.entity.jdbc.ChangeType;
 import com.example.demo.entity.jdbc.EntityType;
-import com.example.demo.entity.jdbc.QuestionType;
 import com.example.demo.entity.jdbc.StandardObjectiveAnswer;
 import com.example.demo.entity.jdbc.StandardQuestion;
 import com.example.demo.entity.jdbc.StandardSimpleAnswer;
@@ -668,5 +674,423 @@ public class StandardAnswerServiceImpl implements StandardAnswerService {
         detail.setOldValue(null);
         detail.setNewValue(LocalDateTime.now().toString());
         changeLogDetailRepository.save(detail);
+    }
+
+    @Override
+    public List<Map<String, Object>> getAnswerHistory(Long answerId) {
+        logger.debug("开始获取标准答案历史记录 - 答案ID: {}", answerId);
+        
+        if (answerId == null) {
+            logger.error("获取标准答案历史记录失败 - 答案ID为空");
+            throw new IllegalArgumentException("答案ID不能为空");
+        }
+
+        try {
+            // 从变更日志表中获取该答案的所有历史记录
+            List<Map<String, Object>> history = changeLogRepository.findByAnswerId(answerId).stream()
+                .map(changeLog -> {
+                    Map<String, Object> historyItem = new HashMap<>();
+                    historyItem.put("id", changeLog.getId());
+                    historyItem.put("commitMessage", changeLog.getCommitMessage());
+                    historyItem.put("commitTime", changeLog.getCommitTime());
+                    historyItem.put("userId", changeLog.getUser().getId());
+                    historyItem.put("userName", changeLog.getUser().getUsername());
+                    
+                    // 获取变更详情
+                    List<Map<String, Object>> details = changeLogDetailRepository
+                        .findByChangeLogId(changeLog.getId())
+                        .stream()
+                        .map(detail -> {
+                            Map<String, Object> detailMap = new HashMap<>();
+                            detailMap.put("field", detail.getAttributeName());
+                            detailMap.put("oldValue", detail.getOldValue());
+                            detailMap.put("newValue", detail.getNewValue());
+                            return detailMap;
+                        })
+                        .collect(Collectors.toList());
+                    
+                    historyItem.put("details", details);
+                    return historyItem;
+                })
+                .collect(Collectors.toList());
+
+            logger.info("成功获取标准答案历史记录 - 答案ID: {}, 记录数: {}", answerId, history.size());
+            return history;
+        } catch (Exception e) {
+            logger.error("获取标准答案历史记录时发生错误", e);
+            throw new RuntimeException("获取历史记录时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public Map<String, Object> getAnswerVersionTree(Long answerId) {
+        logger.debug("开始获取标准答案版本树 - 答案ID: {}", answerId);
+        
+        if (answerId == null) {
+            logger.error("获取标准答案版本树失败 - 答案ID为空");
+            throw new IllegalArgumentException("答案ID不能为空");
+        }
+
+        try {
+            // 构建版本树
+            Map<String, Object> versionTree = new HashMap<>();
+            
+            // 获取根版本
+            var rootVersion = changeLogRepository.findRootVersionByAnswerId(answerId);
+            if (rootVersion == null) {
+                logger.warn("未找到标准答案的根版本 - 答案ID: {}", answerId);
+                return versionTree;
+            }
+
+            // 递归构建版本树
+            versionTree = buildVersionTreeNode(rootVersion);
+
+            logger.info("成功获取标准答案版本树 - 答案ID: {}", answerId);
+            return versionTree;
+        } catch (Exception e) {
+            logger.error("获取标准答案版本树时发生错误", e);
+            throw new RuntimeException("获取版本树时发生错误: " + e.getMessage());
+        }
+    }
+
+    private Map<String, Object> buildVersionTreeNode(ChangeLog changeLog) {
+        Map<String, Object> node = new HashMap<>();
+        node.put("id", changeLog.getId());
+        node.put("commitMessage", changeLog.getCommitMessage());
+        node.put("commitTime", changeLog.getCommitTime());
+        node.put("userId", changeLog.getUser().getId());
+        node.put("userName", changeLog.getUser().getUsername());
+
+        // 获取子版本
+        List<Map<String, Object>> children = changeLogRepository.findChildVersions(changeLog.getId())
+            .stream()
+            .map(this::buildVersionTreeNode)
+            .collect(Collectors.toList());
+        
+        if (!children.isEmpty()) {
+            node.put("children", children);
+        }
+
+        return node;
+    }
+
+    @Override
+    public Map<String, Object> compareAnswerVersions(Long baseVersionId, Long compareVersionId) {
+        logger.debug("开始比较标准答案版本 - 基准版本ID: {}, 比较版本ID: {}", baseVersionId, compareVersionId);
+        
+        if (baseVersionId == null || compareVersionId == null) {
+            logger.error("比较标准答案版本失败 - 版本ID为空");
+            throw new IllegalArgumentException("版本ID不能为空");
+        }
+
+        try {
+            Map<String, Object> comparison = new HashMap<>();
+            
+            // 获取两个版本的变更日志
+            var baseVersion = changeLogRepository.findById(baseVersionId)
+                .orElseThrow(() -> new IllegalArgumentException("找不到基准版本"));
+            var compareVersion = changeLogRepository.findById(compareVersionId)
+                .orElseThrow(() -> new IllegalArgumentException("找不到比较版本"));
+
+            // 获取两个版本的变更详情
+            var baseDetails = changeLogDetailRepository.findByChangeLogId(baseVersionId);
+            var compareDetails = changeLogDetailRepository.findByChangeLogId(compareVersionId);
+
+            // 比较基本信息
+            comparison.put("baseVersion", Map.of(
+                "id", baseVersion.getId(),
+                "commitMessage", baseVersion.getCommitMessage(),
+                "commitTime", baseVersion.getCommitTime(),
+                "userId", baseVersion.getUser().getId(),
+                "userName", baseVersion.getUser().getUsername()
+            ));
+
+            comparison.put("compareVersion", Map.of(
+                "id", compareVersion.getId(),
+                "commitMessage", compareVersion.getCommitMessage(),
+                "commitTime", compareVersion.getCommitTime(),
+                "userId", compareVersion.getUser().getId(),
+                "userName", compareVersion.getUser().getUsername()
+            ));
+
+            // 比较字段变化
+            List<Map<String, Object>> fieldDiffs = new ArrayList<>();
+            Set<String> allFields = new HashSet<>();
+            baseDetails.forEach(detail -> allFields.add(detail.getAttributeName()));
+            compareDetails.forEach(detail -> allFields.add(detail.getAttributeName()));
+
+            for (String field : allFields) {
+                Map<String, Object> fieldDiff = new HashMap<>();
+                fieldDiff.put("field", field);
+
+                var baseValue = baseDetails.stream()
+                    .filter(d -> d.getAttributeName().equals(field))
+                    .map(d -> d.getNewValue())
+                    .findFirst()
+                    .orElse(null);
+
+                var compareValue = compareDetails.stream()
+                    .filter(d -> d.getAttributeName().equals(field))
+                    .map(d -> d.getNewValue())
+                    .findFirst()
+                    .orElse(null);
+
+                fieldDiff.put("baseValue", baseValue);
+                fieldDiff.put("compareValue", compareValue);
+                fieldDiff.put("changed", !Objects.equals(baseValue, compareValue));
+
+                fieldDiffs.add(fieldDiff);
+            }
+
+            comparison.put("fieldDiffs", fieldDiffs);
+
+            logger.info("成功比较标准答案版本 - 基准版本ID: {}, 比较版本ID: {}", baseVersionId, compareVersionId);
+            return comparison;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("比较标准答案版本时发生错误", e);
+            throw new RuntimeException("比较版本时发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public Object rollbackAnswer(Long versionId, Long userId, String commitMessage) {
+        logger.debug("开始回滚标准答案到指定版本 - 版本ID: {}, 用户ID: {}", versionId, userId);
+        
+        if (versionId == null || userId == null) {
+            logger.error("回滚标准答案失败 - 参数为空");
+            throw new IllegalArgumentException("版本ID和用户ID不能为空");
+        }
+
+        try {
+            // 获取要回滚到的版本
+            ChangeLog targetVersion = changeLogRepository.findById(versionId)
+                .orElseThrow(() -> new IllegalArgumentException("找不到指定的版本"));
+            
+            // 获取标准问题
+            StandardQuestion standardQuestion = targetVersion.getAssociatedStandardQuestion();
+            if (standardQuestion == null) {
+                throw new IllegalStateException("该版本没有关联的标准问题");
+            }
+            
+            // 获取用户信息
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("找不到指定的用户"));
+            
+            // 创建新的变更日志
+            ChangeLog changeLog = new ChangeLog();
+            changeLog.setChangeType(ChangeType.ROLLBACK_STANDARD_ANSWER);
+            changeLog.setChangedByUser(user);
+            changeLog.setCommitMessage(commitMessage);
+            changeLog.setCommitTime(LocalDateTime.now());
+            changeLog.setAssociatedStandardQuestion(standardQuestion);
+            changeLog = changeLogRepository.save(changeLog);
+            
+            // 根据问题类型获取当前答案
+            Object currentAnswer = null;
+            switch (standardQuestion.getQuestionType()) {
+                case SINGLE_CHOICE:
+                case MULTIPLE_CHOICE:
+                    currentAnswer = objectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+                        .orElse(null);
+                    break;
+                case SIMPLE_FACT:
+                    currentAnswer = simpleAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+                        .orElse(null);
+                    break;
+                case SUBJECTIVE:
+                    currentAnswer = subjectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId());
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的问题类型: " + standardQuestion.getQuestionType());
+            }
+            
+            if (currentAnswer == null) {
+                throw new IllegalStateException("找不到当前的标准答案");
+            }
+            
+            // 获取变更详情
+            List<ChangeLogDetail> targetDetails = changeLogDetailRepository.findByChangeLogId(versionId);
+            if (targetDetails == null || targetDetails.isEmpty()) {
+                throw new IllegalStateException("目标版本没有变更详情");
+            }
+            
+            // 根据问题类型执行回滚
+            Object result = null;
+            switch (standardQuestion.getQuestionType()) {
+                case SINGLE_CHOICE:
+                case MULTIPLE_CHOICE:
+                    result = rollbackObjectiveAnswer(targetDetails, standardQuestion, user, changeLog);
+                    break;
+                case SIMPLE_FACT:
+                    result = rollbackSimpleAnswer(targetDetails, standardQuestion, user, changeLog);
+                    break;
+                case SUBJECTIVE:
+                    result = rollbackSubjectiveAnswer(targetDetails, standardQuestion, user, changeLog);
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支持的问题类型: " + standardQuestion.getQuestionType());
+            }
+
+            logger.info("成功回滚标准答案 - 版本ID: {}, 用户ID: {}", versionId, userId);
+            return result;
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("回滚标准答案时发生错误", e);
+            throw new RuntimeException("回滚答案时发生错误: " + e.getMessage());
+        }
+    }
+    
+    private StandardObjectiveAnswer rollbackObjectiveAnswer(
+            List<ChangeLogDetail> targetDetails, 
+            StandardQuestion standardQuestion,
+            User user,
+            ChangeLog changeLog) {
+        
+        // 创建新的答案实例
+        StandardObjectiveAnswer answer = new StandardObjectiveAnswer();
+        answer.setStandardQuestion(standardQuestion);
+        answer.setDeterminedByUser(user);
+        answer.setDeterminedTime(LocalDateTime.now());
+        answer.setCreatedChangeLog(changeLog);
+        
+        // 从变更详情中恢复数据
+        for (ChangeLogDetail detail : targetDetails) {
+            switch (detail.getAttributeName()) {
+                case "options":
+                    answer.setOptions(detail.getNewValue());
+                    break;
+                case "correctOptionIds":
+                    answer.setCorrectOptionIds(detail.getNewValue());
+                    break;
+            }
+        }
+        
+        // 软删除当前答案
+        objectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+            .ifPresent(current -> {
+                current.setDeletedAt(LocalDateTime.now());
+                objectiveAnswerRepository.save(current);
+            });
+        
+        // 保存新答案
+        answer = objectiveAnswerRepository.save(answer);
+        
+        // 记录变更详情
+        for (ChangeLogDetail detail : targetDetails) {
+            ChangeLogDetail newDetail = new ChangeLogDetail();
+            newDetail.setChangeLog(changeLog);
+            newDetail.setEntityType(detail.getEntityType());
+            newDetail.setEntityId(answer.getId());
+            newDetail.setAttributeName(detail.getAttributeName());
+            newDetail.setOldValue(null); // 回滚操作不需要记录旧值
+            newDetail.setNewValue(detail.getNewValue());
+            changeLogDetailRepository.save(newDetail);
+        }
+        
+        return answer;
+    }
+    
+    private StandardSimpleAnswer rollbackSimpleAnswer(
+            List<ChangeLogDetail> targetDetails, 
+            StandardQuestion standardQuestion,
+            User user,
+            ChangeLog changeLog) {
+        
+        // 创建新的答案实例
+        StandardSimpleAnswer answer = new StandardSimpleAnswer();
+        answer.setStandardQuestion(standardQuestion);
+        answer.setDeterminedByUser(user);
+        answer.setDeterminedTime(LocalDateTime.now());
+        answer.setCreatedChangeLog(changeLog);
+        
+        // 从变更详情中恢复数据
+        for (ChangeLogDetail detail : targetDetails) {
+            switch (detail.getAttributeName()) {
+                case "answerText":
+                    answer.setAnswerText(detail.getNewValue());
+                    break;
+                case "alternativeAnswers":
+                    answer.setAlternativeAnswers(detail.getNewValue());
+                    break;
+            }
+        }
+        
+        // 软删除当前答案
+        simpleAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId())
+            .ifPresent(current -> {
+                current.setDeletedAt(LocalDateTime.now());
+                simpleAnswerRepository.save(current);
+            });
+        
+        // 保存新答案
+        answer = simpleAnswerRepository.save(answer);
+        
+        // 记录变更详情
+        for (ChangeLogDetail detail : targetDetails) {
+            ChangeLogDetail newDetail = new ChangeLogDetail();
+            newDetail.setChangeLog(changeLog);
+            newDetail.setEntityType(detail.getEntityType());
+            newDetail.setEntityId(answer.getId());
+            newDetail.setAttributeName(detail.getAttributeName());
+            newDetail.setOldValue(null); // 回滚操作不需要记录旧值
+            newDetail.setNewValue(detail.getNewValue());
+            changeLogDetailRepository.save(newDetail);
+        }
+        
+        return answer;
+    }
+    
+    private StandardSubjectiveAnswer rollbackSubjectiveAnswer(
+            List<ChangeLogDetail> targetDetails, 
+            StandardQuestion standardQuestion,
+            User user,
+            ChangeLog changeLog) {
+        
+        // 创建新的答案实例
+        StandardSubjectiveAnswer answer = new StandardSubjectiveAnswer();
+        answer.setStandardQuestion(standardQuestion);
+        answer.setDeterminedByUser(user);
+        answer.setDeterminedTime(LocalDateTime.now());
+        answer.setCreatedChangeLog(changeLog);
+        
+        // 从变更详情中恢复数据
+        for (ChangeLogDetail detail : targetDetails) {
+            switch (detail.getAttributeName()) {
+                case "answerText":
+                    answer.setAnswerText(detail.getNewValue());
+                    break;
+                case "scoringGuidance":
+                    answer.setScoringGuidance(detail.getNewValue());
+                    break;
+            }
+        }
+        
+        // 软删除当前答案
+        StandardSubjectiveAnswer current = subjectiveAnswerRepository.findByStandardQuestionIdAndDeletedAtIsNull(standardQuestion.getId());
+        if (current != null) {
+            current.setDeletedAt(LocalDateTime.now());
+            subjectiveAnswerRepository.save(current);
+        }
+        
+        // 保存新答案
+        answer = subjectiveAnswerRepository.save(answer);
+        
+        // 记录变更详情
+        for (ChangeLogDetail detail : targetDetails) {
+            ChangeLogDetail newDetail = new ChangeLogDetail();
+            newDetail.setChangeLog(changeLog);
+            newDetail.setEntityType(detail.getEntityType());
+            newDetail.setEntityId(answer.getId());
+            newDetail.setAttributeName(detail.getAttributeName());
+            newDetail.setOldValue(null); // 回滚操作不需要记录旧值
+            newDetail.setNewValue(detail.getNewValue());
+            changeLogDetailRepository.save(newDetail);
+        }
+        
+        return answer;
     }
 } 

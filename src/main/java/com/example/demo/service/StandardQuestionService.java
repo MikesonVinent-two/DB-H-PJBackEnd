@@ -2,8 +2,10 @@ package com.example.demo.service;
 
 import java.util.List;
 import java.util.Map;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
 import com.example.demo.dto.BatchTagOperationsDTO;
 import com.example.demo.dto.QuestionHistoryDTO;
 import com.example.demo.dto.StandardQuestionDTO;
@@ -69,4 +71,29 @@ public interface StandardQuestionService {
      * @return 操作结果，key为问题ID，value为操作成功与否
      */
     Map<Long, Boolean> batchUpdateQuestionTags(BatchTagOperationsDTO batchOperationsDTO);
+
+    /**
+     * 搜索标准问题
+     * @param tags 标签列表
+     * @param keyword 关键词
+     * @param userId 当前用户ID，用于判断用户是否已回答
+     * @param pageable 分页参数
+     * @return 搜索结果，包含问题列表和额外信息
+     */
+    Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Pageable pageable);
+    
+    /**
+     * 根据标准问题ID获取原始问题和原始回答列表
+     * @param questionId 标准问题ID
+     * @param pageable 分页参数
+     * @return 包含原始问题和回答的数据
+     */
+    Map<String, Object> getOriginalQuestionAndAnswers(Long questionId, Pageable pageable);
+    
+    /**
+     * 查找所有没有标准回答的标准问题
+     * @param pageable 分页参数
+     * @return 无标准回答的问题列表
+     */
+    Map<String, Object> findQuestionsWithoutStandardAnswers(Pageable pageable);
 } 

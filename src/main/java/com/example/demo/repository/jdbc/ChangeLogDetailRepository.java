@@ -1,8 +1,13 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.ChangeLogDetail;
-import com.example.demo.entity.jdbc.EntityType;
+import java.lang.reflect.Field;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,13 +16,9 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.lang.reflect.Field;
-import java.util.List;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.ChangeLogDetail;
+import com.example.demo.entity.jdbc.EntityType;
 
 /**
  * 基于JDBC的变更日志详情仓库实?
@@ -28,24 +29,27 @@ public class ChangeLogDetailRepository {
     private final JdbcTemplate jdbcTemplate;
 
     private static final String SQL_INSERT = 
-            "INSERT INTO change_log_details (change_log_id, entity_type, entity_id, attribute_name, old_value, new_value) " +
+            "INSERT INTO CHANGE_LOG_DETAILS (change_log_id, entity_type, entity_id, attribute_name, old_value, new_value) " +
             "VALUES (?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
-            "UPDATE change_log_details SET change_log_id=?, entity_type=?, entity_id=?, attribute_name=?, old_value=?, new_value=? " +
+            "UPDATE CHANGE_LOG_DETAILS SET change_log_id=?, entity_type=?, entity_id=?, attribute_name=?, old_value=?, new_value=? " +
             "WHERE id=?";
     
     private static final String SQL_FIND_BY_ID = 
-            "SELECT * FROM change_log_details WHERE id=?";
+            "SELECT * FROM CHANGE_LOG_DETAILS WHERE id=?";
     
     private static final String SQL_FIND_BY_CHANGE_LOG = 
-            "SELECT * FROM change_log_details WHERE change_log_id=?";
+            "SELECT * FROM CHANGE_LOG_DETAILS WHERE change_log_id=?";
     
     private static final String SQL_FIND_ALL = 
-            "SELECT * FROM change_log_details";
+            "SELECT * FROM CHANGE_LOG_DETAILS";
     
     private static final String SQL_DELETE = 
-            "DELETE FROM change_log_details WHERE id=?";
+            "DELETE FROM CHANGE_LOG_DETAILS WHERE id=?";
+
+    private static final String SQL_FIND_BY_CHANGE_LOG_ID = 
+            "SELECT * FROM CHANGE_LOG_DETAILS WHERE change_log_id = ?";
 
     @Autowired
     public ChangeLogDetailRepository(JdbcTemplate jdbcTemplate) {
@@ -162,6 +166,15 @@ public class ChangeLogDetailRepository {
     public boolean delete(Long id) {
         int affected = jdbcTemplate.update(SQL_DELETE, id);
         return affected > 0;
+    }
+
+    /**
+     * 根据变更日志ID查找所有变更详情
+     * @param changeLogId 变更日志ID
+     * @return 变更详情列表
+     */
+    public List<ChangeLogDetail> findByChangeLogId(Long changeLogId) {
+        return jdbcTemplate.query(SQL_FIND_BY_CHANGE_LOG_ID, new ChangeLogDetailRowMapper(), changeLogId);
     }
 
     /**

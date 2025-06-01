@@ -2,6 +2,7 @@ package com.example.demo.service.impl;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -17,22 +18,22 @@ import org.springframework.util.StringUtils;
 
 import com.example.demo.dto.RawAnswerDTO;
 import com.example.demo.dto.RawQuestionDTO;
-import com.example.demo.util.MetadataUtils;
+import com.example.demo.dto.RawQuestionDisplayDTO;
 import com.example.demo.dto.RawQuestionWithAnswersDTO;
 import com.example.demo.entity.jdbc.RawAnswer;
 import com.example.demo.entity.jdbc.RawQuestion;
 import com.example.demo.entity.jdbc.RawQuestionTag;
+import com.example.demo.entity.jdbc.StandardQuestion;
 import com.example.demo.entity.jdbc.Tag;
 import com.example.demo.repository.jdbc.RawAnswerRepository;
 import com.example.demo.repository.jdbc.RawQuestionRepository;
 import com.example.demo.repository.jdbc.RawQuestionTagRepository;
+import com.example.demo.repository.jdbc.StandardQuestionRepository;
 import com.example.demo.repository.jdbc.TagRepository;
 import com.example.demo.service.RawDataService;
+import com.example.demo.util.MetadataUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.example.demo.dto.RawQuestionDisplayDTO;
-import com.example.demo.entity.jdbc.StandardQuestion;
-import com.example.demo.repository.jdbc.StandardQuestionRepository;
 
 @Service
 public class RawDataServiceImpl implements RawDataService {
@@ -415,6 +416,30 @@ public class RawDataServiceImpl implements RawDataService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<RawAnswer> findRawAnswersByQuestionId(Long questionId, Pageable pageable) {
+        logger.debug("开始查询原始问题(ID:{})的所有回答", questionId);
+        
+        // 验证问题ID
+        if (questionId == null) {
+            throw new IllegalArgumentException("问题ID不能为空");
+        }
+        
+        // 检查问题是否存在
+        boolean exists = questionRepository.findById(questionId).isPresent();
+        if (!exists) {
+            logger.error("查询原始回答失败 - 问题不存在: {}", questionId);
+            throw new IllegalArgumentException("问题不存在");
+        }
+        
+        // 查询问题的所有回答
+        Page<RawAnswer> answers = answerRepository.findByRawQuestionIdOrderByPublishTimeDesc(questionId, pageable);
+        logger.debug("查询到原始问题(ID:{})的{}个回答", questionId, answers.getTotalElements());
+        
+        return answers;
+    }
+
     // 转换为展示DTO的辅助方法
     private RawQuestionDisplayDTO convertToDisplayDTO(RawQuestion rawQuestion) {
         logger.debug("开始转换问题 ID：{} 的数据", rawQuestion.getId());
@@ -426,12 +451,28 @@ public class RawDataServiceImpl implements RawDataService {
         dto.setContent(rawQuestion.getContent());
         dto.setCrawlTime(rawQuestion.getCrawlTime());
         
-        // 处理标签
+        // 处理标签 - 首先尝试从questionTags关联中获取
         if (rawQuestion.getQuestionTags() != null && !rawQuestion.getQuestionTags().isEmpty()) {
-            logger.debug("问题 ID：{} 有 {} 个标签", rawQuestion.getId(), rawQuestion.getQuestionTags().size());
+            logger.debug("问题 ID：{} 有 {} 个标签关联", rawQuestion.getId(), rawQuestion.getQuestionTags().size());
             dto.setTags(rawQuestion.getQuestionTags().stream()
                     .map(tag -> tag.getTag().getTagName())
                     .collect(Collectors.toList()));
+        } 
+        // 如果questionTags为空，尝试从tags JSON字符串中解析
+        else if (rawQuestion.getTags() != null && !rawQuestion.getTags().isEmpty() && !rawQuestion.getTags().equals("[]")) {
+            try {
+                logger.debug("问题 ID：{} 没有标签关联，尝试从JSON字符串解析标签", rawQuestion.getId());
+                List<String> tagList = objectMapper.readValue(rawQuestion.getTags(), 
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                dto.setTags(tagList);
+                logger.debug("从JSON字符串解析到 {} 个标签", tagList.size());
+            } catch (Exception e) {
+                logger.warn("解析问题 ID：{} 的标签JSON字符串失败: {}", rawQuestion.getId(), e.getMessage());
+                dto.setTags(Collections.emptyList());
+            }
+        } else {
+            logger.debug("问题 ID：{} 没有标签", rawQuestion.getId());
+            dto.setTags(Collections.emptyList());
         }
         
         // 检查是否已标准化

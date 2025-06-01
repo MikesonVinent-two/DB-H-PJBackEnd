@@ -27,6 +27,9 @@ import com.example.demo.repository.jdbc.EvaluationPromptAssemblyConfigRepository
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.PromptAssemblyConfigService;
 
+/**
+ * 提示词组装配置服务实现类
+ */
 @Service
 public class PromptAssemblyConfigServiceImpl implements PromptAssemblyConfigService {
     
@@ -61,8 +64,8 @@ public class PromptAssemblyConfigServiceImpl implements PromptAssemblyConfigServ
         // 创建变更日志
         ChangeLog changeLog = new ChangeLog();
         changeLog.setChangeType(ChangeType.CREATE_PROMPT_ASSEMBLY_CONFIG);
-        changeLog.setChangedByUser(user);
-        changeLog.setChangeTime(LocalDateTime.now());
+        changeLog.setUser(user);
+        changeLog.setCommitTime(LocalDateTime.now());
         changeLog.setCommitMessage("创建回答提示词组装配置: " + configDTO.getName());
         changeLogRepository.save(changeLog);
         
@@ -102,8 +105,8 @@ public class PromptAssemblyConfigServiceImpl implements PromptAssemblyConfigServ
         // 创建变更日志
         ChangeLog changeLog = new ChangeLog();
         changeLog.setChangeType(ChangeType.CREATE_PROMPT_ASSEMBLY_CONFIG);
-        changeLog.setChangedByUser(user);
-        changeLog.setChangeTime(LocalDateTime.now());
+        changeLog.setUser(user);
+        changeLog.setCommitTime(LocalDateTime.now());
         changeLog.setCommitMessage("创建评测提示词组装配置: " + configDTO.getName());
         changeLogRepository.save(changeLog);
         

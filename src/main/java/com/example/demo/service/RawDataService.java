@@ -1,14 +1,16 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.RawAnswerDTO;
-import com.example.demo.dto.RawQuestionDTO;
-import com.example.demo.dto.RawQuestionWithAnswersDTO;
-import com.example.demo.entity.jdbc.RawQuestion;
-import com.example.demo.entity.jdbc.RawAnswer;
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import com.example.demo.dto.RawAnswerDTO;
+import com.example.demo.dto.RawQuestionDTO;
 import com.example.demo.dto.RawQuestionDisplayDTO;
-import java.util.List;
+import com.example.demo.dto.RawQuestionWithAnswersDTO;
+import com.example.demo.entity.jdbc.RawAnswer;
+import com.example.demo.entity.jdbc.RawQuestion;
 
 public interface RawDataService {
     RawQuestion createQuestion(RawQuestion question);
@@ -52,4 +54,13 @@ public interface RawDataService {
      * @throws IllegalArgumentException 如果回答不存在
      */
     boolean deleteRawAnswer(Long answerId);
+    
+    /**
+     * 根据原始问题ID查询其所有原始回答（分页）
+     * @param questionId 原始问题ID
+     * @param pageable 分页参数
+     * @return 原始回答分页列表
+     * @throws IllegalArgumentException 如果问题不存在
+     */
+    Page<RawAnswer> findRawAnswersByQuestionId(Long questionId, Pageable pageable);
 } 

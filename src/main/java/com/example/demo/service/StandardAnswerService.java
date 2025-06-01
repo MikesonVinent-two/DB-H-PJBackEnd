@@ -1,5 +1,8 @@
 package com.example.demo.service;
 
+import java.util.List;
+import java.util.Map;
+
 import com.example.demo.dto.StandardAnswerDTO;
 
 public interface StandardAnswerService {
@@ -36,4 +39,37 @@ public interface StandardAnswerService {
      * @param userId 操作用户ID
      */
     void deleteStandardAnswer(Long standardQuestionId, Long userId);
+
+    /**
+     * 获取标准答案的历史记录
+     * @param answerId 标准答案ID
+     * @return 历史记录列表
+     */
+    List<Map<String, Object>> getAnswerHistory(Long answerId);
+
+    /**
+     * 获取标准答案的版本树
+     * @param answerId 标准答案ID
+     * @return 版本树数据
+     */
+    Map<String, Object> getAnswerVersionTree(Long answerId);
+
+    /**
+     * 比较两个版本的标准答案
+     * @param baseVersionId 基准版本ID
+     * @param compareVersionId 比较版本ID
+     * @return 比较结果
+     */
+    Map<String, Object> compareAnswerVersions(Long baseVersionId, Long compareVersionId);
+
+    /**
+     * 回滚标准答案到指定版本
+     * @param versionId 要回滚到的版本ID
+     * @param userId 操作用户ID
+     * @param commitMessage 回滚说明信息
+     * @return 回滚后的标准答案
+     * @throws IllegalArgumentException 如果参数无效
+     * @throws IllegalStateException 如果版本冲突
+     */
+    Object rollbackAnswer(Long versionId, Long userId, String commitMessage);
 } 
