@@ -1,12 +1,20 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.AnswerGenerationBatch;
-import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
-import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
-import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
-import com.example.demo.entity.jdbc.DatasetVersion;
-import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
-import com.example.demo.entity.jdbc.User;
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,23 +23,14 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.HashMap;
-import java.math.BigDecimal;
-
+import com.example.demo.entity.jdbc.AnswerGenerationBatch;
+import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
+import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
+import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
+import com.example.demo.entity.jdbc.DatasetVersion;
+import com.example.demo.entity.jdbc.User;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 基于JDBC的答案生成批次仓库实现
@@ -46,17 +45,17 @@ public class AnswerGenerationBatchRepository {
     private static final String SQL_INSERT = 
             "INSERT INTO answer_generation_batches " +
             "(name, description, dataset_version_id, creation_time, status, " +
-            "answer_assembly_config_id, evaluation_assembly_config_id, single_choice_prompt_id, " +
+            "answer_assembly_config_id, single_choice_prompt_id, " +
             "multiple_choice_prompt_id, simple_fact_prompt_id, subjective_prompt_id, " +
             "global_parameters, created_by_user_id, completed_at, progress_percentage, " +
             "last_activity_time, last_check_time, resume_count, pause_time, pause_reason, " +
             "answer_repeat_count, error_message, processing_instance, last_processed_run_id) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE answer_generation_batches SET " +
             "name=?, description=?, dataset_version_id=?, creation_time=?, status=?, " +
-            "answer_assembly_config_id=?, evaluation_assembly_config_id=?, single_choice_prompt_id=?, " +
+            "answer_assembly_config_id=?, single_choice_prompt_id=?, " +
             "multiple_choice_prompt_id=?, simple_fact_prompt_id=?, subjective_prompt_id=?, " +
             "global_parameters=?, created_by_user_id=?, completed_at=?, progress_percentage=?, " +
             "last_activity_time=?, last_check_time=?, resume_count=?, pause_time=?, pause_reason=?, " +
@@ -150,135 +149,128 @@ public class AnswerGenerationBatchRepository {
                 ps.setNull(6, Types.BIGINT);
             }
             
-            // 设置评测组装配置ID
-            if (batch.getEvaluationAssemblyConfig() != null && batch.getEvaluationAssemblyConfig().getId() != null) {
-                ps.setLong(7, batch.getEvaluationAssemblyConfig().getId());
+            // 设置单选题prompt ID
+            if (batch.getSingleChoicePrompt() != null && batch.getSingleChoicePrompt().getId() != null) {
+                ps.setLong(7, batch.getSingleChoicePrompt().getId());
             } else {
                 ps.setNull(7, Types.BIGINT);
             }
             
-            // 设置单选题prompt ID
-            if (batch.getSingleChoicePrompt() != null && batch.getSingleChoicePrompt().getId() != null) {
-                ps.setLong(8, batch.getSingleChoicePrompt().getId());
+            // 设置多选题prompt ID
+            if (batch.getMultipleChoicePrompt() != null && batch.getMultipleChoicePrompt().getId() != null) {
+                ps.setLong(8, batch.getMultipleChoicePrompt().getId());
             } else {
                 ps.setNull(8, Types.BIGINT);
             }
             
-            // 设置多选题prompt ID
-            if (batch.getMultipleChoicePrompt() != null && batch.getMultipleChoicePrompt().getId() != null) {
-                ps.setLong(9, batch.getMultipleChoicePrompt().getId());
+            // 设置简单事实题prompt ID
+            if (batch.getSimpleFactPrompt() != null && batch.getSimpleFactPrompt().getId() != null) {
+                ps.setLong(9, batch.getSimpleFactPrompt().getId());
             } else {
                 ps.setNull(9, Types.BIGINT);
             }
             
-            // 设置简单事实题prompt ID
-            if (batch.getSimpleFactPrompt() != null && batch.getSimpleFactPrompt().getId() != null) {
-                ps.setLong(10, batch.getSimpleFactPrompt().getId());
-            } else {
-                ps.setNull(10, Types.BIGINT);
-            }
-            
             // 设置主观题prompt ID
             if (batch.getSubjectivePrompt() != null && batch.getSubjectivePrompt().getId() != null) {
-                ps.setLong(11, batch.getSubjectivePrompt().getId());
+                ps.setLong(10, batch.getSubjectivePrompt().getId());
             } else {
-                ps.setNull(11, Types.BIGINT);
+                ps.setNull(10, Types.BIGINT);
             }
             
             // 设置全局参数
             if (batch.getGlobalParameters() != null) {
                 try {
                     ObjectMapper objectMapper = new ObjectMapper();
-                    ps.setString(12, objectMapper.writeValueAsString(batch.getGlobalParameters()));
+                    ps.setString(11, objectMapper.writeValueAsString(batch.getGlobalParameters()));
                 } catch (Exception e) {
-                    ps.setString(12, "{}");
+                    ps.setString(11, "{}");
                 }
             } else {
-                ps.setString(12, "{}");
+                ps.setString(11, "{}");
             }
             
             // 设置创建者ID
             if (batch.getCreatedByUser() != null && batch.getCreatedByUser().getId() != null) {
-                ps.setLong(13, batch.getCreatedByUser().getId());
+                ps.setLong(12, batch.getCreatedByUser().getId());
             } else {
-                ps.setNull(13, Types.BIGINT);
+                ps.setNull(12, Types.BIGINT);
             }
             
             // 设置完成时间
             if (batch.getCompletedAt() != null) {
-                ps.setTimestamp(14, Timestamp.valueOf(batch.getCompletedAt()));
+                ps.setTimestamp(13, Timestamp.valueOf(batch.getCompletedAt()));
             } else {
-                ps.setNull(14, Types.TIMESTAMP);
+                ps.setNull(13, Types.TIMESTAMP);
             }
             
             // 设置进度百分比
             if (batch.getProgressPercentage() != null) {
-                ps.setBigDecimal(15, batch.getProgressPercentage());
+                ps.setBigDecimal(14, batch.getProgressPercentage());
             } else {
-                ps.setNull(15, Types.DECIMAL);
+                ps.setNull(14, Types.DECIMAL);
             }
             
             // 设置最后活动时间
             if (batch.getLastActivityTime() != null) {
-                ps.setTimestamp(16, Timestamp.valueOf(batch.getLastActivityTime()));
+                ps.setTimestamp(15, Timestamp.valueOf(batch.getLastActivityTime()));
             } else {
-                ps.setNull(16, Types.TIMESTAMP);
+                ps.setNull(15, Types.TIMESTAMP);
             }
             
             // 设置最后检查时间
             if (batch.getLastCheckTime() != null) {
-                ps.setTimestamp(17, Timestamp.valueOf(batch.getLastCheckTime()));
+                ps.setTimestamp(16, Timestamp.valueOf(batch.getLastCheckTime()));
             } else {
-                ps.setNull(17, Types.TIMESTAMP);
+                ps.setNull(16, Types.TIMESTAMP);
             }
             
             // 设置恢复次数
             if (batch.getResumeCount() != null) {
-                ps.setInt(18, batch.getResumeCount());
+                ps.setInt(17, batch.getResumeCount());
             } else {
-                ps.setInt(18, 0);
+                ps.setInt(17, 0);
             }
             
             // 设置暂停时间
             if (batch.getPauseTime() != null) {
-                ps.setTimestamp(19, Timestamp.valueOf(batch.getPauseTime()));
+                ps.setTimestamp(18, Timestamp.valueOf(batch.getPauseTime()));
             } else {
-                ps.setNull(19, Types.TIMESTAMP);
+                ps.setNull(18, Types.TIMESTAMP);
             }
             
             // 设置暂停原因
             if (batch.getPauseReason() != null) {
-                ps.setString(20, batch.getPauseReason());
+                ps.setString(19, batch.getPauseReason());
             } else {
-                ps.setNull(20, Types.VARCHAR);
+                ps.setNull(19, Types.VARCHAR);
             }
             
             // 设置回答重复次数
             if (batch.getAnswerRepeatCount() != null) {
-                ps.setInt(21, batch.getAnswerRepeatCount());
+                ps.setInt(20, batch.getAnswerRepeatCount());
             } else {
-                ps.setInt(21, 1); // 默认值
+                ps.setInt(20, 1); // 默认值
             }
             
             // 设置错误信息
             if (batch.getErrorMessage() != null) {
-                ps.setString(22, batch.getErrorMessage());
+                ps.setString(21, batch.getErrorMessage());
             } else {
-                ps.setNull(22, Types.VARCHAR);
+                ps.setNull(21, Types.VARCHAR);
             }
             
             // 设置处理实例标识
             if (batch.getProcessingInstance() != null) {
-                ps.setString(23, batch.getProcessingInstance());
+                ps.setString(22, batch.getProcessingInstance());
             } else {
-                ps.setNull(23, Types.VARCHAR);
+                ps.setNull(22, Types.VARCHAR);
             }
             
             // 设置上次处理的运行ID
             if (batch.getLastProcessedRunId() != null) {
-                ps.setLong(24, batch.getLastProcessedRunId());
+                ps.setLong(23, batch.getLastProcessedRunId());
             } else {
-                ps.setNull(24, Types.BIGINT);
+                ps.setNull(23, Types.BIGINT);
             }
             
             return ps;
@@ -336,139 +328,132 @@ public class AnswerGenerationBatchRepository {
                 ps.setNull(6, Types.BIGINT);
             }
             
-            // 设置评测组装配置ID
-            if (batch.getEvaluationAssemblyConfig() != null && batch.getEvaluationAssemblyConfig().getId() != null) {
-                ps.setLong(7, batch.getEvaluationAssemblyConfig().getId());
+            // 设置单选题prompt ID
+            if (batch.getSingleChoicePrompt() != null && batch.getSingleChoicePrompt().getId() != null) {
+                ps.setLong(7, batch.getSingleChoicePrompt().getId());
             } else {
                 ps.setNull(7, Types.BIGINT);
             }
             
-            // 设置单选题prompt ID
-            if (batch.getSingleChoicePrompt() != null && batch.getSingleChoicePrompt().getId() != null) {
-                ps.setLong(8, batch.getSingleChoicePrompt().getId());
+            // 设置多选题prompt ID
+            if (batch.getMultipleChoicePrompt() != null && batch.getMultipleChoicePrompt().getId() != null) {
+                ps.setLong(8, batch.getMultipleChoicePrompt().getId());
             } else {
                 ps.setNull(8, Types.BIGINT);
             }
             
-            // 设置多选题prompt ID
-            if (batch.getMultipleChoicePrompt() != null && batch.getMultipleChoicePrompt().getId() != null) {
-                ps.setLong(9, batch.getMultipleChoicePrompt().getId());
+            // 设置简单事实题prompt ID
+            if (batch.getSimpleFactPrompt() != null && batch.getSimpleFactPrompt().getId() != null) {
+                ps.setLong(9, batch.getSimpleFactPrompt().getId());
             } else {
                 ps.setNull(9, Types.BIGINT);
             }
             
-            // 设置简单事实题prompt ID
-            if (batch.getSimpleFactPrompt() != null && batch.getSimpleFactPrompt().getId() != null) {
-                ps.setLong(10, batch.getSimpleFactPrompt().getId());
-            } else {
-                ps.setNull(10, Types.BIGINT);
-            }
-            
             // 设置主观题prompt ID
             if (batch.getSubjectivePrompt() != null && batch.getSubjectivePrompt().getId() != null) {
-                ps.setLong(11, batch.getSubjectivePrompt().getId());
+                ps.setLong(10, batch.getSubjectivePrompt().getId());
             } else {
-                ps.setNull(11, Types.BIGINT);
+                ps.setNull(10, Types.BIGINT);
             }
             
             // 设置全局参数
             if (batch.getGlobalParameters() != null) {
                 try {
                     ObjectMapper objectMapper = new ObjectMapper();
-                    ps.setString(12, objectMapper.writeValueAsString(batch.getGlobalParameters()));
+                    ps.setString(11, objectMapper.writeValueAsString(batch.getGlobalParameters()));
                 } catch (Exception e) {
-                    ps.setString(12, "{}");
+                    ps.setString(11, "{}");
                 }
             } else {
-                ps.setString(12, "{}");
+                ps.setString(11, "{}");
             }
             
             // 设置创建者ID
             if (batch.getCreatedByUser() != null && batch.getCreatedByUser().getId() != null) {
-                ps.setLong(13, batch.getCreatedByUser().getId());
+                ps.setLong(12, batch.getCreatedByUser().getId());
             } else {
-                ps.setNull(13, Types.BIGINT);
+                ps.setNull(12, Types.BIGINT);
             }
             
             // 设置完成时间
             if (batch.getCompletedAt() != null) {
-                ps.setTimestamp(14, Timestamp.valueOf(batch.getCompletedAt()));
+                ps.setTimestamp(13, Timestamp.valueOf(batch.getCompletedAt()));
             } else {
-                ps.setNull(14, Types.TIMESTAMP);
+                ps.setNull(13, Types.TIMESTAMP);
             }
             
             // 设置进度百分比
             if (batch.getProgressPercentage() != null) {
-                ps.setBigDecimal(15, batch.getProgressPercentage());
+                ps.setBigDecimal(14, batch.getProgressPercentage());
             } else {
-                ps.setNull(15, Types.DECIMAL);
+                ps.setNull(14, Types.DECIMAL);
             }
             
             // 设置最后活动时间
             if (batch.getLastActivityTime() != null) {
-                ps.setTimestamp(16, Timestamp.valueOf(batch.getLastActivityTime()));
+                ps.setTimestamp(15, Timestamp.valueOf(batch.getLastActivityTime()));
             } else {
-                ps.setNull(16, Types.TIMESTAMP);
+                ps.setNull(15, Types.TIMESTAMP);
             }
             
             // 设置最后检查时间
             if (batch.getLastCheckTime() != null) {
-                ps.setTimestamp(17, Timestamp.valueOf(batch.getLastCheckTime()));
+                ps.setTimestamp(16, Timestamp.valueOf(batch.getLastCheckTime()));
             } else {
-                ps.setNull(17, Types.TIMESTAMP);
+                ps.setNull(16, Types.TIMESTAMP);
             }
             
             // 设置恢复次数
             if (batch.getResumeCount() != null) {
-                ps.setInt(18, batch.getResumeCount());
+                ps.setInt(17, batch.getResumeCount());
             } else {
-                ps.setInt(18, 0);
+                ps.setInt(17, 0);
             }
             
             // 设置暂停时间
             if (batch.getPauseTime() != null) {
-                ps.setTimestamp(19, Timestamp.valueOf(batch.getPauseTime()));
+                ps.setTimestamp(18, Timestamp.valueOf(batch.getPauseTime()));
             } else {
-                ps.setNull(19, Types.TIMESTAMP);
+                ps.setNull(18, Types.TIMESTAMP);
             }
             
             // 设置暂停原因
             if (batch.getPauseReason() != null) {
-                ps.setString(20, batch.getPauseReason());
+                ps.setString(19, batch.getPauseReason());
             } else {
-                ps.setNull(20, Types.VARCHAR);
+                ps.setNull(19, Types.VARCHAR);
             }
             
             // 设置回答重复次数
             if (batch.getAnswerRepeatCount() != null) {
-                ps.setInt(21, batch.getAnswerRepeatCount());
+                ps.setInt(20, batch.getAnswerRepeatCount());
             } else {
-                ps.setInt(21, 1); // 默认值
+                ps.setInt(20, 1); // 默认值
             }
             
             // 设置错误信息
             if (batch.getErrorMessage() != null) {
-                ps.setString(22, batch.getErrorMessage());
+                ps.setString(21, batch.getErrorMessage());
             } else {
-                ps.setNull(22, Types.VARCHAR);
+                ps.setNull(21, Types.VARCHAR);
             }
             
             // 设置处理实例标识
             if (batch.getProcessingInstance() != null) {
-                ps.setString(23, batch.getProcessingInstance());
+                ps.setString(22, batch.getProcessingInstance());
             } else {
-                ps.setNull(23, Types.VARCHAR);
+                ps.setNull(22, Types.VARCHAR);
             }
             
             // 设置上次处理的运行ID
             if (batch.getLastProcessedRunId() != null) {
-                ps.setLong(24, batch.getLastProcessedRunId());
+                ps.setLong(23, batch.getLastProcessedRunId());
             } else {
-                ps.setNull(24, Types.BIGINT);
+                ps.setNull(23, Types.BIGINT);
             }
             
             // 设置ID
-            ps.setLong(25, batch.getId());
+            ps.setLong(24, batch.getId());
             
             return ps;
         });
@@ -668,19 +653,6 @@ public class AnswerGenerationBatchRepository {
                 }
             } else {
                 logger.warn("批次{}的回答Prompt组装配置ID为NULL", batch.getId());
-            }
-            
-            // 设置评测prompt组装配置
-            Long evalConfigId = rs.getLong("evaluation_assembly_config_id");
-            if (!rs.wasNull()) {
-                try {
-                    EvaluationPromptAssemblyConfig config = new EvaluationPromptAssemblyConfig();
-                    config.setId(evalConfigId);
-                    // 如果需要可以像数据集版本那样加载完整信息
-                    batch.setEvaluationAssemblyConfig(config);
-                } catch (Exception e) {
-                    logger.error("加载批次{}的评测Prompt组装配置失败: {}", batch.getId(), e.getMessage(), e);
-                }
             }
             
             // 加载题型相关的提示词配置

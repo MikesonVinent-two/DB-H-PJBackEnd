@@ -426,6 +426,18 @@ public class EvaluationController {
         params.put(ApiConstants.KEY_BATCH_ID, request.getBatchId());
         params.put("evaluationType", "SUBJECTIVE_BATCH");
         
+        // 如果指定了主观题评测提示词ID，则添加到参数中
+        if (request.getSubjectivePromptId() != null) {
+            params.put("subjectivePromptId", request.getSubjectivePromptId());
+            logger.info("使用指定的主观题评测提示词，ID: {}", request.getSubjectivePromptId());
+        }
+        
+        // 如果指定了评测组装配置ID，则添加到参数中
+        if (request.getEvaluationAssemblyConfigId() != null) {
+            params.put("evaluationAssemblyConfigId", request.getEvaluationAssemblyConfigId());
+            logger.info("使用指定的评测组装配置，ID: {}", request.getEvaluationAssemblyConfigId());
+        }
+        
         EvaluationRun evaluationRun = evaluationService.createEvaluationRun(
                 request.getBatchId(),
                 request.getEvaluatorId(),
@@ -438,7 +450,11 @@ public class EvaluationController {
         CompletableFuture.runAsync(() -> {
             try {
                 evaluationService.evaluateBatchSubjectiveQuestions(
-                    request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+                    request.getBatchId(), 
+                    request.getEvaluatorId(), 
+                    request.getUserId(),
+                    request.getSubjectivePromptId(),
+                    request.getEvaluationAssemblyConfigId());  // 传递评测组装配置ID
             } catch (Exception e) {
                 logger.error("批量评测主观题失败", e);
             }
@@ -991,6 +1007,8 @@ public class EvaluationController {
         private Long batchId;
         private Long evaluatorId;
         private Long userId;
+        private Long subjectivePromptId;
+        private Long evaluationAssemblyConfigId;
         
         public Long getBatchId() {
             return batchId;
@@ -1014,6 +1032,22 @@ public class EvaluationController {
         
         public void setUserId(Long userId) {
             this.userId = userId;
+        }
+        
+        public Long getSubjectivePromptId() {
+            return subjectivePromptId;
+        }
+        
+        public void setSubjectivePromptId(Long subjectivePromptId) {
+            this.subjectivePromptId = subjectivePromptId;
+        }
+        
+        public Long getEvaluationAssemblyConfigId() {
+            return evaluationAssemblyConfigId;
+        }
+        
+        public void setEvaluationAssemblyConfigId(Long evaluationAssemblyConfigId) {
+            this.evaluationAssemblyConfigId = evaluationAssemblyConfigId;
         }
     }
     

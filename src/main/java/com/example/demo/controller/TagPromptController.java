@@ -27,7 +27,7 @@ import jakarta.validation.Valid;
  * 标签提示词API控制器
  */
 @RestController
-@RequestMapping("/api/prompts/tags")
+@RequestMapping("/prompts/tags")
 public class TagPromptController {
     
     private static final Logger logger = LoggerFactory.getLogger(TagPromptController.class);
@@ -42,7 +42,7 @@ public class TagPromptController {
      * @param request 更新请求
      * @return 更新后的提示词
      */
-    @PutMapping("/{id}")
+    @PutMapping("/detail/{id}")
     public ResponseEntity<TagPromptResponse> updateTagPrompt(
             @PathVariable Long id,
             @Valid @RequestBody UpdateTagPromptRequest request) {
@@ -75,7 +75,7 @@ public class TagPromptController {
      * @param id 提示词ID
      * @return 提示词详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public ResponseEntity<TagPromptResponse> getTagPromptById(@PathVariable Long id) {
         Optional<AnswerTagPrompt> promptOpt = promptService.getAnswerTagPromptById(id);
         
@@ -88,7 +88,7 @@ public class TagPromptController {
      * 
      * @return 提示词列表
      */
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<List<TagPromptResponse>> getAllTagPrompts() {
         List<AnswerTagPrompt> prompts = promptService.getAllAnswerTagPrompts();
         

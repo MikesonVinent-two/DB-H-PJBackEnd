@@ -56,6 +56,8 @@ public class EvaluationRun {
     private LocalDateTime runTime;
     private RunStatus status;
     private String parameters;
+    private EvaluationPromptAssemblyConfig evaluationAssemblyConfig;
+    private EvaluationSubjectivePrompt subjectivePrompt;
     private String errorMessage;
     private Long createdByUserId;
     private Long lastProcessedAnswerId;
@@ -159,6 +161,22 @@ public class EvaluationRun {
 
     public void setParameters(String parameters) {
         this.parameters = parameters;
+    }
+
+    public EvaluationPromptAssemblyConfig getEvaluationAssemblyConfig() {
+        return evaluationAssemblyConfig;
+    }
+
+    public void setEvaluationAssemblyConfig(EvaluationPromptAssemblyConfig evaluationAssemblyConfig) {
+        this.evaluationAssemblyConfig = evaluationAssemblyConfig;
+    }
+
+    public EvaluationSubjectivePrompt getSubjectivePrompt() {
+        return subjectivePrompt;
+    }
+
+    public void setSubjectivePrompt(EvaluationSubjectivePrompt subjectivePrompt) {
+        this.subjectivePrompt = subjectivePrompt;
     }
 
     public String getErrorMessage() {

@@ -1,27 +1,28 @@
 package com.example.demo.service.impl;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.ModelAnswerRunDTO;
@@ -31,12 +32,13 @@ import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
 import com.example.demo.entity.jdbc.AnswerPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.AnswerQuestionTypePrompt;
 import com.example.demo.entity.jdbc.DatasetVersion;
-import com.example.demo.entity.jdbc.EvaluationPromptAssemblyConfig;
 import com.example.demo.entity.jdbc.LlmModel;
 import com.example.demo.entity.jdbc.ModelAnswerRun;
 import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
 import com.example.demo.entity.jdbc.QuestionType;
 import com.example.demo.entity.jdbc.User;
+import com.example.demo.exception.EntityNotFoundException;
+import com.example.demo.manager.BatchStateManager;
 import com.example.demo.repository.jdbc.AnswerGenerationBatchRepository;
 import com.example.demo.repository.jdbc.AnswerPromptAssemblyConfigRepository;
 import com.example.demo.repository.jdbc.AnswerQuestionTypePromptRepository;
@@ -46,25 +48,9 @@ import com.example.demo.repository.jdbc.LlmModelRepository;
 import com.example.demo.repository.jdbc.ModelAnswerRunRepository;
 import com.example.demo.repository.jdbc.UserRepository;
 import com.example.demo.service.AnswerGenerationService;
+import com.example.demo.service.LlmApiService;
 import com.example.demo.service.WebSocketService;
 import com.example.demo.task.AnswerGenerationTask;
-import com.example.demo.service.LlmApiService;
-import com.example.demo.manager.BatchStateManager;
-import com.example.demo.exception.EntityNotFoundException;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.UUID;
 
 @Service
 public class AnswerGenerationServiceImpl implements AnswerGenerationService {
@@ -162,13 +148,7 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                     }
                 }
                 
-                EvaluationPromptAssemblyConfig evalConfig = null;
-                if (request.getEvaluationAssemblyConfigId() != null) {
-                    evalConfig = evalConfigRepository.findById(request.getEvaluationAssemblyConfigId())
-                            .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测Prompt组装配置(ID: " + request.getEvaluationAssemblyConfigId() + ")"));
-                }
-                
-                // 验证题型prompt
+                // 查询题型prompt
                 AnswerQuestionTypePrompt singleChoicePrompt = null;
                 if (request.getSingleChoicePromptId() != null) {
                     singleChoicePrompt = answerQuestionTypePromptRepository.findById(request.getSingleChoicePromptId())
@@ -213,7 +193,6 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
                 batch.setCreationTime(LocalDateTime.now());
                 batch.setStatus(BatchStatus.PENDING);
                 batch.setAnswerAssemblyConfig(answerConfig);
-                batch.setEvaluationAssemblyConfig(evalConfig);
                 batch.setGlobalParameters(request.getGlobalParameters());
                 batch.setCreatedByUser(user);
                 batch.setProgressPercentage(BigDecimal.ZERO);
@@ -1053,10 +1032,6 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         
         if (batch.getAnswerAssemblyConfig() != null) {
             dto.setAnswerAssemblyConfigId(batch.getAnswerAssemblyConfig().getId());
-        }
-        
-        if (batch.getEvaluationAssemblyConfig() != null) {
-            dto.setEvaluationAssemblyConfigId(batch.getEvaluationAssemblyConfig().getId());
         }
         
         // 转换题型prompt信息

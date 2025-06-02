@@ -7,10 +7,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -321,6 +323,163 @@ public class EvaluationServiceImpl implements EvaluationService {
         return promptBuilder.toString();
     }
     
+    /**
+     * 组装评测提示词，使用指定的主观题评测提示词ID
+     */
+    private String assembleEvaluationPrompt(StandardQuestion question, String answerText, 
+                                         String referenceAnswer, List<EvaluationCriterion> criteria,
+                                         Long subjectivePromptId) {
+        StringBuilder promptBuilder = new StringBuilder();
+        
+        // 获取默认的评测提示词组装配置（取第一个激活的配置）
+        List<EvaluationPromptAssemblyConfig> configs = evaluationPromptAssemblyConfigRepository.findByIsActiveTrue();
+        EvaluationPromptAssemblyConfig config = configs.isEmpty() ? null : configs.get(0);
+        
+        if (config != null) {
+            // 添加基础系统提示
+            if (config.getBaseSystemPrompt() != null) {
+                promptBuilder.append(config.getBaseSystemPrompt());
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加标签提示（如果问题有标签）
+            if (question.getTags() != null && !question.getTags().isEmpty() && 
+                config.getTagPromptsSectionHeader() != null) {
+                
+                // 先收集有效的标签提示词，如果没有任何有效提示词则跳过整个标签部分
+                List<Tag> tags = question.getTags();
+                boolean hasAnyTagPrompt = false;
+                
+                StringBuilder tagPromptsBuilder = new StringBuilder();
+                
+                for (Tag tag : tags) {
+                    try {
+                        // 获取该标签的激活状态提示词
+                        List<EvaluationTagPrompt> tagPrompts = evaluationTagPromptRepository
+                            .findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
+                        
+                        if (!tagPrompts.isEmpty()) {
+                            // 使用优先级最高的提示词（列表已按优先级排序）
+                            EvaluationTagPrompt prompt = tagPrompts.get(0);
+                            tagPromptsBuilder.append("【").append(tag.getTagName()).append("】: ");
+                            tagPromptsBuilder.append(prompt.getPromptTemplate());
+                            tagPromptsBuilder.append(config.getTagPromptSeparator());
+                            hasAnyTagPrompt = true;
+                        }
+                        // 如果标签没有提示词，则跳过该标签，不添加到prompt中
+                    } catch (Exception e) {
+                        logger.warn("获取评测标签提示词失败，标签ID: {}", tag.getId(), e);
+                    }
+                }
+                
+                // 只有当至少有一个标签有提示词时，才添加标签部分
+                if (hasAnyTagPrompt) {
+                    promptBuilder.append(config.getTagPromptsSectionHeader());
+                    promptBuilder.append("\n");
+                    promptBuilder.append(tagPromptsBuilder);
+                    promptBuilder.append(config.getSectionSeparator());
+                }
+            }
+            
+            // 添加主观题评测要求（如果问题类型是主观题）
+            if (question.getQuestionType() == QuestionType.SUBJECTIVE && 
+                config.getSubjectiveSectionHeader() != null) {
+                promptBuilder.append(config.getSubjectiveSectionHeader());
+                promptBuilder.append("\n");
+                
+                try {
+                    // 获取指定ID的主观题评测提示词
+                    EvaluationSubjectivePrompt prompt = null;
+                    if (subjectivePromptId != null) {
+                        Optional<EvaluationSubjectivePrompt> promptOpt = evaluationSubjectivePromptRepository.findById(subjectivePromptId);
+                        if (promptOpt.isPresent()) {
+                            prompt = promptOpt.get();
+                            logger.info("使用指定的主观题评测提示词，ID: {}, 名称: {}", subjectivePromptId, prompt.getName());
+                        } else {
+                            logger.warn("未找到指定ID的主观题评测提示词: {}，将使用默认提示词", subjectivePromptId);
+                        }
+                    }
+                    
+                    // 如果没有找到指定ID的提示词，则使用默认的激活提示词
+                    if (prompt == null) {
+                        List<EvaluationSubjectivePrompt> subjectivePrompts = evaluationSubjectivePromptRepository
+                            .findByIsActiveTrueAndDeletedAtIsNull();
+                        
+                        if (!subjectivePrompts.isEmpty()) {
+                            prompt = subjectivePrompts.get(0);
+                            logger.info("使用默认的主观题评测提示词，ID: {}, 名称: {}", prompt.getId(), prompt.getName());
+                        }
+                    }
+                    
+                    if (prompt != null) {
+                        promptBuilder.append(prompt.getPromptTemplate());
+                        
+                        // 添加评分指导（如果有）
+                        if (prompt.getScoringInstruction() != null && !prompt.getScoringInstruction().isEmpty()) {
+                            promptBuilder.append("\n\n评分指导:\n");
+                            promptBuilder.append(prompt.getScoringInstruction());
+                        }
+                        
+                        // 添加输出格式要求（如果有）
+                        if (prompt.getOutputFormatInstruction() != null && !prompt.getOutputFormatInstruction().isEmpty()) {
+                            promptBuilder.append("\n\n输出格式要求:\n");
+                            promptBuilder.append(prompt.getOutputFormatInstruction());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("获取主观题评测提示词失败", e);
+                }
+                
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加最终指示
+            if (config.getFinalInstruction() != null) {
+                promptBuilder.append(config.getFinalInstruction());
+                promptBuilder.append(config.getSectionSeparator());
+            }
+        } else {
+            // 如果没有配置，使用默认系统提示
+            promptBuilder.append("你是一位专业的答案评测专家。请对以下主观题的回答进行评测。\n\n");
+        }
+        
+        // 添加问题和答案内容
+        promptBuilder.append("问题：").append(question.getQuestionText()).append("\n\n");
+        promptBuilder.append("学生回答：").append(answerText).append("\n\n");
+        promptBuilder.append("参考答案：").append(referenceAnswer).append("\n\n");
+        
+        // 添加评测标准
+        promptBuilder.append("评测标准：\n");
+        for (EvaluationCriterion criterion : criteria) {
+            promptBuilder.append("- ").append(criterion.getName()).append("：")
+                  .append(criterion.getDescription()).append("\n");
+        }
+        
+        // 添加默认的输出格式要求（如果没有找到任何主观题提示词）
+        if (config == null || 
+            (question.getQuestionType() == QuestionType.SUBJECTIVE && 
+             evaluationSubjectivePromptRepository.findByIsActiveTrueAndDeletedAtIsNull().isEmpty() && 
+             subjectivePromptId == null)) {
+            promptBuilder.append("\n请对回答进行全面评测，并给出以下格式的评测结果：\n");
+            promptBuilder.append("1. 总体评分（0-10分）\n");
+            promptBuilder.append("2. 各评测标准的得分和评语\n");
+            promptBuilder.append("3. 总体评语，包括优点和不足\n");
+            promptBuilder.append("4. 改进建议\n\n");
+            promptBuilder.append("请以JSON格式输出，格式如下：\n");
+            promptBuilder.append("{\n");
+            promptBuilder.append("  \"总分\": 分数,\n");
+            promptBuilder.append("  \"criteria_scores\": [\n");
+            promptBuilder.append("    {\"criterion\": \"标准名称\", \"score\": 分数, \"comments\": \"评语\"},\n");
+            promptBuilder.append("    ...\n");
+            promptBuilder.append("  ],\n");
+            promptBuilder.append("  \"overall_comments\": \"总体评语\",\n");
+            promptBuilder.append("  \"improvement_suggestions\": \"改进建议\"\n");
+            promptBuilder.append("}");
+        }
+        
+        return promptBuilder.toString();
+    }
+    
     @Override
     public Map<String, Object> evaluateSubjectiveWithAI(String answerText, String questionText, 
                                                    String referenceAnswer, List<EvaluationCriterion> criteria,
@@ -393,39 +552,189 @@ public class EvaluationServiceImpl implements EvaluationService {
             try {
                 aiResult = objectMapper.readValue(processedResponse, new TypeReference<Map<String, Object>>() {});
             } catch (Exception e) {
-                logger.error("JSON解析失败，尝试进一步清理响应", e);
-                // 尝试更激进的清理，处理可能的多行代码块标记
-                processedResponse = aiResponse.replaceAll("```[a-zA-Z]*\\s*", "").replaceAll("\\s*```", "");
-                aiResult = objectMapper.readValue(processedResponse, new TypeReference<Map<String, Object>>() {});
-            }
-            
-            // 提取总体评分 - 支持"overall_score"或"总分"字段
-            Object overallScoreObj = aiResult.get("overall_score");
-            if (overallScoreObj == null) {
-                overallScoreObj = aiResult.get("总分");
-            }
-            
-            BigDecimal overallScore;
-            if (overallScoreObj instanceof Number) {
-                overallScore = new BigDecimal(overallScoreObj.toString()).setScale(2, RoundingMode.HALF_UP);
-                // 确保分数在0-100范围内
-                if (overallScore.compareTo(BigDecimal.ZERO) < 0) {
-                    overallScore = BigDecimal.ZERO;
-                } else if (overallScore.compareTo(new BigDecimal(100)) > 0) {
-                    overallScore = new BigDecimal(100);
+                logger.warn("解析JSON失败，尝试提取JSON部分", e);
+                
+                // 尝试从文本中提取JSON部分
+                Pattern jsonPattern = Pattern.compile("\\{[\\s\\S]*\\}");
+                Matcher matcher = jsonPattern.matcher(processedResponse);
+                
+                if (matcher.find()) {
+                    String jsonPart = matcher.group();
+                    try {
+                        aiResult = objectMapper.readValue(jsonPart, new TypeReference<Map<String, Object>>() {});
+                    } catch (Exception e2) {
+                        logger.error("提取JSON后解析仍然失败", e2);
+                        throw new RuntimeException("无法解析AI评测结果: " + e2.getMessage());
+                    }
+                } else {
+                    throw new RuntimeException("无法从响应中提取JSON格式的评测结果");
                 }
-            } else {
-                overallScore = new BigDecimal(50); // 默认中等分数
             }
+            
+            // 提取总分
+            Object scoreObj = aiResult.get("总分");
+            if (scoreObj == null) {
+                scoreObj = aiResult.get("score");
+            }
+            
+            if (scoreObj == null) {
+                throw new RuntimeException("AI评测结果中缺少总分字段");
+            }
+            
+            BigDecimal score = new BigDecimal(scoreObj.toString());
             
             // 提取评语
-            String overallComments = (String) aiResult.getOrDefault("overall_comments", "无评语");
-            String improvementSuggestions = (String) aiResult.getOrDefault("improvement_suggestions", "无建议");
+            String comments = null;
+            if (aiResult.containsKey("overall_comments")) {
+                comments = (String) aiResult.get("overall_comments");
+            } else if (aiResult.containsKey("总评")) {
+                comments = (String) aiResult.get("总评");
+            } else if (aiResult.containsKey("comments")) {
+                comments = (String) aiResult.get("comments");
+            }
             
-            // 组合最终评测结果
-            result.put("score", overallScore);
-            result.put("comments", overallComments);
-            result.put("improvement_suggestions", improvementSuggestions);
+            // 如果没有评语，则使用改进建议作为评语
+            if (comments == null && aiResult.containsKey("improvement_suggestions")) {
+                comments = (String) aiResult.get("improvement_suggestions");
+            }
+            
+            // 构建结果
+            result.put("score", score);
+            result.put("comments", comments != null ? comments : "无评语");
+            result.put("raw_ai_response", aiResponse);
+            result.put("criteria_scores", aiResult.get("criteria_scores"));
+            
+        } catch (Exception e) {
+            logger.error("AI评测主观题失败", e);
+            result.put("score", BigDecimal.ZERO);
+            result.put("comments", "评测失败: " + e.getMessage());
+            result.put("error", e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 使用指定的主观题评测提示词进行AI评测
+     */
+    public Map<String, Object> evaluateSubjectiveWithAI(String answerText, String questionText, 
+                                                   String referenceAnswer, List<EvaluationCriterion> criteria,
+                                                   Long evaluatorId, Long subjectivePromptId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            logger.info("开始使用AI评测主观题，评测者ID: {}, 使用主观题评测提示词ID: {}", evaluatorId, subjectivePromptId);
+            
+            // 获取评测者信息
+            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
+            
+            // 验证评测者类型是AI
+            if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
+                throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
+            }
+            
+            // 获取AI模型信息
+            if (evaluator.getLlmModel() == null) {
+                throw new IllegalArgumentException("评测者未关联AI模型: " + evaluatorId);
+            }
+            
+            // 查找问题（如果可能）
+            StandardQuestion question = null;
+            try {
+                // 尝试通过问题文本查找对应的标准问题
+                List<StandardQuestion> questions = standardQuestionRepository.findByQuestionTextContaining(questionText);
+                if (!questions.isEmpty()) {
+                    question = questions.get(0);
+                }
+            } catch (Exception e) {
+                logger.warn("无法查找对应的标准问题，将使用默认提示词", e);
+            }
+            
+            // 组装评测提示词
+            String prompt;
+            if (question != null) {
+                // 使用标准问题组装提示词，并传递指定的主观题评测提示词ID
+                prompt = assembleEvaluationPrompt(question, answerText, referenceAnswer, criteria, subjectivePromptId);
+            } else {
+                // 创建一个临时问题对象
+                question = new StandardQuestion();
+                question.setQuestionText(questionText);
+                question.setQuestionType(QuestionType.SUBJECTIVE);
+                // 没有标签，但传递指定的主观题评测提示词ID
+                prompt = assembleEvaluationPrompt(question, answerText, referenceAnswer, criteria, subjectivePromptId);
+            }
+            
+            // 调用AI服务进行评测
+            String aiResponse = callAIService(prompt, evaluator.getLlmModel().getId());
+            
+            // 将完整的AI回复记录到日志中
+            logger.info("\n========== AI评测回复 ==========\n{}\n==================================", aiResponse);
+            
+            // 预处理AI响应：移除Markdown代码块标记
+            String processedResponse = aiResponse;
+            if (aiResponse.startsWith("```")) {
+                // 移除开头的```json或```等标记
+                processedResponse = aiResponse.replaceAll("^```(json)?\\s*", "");
+                // 移除结尾的```标记
+                processedResponse = processedResponse.replaceAll("\\s*```\\s*$", "");
+                logger.info("检测到Markdown格式的响应，已移除代码块标记");
+            }
+            
+            // 解析AI评测结果
+            Map<String, Object> aiResult;
+            try {
+                aiResult = objectMapper.readValue(processedResponse, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception e) {
+                logger.warn("解析JSON失败，尝试提取JSON部分", e);
+                
+                // 尝试从文本中提取JSON部分
+                Pattern jsonPattern = Pattern.compile("\\{[\\s\\S]*\\}");
+                Matcher matcher = jsonPattern.matcher(processedResponse);
+                
+                if (matcher.find()) {
+                    String jsonPart = matcher.group();
+                    try {
+                        aiResult = objectMapper.readValue(jsonPart, new TypeReference<Map<String, Object>>() {});
+                    } catch (Exception e2) {
+                        logger.error("提取JSON后解析仍然失败", e2);
+                        throw new RuntimeException("无法解析AI评测结果: " + e2.getMessage());
+                    }
+                } else {
+                    throw new RuntimeException("无法从响应中提取JSON格式的评测结果");
+                }
+            }
+            
+            // 提取总分
+            Object scoreObj = aiResult.get("总分");
+            if (scoreObj == null) {
+                scoreObj = aiResult.get("score");
+            }
+            
+            if (scoreObj == null) {
+                throw new RuntimeException("AI评测结果中缺少总分字段");
+            }
+            
+            BigDecimal score = new BigDecimal(scoreObj.toString());
+            
+            // 提取评语
+            String comments = null;
+            if (aiResult.containsKey("overall_comments")) {
+                comments = (String) aiResult.get("overall_comments");
+            } else if (aiResult.containsKey("总评")) {
+                comments = (String) aiResult.get("总评");
+            } else if (aiResult.containsKey("comments")) {
+                comments = (String) aiResult.get("comments");
+            }
+            
+            // 如果没有评语，则使用改进建议作为评语
+            if (comments == null && aiResult.containsKey("improvement_suggestions")) {
+                comments = (String) aiResult.get("improvement_suggestions");
+            }
+            
+            // 构建结果
+            result.put("score", score);
+            result.put("comments", comments != null ? comments : "无评语");
             result.put("raw_ai_response", aiResponse);
             result.put("criteria_scores", aiResult.get("criteria_scores"));
             
@@ -2120,15 +2429,47 @@ public class EvaluationServiceImpl implements EvaluationService {
             evaluationRun.setCreatedBy(userId);
             evaluationRun.setLastUpdated(LocalDateTime.now());
             
+            // 设置评测提示词组装配置
+            if (parameters != null && parameters.containsKey("evaluationAssemblyConfigId")) {
+                Long evaluationAssemblyConfigId = Long.valueOf(parameters.get("evaluationAssemblyConfigId").toString());
+                EvaluationPromptAssemblyConfig config = evaluationPromptAssemblyConfigRepository.findById(evaluationAssemblyConfigId)
+                        .orElse(null);
+                if (config != null) {
+                    evaluationRun.setEvaluationAssemblyConfig(config);
+                    logger.info("设置评测提示词组装配置: {}", config.getName());
+                } else {
+                    logger.warn("找不到指定的评测提示词组装配置(ID: {})", evaluationAssemblyConfigId);
+                }
+            } else {
+                // 如果没有指定，尝试使用默认配置
+                List<EvaluationPromptAssemblyConfig> activeConfigs = evaluationPromptAssemblyConfigRepository.findByIsActiveTrue();
+                if (!activeConfigs.isEmpty()) {
+                    evaluationRun.setEvaluationAssemblyConfig(activeConfigs.get(0));
+                    logger.info("使用默认评测提示词组装配置: {}", activeConfigs.get(0).getName());
+                }
+            }
+            
+            // 设置主观题评测提示词
+            if (parameters != null && parameters.containsKey("subjectivePromptId")) {
+                Long subjectivePromptId = Long.valueOf(parameters.get("subjectivePromptId").toString());
+                EvaluationSubjectivePrompt prompt = evaluationSubjectivePromptRepository.findById(subjectivePromptId)
+                        .orElse(null);
+                if (prompt != null) {
+                    evaluationRun.setSubjectivePrompt(prompt);
+                    logger.info("设置主观题评测提示词: {}", prompt.getName());
+                } else {
+                    logger.warn("找不到指定的主观题评测提示词(ID: {})", subjectivePromptId);
+                }
+            }
+            
             // 保存评测运行记录
             evaluationRun = evaluationRunRepository.save(evaluationRun);
             
-            logger.info("评测运行创建成功，运行ID: {}", evaluationRun.getId());
             return evaluationRun;
             
         } catch (Exception e) {
-            logger.error("创建评测运行失败", e);
-            throw new RuntimeException("创建评测运行失败: " + e.getMessage(), e);
+            logger.error("创建评测运行记录失败", e);
+            throw new RuntimeException("创建评测运行记录失败: " + e.getMessage(), e);
         }
     }
     
@@ -3149,7 +3490,14 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Override
     @Transactional
     public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId) {
-        logger.debug("开始批量评测批次的主观题，批次ID: {}", batchId);
+        // 调用带有subjectivePromptId参数的方法，传递null表示使用默认提示词
+        return evaluateBatchSubjectiveQuestions(batchId, evaluatorId, userId, null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId) {
+        logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}", batchId, evaluatorId, userId, subjectivePromptId);
         
         // 验证评测者和用户
         Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
@@ -3299,7 +3647,7 @@ public class EvaluationServiceImpl implements EvaluationService {
                 
                 try {
                     // 评测单个回答
-                    evaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria);
+                    evaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria, evaluationRun);
                     
                     // 更新完成数量
                     evaluationRun.setCompletedAnswersCount(evaluationRun.getCompletedAnswersCount() + 1);
@@ -3375,84 +3723,82 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public BigDecimal evaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
-                                        List<EvaluationCriterion> criteria) {
+                                        List<EvaluationCriterion> criteria, EvaluationRun evaluationRun) {
         try {
             // 确保加载完整的问题信息
             answer = getLlmAnswerWithQuestions(answer);
             
+            // 验证数据完整性
             if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                logger.warn("无法评测回答ID: {}，因为其关联的标准问题为空", answer.getId());
-                return BigDecimal.ZERO;
+                logger.warn("回答ID: {}关联的标准问题为空，无法进行评测", answer.getId());
+                throw new IllegalStateException("回答关联的标准问题为空，无法进行评测");
             }
             
+            // 获取标准问题和参考答案
             StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
             
-            // 确保是主观题
-            if (question.getQuestionType() != QuestionType.SUBJECTIVE) {
-                throw new IllegalArgumentException("不是主观题类型: " + question.getId());
+            // 获取参考答案
+            String referenceAnswer = "";
+            if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
+                // 获取主观题标准答案
+                StandardSubjectiveAnswer standardAnswer = standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId())
+                    .orElse(null);
+                if (standardAnswer != null) {
+                    referenceAnswer = standardAnswer.getAnswerText();
+                }
             }
             
-            // 获取repeatIndex，如果为null则默认为0
+            // 获取重复索引
             Integer repeatIndex = answer.getRepeatIndex();
             if (repeatIndex == null) {
                 repeatIndex = 0;
             }
             
-            // 检查是否已存在相同的评测记录（考虑答案ID和评测者ID）
-            boolean exists = evaluationRepository.existsByLlmAnswerIdAndEvaluatorId(
-                answer.getId(), evaluator.getId());
-            
-            if (exists) {
-                logger.info("该主观题回答已被同一评测者评测过，将覆盖原有评测记录，回答ID: {}, 重复索引: {}, 评测者ID: {}", 
-                        answer.getId(), repeatIndex, evaluator.getId());
-                
-                // 删除现有评测记录
-                deleteExistingEvaluations(answer.getId(), evaluator.getId());
+            // 检查是否已经存在评测记录
+            boolean existsBeforeSave = false;
+            List<Evaluation> existingEvaluations = evaluationRepository.findByLlmAnswerIdAndEvaluatorId(answer.getId(), evaluator.getId());
+            if (!existingEvaluations.isEmpty()) {
+                existsBeforeSave = true;
+                logger.info("回答ID: {}已经存在评测记录，将进行覆盖", answer.getId());
             }
-            
-            // 获取标准答案
-            StandardSubjectiveAnswer standardAnswer = standardSubjectiveAnswerRepository
-                    .findByStandardQuestionId(question.getId())
-                    .orElseThrow(() -> new IllegalStateException("找不到主观题的标准答案: " + question.getId()));
             
             // 创建评测记录
             Evaluation evaluation = new Evaluation();
             evaluation.setLlmAnswer(answer);
             evaluation.setEvaluator(evaluator);
-            evaluation.setEvaluationType(EvaluationType.AI_MODEL);
-            evaluation.setStatus(EvaluationStatus.PROCESSING);
-            evaluation.setCreationTime(LocalDateTime.now());
             evaluation.setCreatedByUser(user);
+            evaluation.setEvaluationTime(LocalDateTime.now());
+            evaluation.setStatus(EvaluationStatus.PENDING);
             
-            evaluation = evaluationRepository.save(evaluation);
-            
-            // 调用AI评测
-            Map<String, Object> evaluationResult = evaluateSubjectiveWithAI(
-                    answer.getAnswerText(),
-                    question.getQuestionText(),
-                    standardAnswer.getAnswerText(),
+            // 组装评测提示词
+            String prompt = assembleEvaluationPrompt(
+                    question, 
+                    answer.getAnswerText(), 
+                    referenceAnswer, 
                     criteria,
-                    evaluator.getId());
+                    evaluationRun);
             
-            // 添加重复索引信息
-            evaluationResult.put("repeatIndex", repeatIndex);
+            // 调用AI服务进行评测
+            String aiResponse = callAIService(prompt, evaluator.getLlmModel().getId());
             
-            // 更新评测记录
-            BigDecimal score = new BigDecimal(evaluationResult.get("score").toString());
-            evaluation.setScore(score);
-            evaluation.setComments((String) evaluationResult.get("comments"));
-            evaluation.setEvaluationResults(evaluationResult);
+            // 解析评测结果
+            Map<String, Object> evaluationResults = parseAIResponse(aiResponse);
+            
+            // 提取总分
+            BigDecimal score = BigDecimal.ZERO;
+            if (evaluationResults.containsKey("总分")) {
+                try {
+                    score = new BigDecimal(evaluationResults.get("总分").toString());
+                } catch (NumberFormatException e) {
+                    logger.warn("无法解析总分: {}", evaluationResults.get("总分"));
+                }
+            }
+            
+            // 保存评测结果
+            evaluation.setEvaluationResults(evaluationResults);
             evaluation.setStatus(EvaluationStatus.SUCCESS);
-            evaluation.setCompletionTime(LocalDateTime.now());
             
-            // 在保存前检查是否已存在相同的评测记录
-            boolean existsBeforeSave = evaluationRepository.existsByLlmAnswerIdAndEvaluatorId(
-                answer.getId(), evaluator.getId());
-            
-            // 详细记录请求体信息
-            logger.info("准备保存主观题评测记录，详细信息: llmAnswerId={}, repeatIndex={}, evaluatorId={}, createdByUserId={}, status={}, score={}, 已存在相同记录={}",
-                answer.getId(), repeatIndex, evaluator.getId(), user.getId(), evaluation.getStatus(), score, existsBeforeSave);
-            
+            // 检查是否存在唯一键约束冲突
             if (existsBeforeSave) {
                 logger.warn("检测到唯一键约束冲突风险! 该主观题回答(ID:{}, 重复索引:{})已被同一评测者(ID:{})评测过", 
                     answer.getId(), repeatIndex, evaluator.getId());
@@ -3479,6 +3825,13 @@ public class EvaluationServiceImpl implements EvaluationService {
             logger.error("评测主观题回答失败，回答ID: " + answer.getId(), e);
             throw e;
         }
+    }
+    
+    // 兼容旧代码的重载方法
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public BigDecimal evaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
+                                        List<EvaluationCriterion> criteria) {
+        return evaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria, null);
     }
 
     /**
@@ -3995,5 +4348,440 @@ public class EvaluationServiceImpl implements EvaluationService {
         }
         
         return result;
+    }
+
+    private String assembleEvaluationPrompt(StandardQuestion question, String answerText, 
+                                         String referenceAnswer, List<EvaluationCriterion> criteria,
+                                         EvaluationRun evaluationRun) {
+        StringBuilder promptBuilder = new StringBuilder();
+        
+        // 获取评测提示词组装配置，优先使用评测运行中的配置
+        EvaluationPromptAssemblyConfig config = null;
+        if (evaluationRun != null && evaluationRun.getEvaluationAssemblyConfig() != null) {
+            config = evaluationRun.getEvaluationAssemblyConfig();
+            logger.debug("使用评测运行中的评测提示词组装配置: {}", config.getName());
+        } else {
+            // 如果评测运行中没有配置，则使用默认配置
+            List<EvaluationPromptAssemblyConfig> configs = evaluationPromptAssemblyConfigRepository.findByIsActiveTrue();
+            config = configs.isEmpty() ? null : configs.get(0);
+            if (config != null) {
+                logger.debug("使用默认评测提示词组装配置: {}", config.getName());
+            } else {
+                logger.warn("没有找到可用的评测提示词组装配置");
+            }
+        }
+        
+        if (config != null) {
+            // 添加基础系统提示
+            if (config.getBaseSystemPrompt() != null) {
+                promptBuilder.append(config.getBaseSystemPrompt());
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加标签提示（如果问题有标签）
+            if (question.getTags() != null && !question.getTags().isEmpty()) {
+                // 添加标签提示部分标题
+                promptBuilder.append(config.getTagPromptsSectionHeader());
+                promptBuilder.append(config.getSectionSeparator());
+                
+                // 获取问题标签相关的评测提示词
+                List<String> tagPrompts = new ArrayList<>();
+                for (Tag tag : question.getTags()) {
+                    List<EvaluationTagPrompt> tagPromptList = evaluationTagPromptRepository.findByTagIdAndIsActiveTrueAndDeletedAtIsNullOrderByPromptPriorityAsc(tag.getId());
+                    if (!tagPromptList.isEmpty()) {
+                        EvaluationTagPrompt tagPrompt = tagPromptList.get(0);
+                        if (tagPrompt != null && tagPrompt.getPromptTemplate() != null) {
+                            tagPrompts.add(tagPrompt.getPromptTemplate());
+                        }
+                    }
+                }
+                
+                // 添加标签提示词
+                if (!tagPrompts.isEmpty()) {
+                    promptBuilder.append(String.join(config.getTagPromptSeparator(), tagPrompts));
+                    promptBuilder.append(config.getSectionSeparator());
+                }
+            }
+            
+            // 添加主观题评测要求
+            promptBuilder.append(config.getSubjectiveSectionHeader());
+            promptBuilder.append(config.getSectionSeparator());
+            
+            // 获取主观题评测提示词，优先使用评测运行中的配置
+            EvaluationSubjectivePrompt subjectivePrompt = null;
+            if (evaluationRun != null && evaluationRun.getSubjectivePrompt() != null) {
+                subjectivePrompt = evaluationRun.getSubjectivePrompt();
+                logger.debug("使用评测运行中的主观题评测提示词: {}", subjectivePrompt.getName());
+            } else {
+                // 如果评测运行中没有配置，则使用默认配置
+                List<EvaluationSubjectivePrompt> activePrompts = evaluationSubjectivePromptRepository.findByIsActiveTrueAndDeletedAtIsNull();
+                if (!activePrompts.isEmpty()) {
+                    subjectivePrompt = activePrompts.get(0);
+                    logger.debug("使用默认主观题评测提示词: {}", subjectivePrompt.getName());
+                } else {
+                    logger.warn("没有找到可用的主观题评测提示词");
+                }
+            }
+            
+            if (subjectivePrompt != null) {
+                promptBuilder.append(subjectivePrompt.getPromptTemplate());
+            } else {
+                // 如果没有找到主观题评测提示词，使用默认评测要求
+                promptBuilder.append("请按照以下标准评估回答的质量：\n");
+                promptBuilder.append("1. 准确性：回答是否准确、完整地解答了问题\n");
+                promptBuilder.append("2. 清晰度：回答是否条理清晰、易于理解\n");
+                promptBuilder.append("3. 专业性：回答是否展示了专业知识和深度\n");
+                promptBuilder.append("4. 实用性：回答是否提供了实用的信息和建议");
+            }
+            
+            promptBuilder.append(config.getSectionSeparator());
+            
+            // 添加评分标准
+            if (criteria != null && !criteria.isEmpty()) {
+                promptBuilder.append("## 评分标准\n");
+                for (EvaluationCriterion criterion : criteria) {
+                    promptBuilder.append("- ").append(criterion.getName()).append("：").append(criterion.getDescription()).append("\n");
+                }
+                promptBuilder.append(config.getSectionSeparator());
+            }
+            
+            // 添加问题和回答
+            promptBuilder.append("## 问题\n");
+            promptBuilder.append(question.getQuestionText());
+            promptBuilder.append(config.getSectionSeparator());
+            
+            promptBuilder.append("## 学生回答\n");
+            promptBuilder.append(answerText);
+            promptBuilder.append(config.getSectionSeparator());
+            
+            promptBuilder.append("## 参考答案\n");
+            promptBuilder.append(referenceAnswer);
+            promptBuilder.append(config.getSectionSeparator());
+            
+            // 添加最终指令
+            if (config.getFinalInstruction() != null) {
+                promptBuilder.append(config.getFinalInstruction());
+            } else {
+                promptBuilder.append("请根据上述标准评估学生回答的质量，给出详细的评分和评价。");
+            }
+        } else {
+            // 如果没有找到配置，使用默认格式
+            promptBuilder.append("你是一个专业的评测专家，请评估以下回答的质量。\n\n");
+            
+            // 添加问题和回答
+            promptBuilder.append("问题：\n").append(question.getQuestionText()).append("\n\n");
+            promptBuilder.append("学生回答：\n").append(answerText).append("\n\n");
+            promptBuilder.append("参考答案：\n").append(referenceAnswer).append("\n\n");
+            
+            // 添加评分标准
+            if (criteria != null && !criteria.isEmpty()) {
+                promptBuilder.append("评分标准：\n");
+                for (EvaluationCriterion criterion : criteria) {
+                    promptBuilder.append("- ").append(criterion.getName()).append("：").append(criterion.getDescription()).append("\n");
+                }
+                promptBuilder.append("\n");
+            }
+            
+            promptBuilder.append("请根据以上信息，评估学生回答的质量，给出详细的评分和评价。");
+        }
+        
+        return promptBuilder.toString();
+    }
+
+    /**
+     * 解析AI评测响应
+     * 
+     * @param aiResponse AI评测响应文本
+     * @return 解析后的评测结果
+     */
+    private Map<String, Object> parseAIResponse(String aiResponse) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 尝试直接解析为JSON
+            try {
+                result = objectMapper.readValue(aiResponse, new TypeReference<Map<String, Object>>() {});
+                if (!result.isEmpty()) {
+                    return result;
+                }
+            } catch (Exception e) {
+                logger.debug("无法直接解析为JSON，将尝试其他解析方法");
+            }
+            
+            // 提取总分
+            Pattern scorePattern = Pattern.compile("总分[：:](\\d+(\\.\\d+)?)");
+            Matcher scoreMatcher = scorePattern.matcher(aiResponse);
+            if (scoreMatcher.find()) {
+                result.put("总分", scoreMatcher.group(1));
+            } else {
+                // 尝试找到数字打分
+                Pattern numericPattern = Pattern.compile("(\\d+(\\.\\d+)?)/10");
+                Matcher numericMatcher = numericPattern.matcher(aiResponse);
+                if (numericMatcher.find()) {
+                    result.put("总分", numericMatcher.group(1));
+                }
+            }
+            
+            // 提取评价
+            Pattern commentPattern = Pattern.compile("评价[：:](.*?)(?=\\n\\n|$)", Pattern.DOTALL);
+            Matcher commentMatcher = commentPattern.matcher(aiResponse);
+            if (commentMatcher.find()) {
+                result.put("评价", commentMatcher.group(1).trim());
+            }
+            
+            // 提取详细评分
+            Pattern detailPattern = Pattern.compile("(\\w+)[：:](\\d+(\\.\\d+)?)");
+            Matcher detailMatcher = detailPattern.matcher(aiResponse);
+            while (detailMatcher.find()) {
+                String criterion = detailMatcher.group(1);
+                if (!criterion.equals("总分")) {
+                    result.put(criterion, detailMatcher.group(2));
+                }
+            }
+            
+            // 保存原始响应
+            result.put("原始响应", aiResponse);
+            
+        } catch (Exception e) {
+            logger.error("解析AI响应失败: {}", e.getMessage());
+            result.put("原始响应", aiResponse);
+            result.put("解析错误", e.getMessage());
+        }
+        
+        return result;
+    }
+
+    // @Override
+    // @Transactional
+    // public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId) {
+    //     logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}", batchId, evaluatorId, userId, subjectivePromptId);
+        
+    //     // 验证评测者和用户
+    //     Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+    //             .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测者: " + evaluatorId));
+        
+    //     // 验证评测者类型是AI
+    //     if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
+    //         throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
+    //     }
+        
+    //     // 获取或创建评测运行记录
+    //     EvaluationRun evaluationRun = getOrCreateEvaluationRun(batchId, evaluatorId, userId);
+        
+    //     try {
+    //         // 获取所有需要评测的主观题回答
+    //                                 // 获取该批次的所有回答
+    //                     List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
+                        
+    //                     // 过滤出主观题的回答
+    //                     answers = answers.stream()
+    //                             .filter(answer -> {
+    //                                 if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+    //                                     logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+    //                                     return false;
+    //                                 }
+    //                                 return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
+    //                             })
+    //                             .collect(Collectors.toList());
+            
+    //         if (answers.isEmpty()) {
+    //             logger.info("批次中没有主观题回答需要评测，批次ID: {}", batchId);
+    //             return Map.of("status", "completed", "message", "没有主观题需要评测");
+    //         }
+            
+    //         // 更新总回答数
+    //         evaluationRun.setTotalAnswersCount(answers.size());
+            
+    //         // 获取评测标准
+    //         List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
+            
+    //         // 如果是恢复评测，从上次中断的位置继续
+    //         Long startAnswerId = evaluationRun.getCurrentBatchStartId();
+    //         if (startAnswerId == null) {
+    //             startAnswerId = answers.get(0).getId();
+    //             evaluationRun.setCurrentBatchStartId(startAnswerId);
+    //         }
+            
+    //         // 设置批次大小
+    //         int batchSize = evaluationRun.getBatchSize() != null ? evaluationRun.getBatchSize() : 50;
+            
+    //         // 分批处理回答
+    //         for (int i = 0; i < answers.size(); i += batchSize) {
+    //             // 检查是否需要暂停
+    //             if (evaluationRun.getStatus() == RunStatus.PAUSED) {
+    //                 logger.info("评测运行已暂停，批次ID: {}", batchId);
+    //                 break;
+    //             }
+                
+    //             // 获取当前批次的回答
+    //             int endIndex = Math.min(i + batchSize, answers.size());
+    //             List<LlmAnswer> batchAnswers = answers.subList(i, endIndex);
+                
+    //             try {
+    //                 // 更新当前批次信息
+    //                 evaluationRun.setCurrentBatchStartId(batchAnswers.get(0).getId());
+    //                 evaluationRun.setCurrentBatchEndId(batchAnswers.get(batchAnswers.size() - 1).getId());
+    //                 evaluationRun.setRetryCount(0);
+    //                 evaluationRunRepository.save(evaluationRun);
+                    
+    //                 // 处理当前批次
+    //                 processBatchAnswers(batchAnswers, evaluator, criteria, evaluationRun, userId);
+                    
+    //                 // 更新进度
+    //                 updateEvaluationProgress(evaluationRun, endIndex, answers.size());
+                    
+    //             } catch (Exception e) {
+    //                 handleBatchProcessingError(evaluationRun, e);
+                    
+    //                 // 如果超过最大重试次数，暂停评测
+    //                 if (evaluationRun.getRetryCount() >= evaluationRun.getMaxRetries()) {
+    //                     pauseEvaluationRun(evaluationRun.getId());
+    //                     break;
+    //                 }
+    //             }
+    //         }
+            
+    //         // 检查是否所有回答都已评测完成
+    //         if (evaluationRun.getCompletedAnswersCount() >= evaluationRun.getTotalAnswersCount()) {
+    //             completeEvaluationRun(evaluationRun);
+    //         }
+            
+    //         // 返回评测结果
+    //         return getEvaluationRunProgress(evaluationRun.getId());
+            
+    //     } catch (Exception e) {
+    //         logger.error("批量评测主观题失败", e);
+    //         evaluationRun.setStatus(RunStatus.FAILED);
+    //         evaluationRun.setErrorMessage(e.getMessage());
+    //         evaluationRunRepository.save(evaluationRun);
+    //         throw new RuntimeException("批量评测主观题失败: " + e.getMessage(), e);
+    //     }
+    // }
+    
+    @Override
+    @Transactional
+    public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId, Long evaluationAssemblyConfigId) {
+        logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}, 评测组装配置ID: {}", 
+                batchId, evaluatorId, userId, subjectivePromptId, evaluationAssemblyConfigId);
+        
+        // 验证评测者和用户
+        Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测者: " + evaluatorId));
+        
+        // 验证评测者类型是AI
+        if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
+            throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
+        }
+        
+        // 创建评测运行记录的参数
+        Map<String, Object> params = new HashMap<>();
+        params.put("batchId", batchId);
+        params.put("evaluationType", "SUBJECTIVE_BATCH");
+        
+        if (subjectivePromptId != null) {
+            params.put("subjectivePromptId", subjectivePromptId);
+        }
+        
+        if (evaluationAssemblyConfigId != null) {
+            params.put("evaluationAssemblyConfigId", evaluationAssemblyConfigId);
+        }
+        
+        // 创建评测运行记录
+        EvaluationRun evaluationRun = createEvaluationRun(
+                batchId, 
+                evaluatorId, 
+                "批量主观题评测-" + batchId, 
+                null, 
+                params, 
+                userId);
+        
+        try {
+            // 获取所有需要评测的主观题回答
+            // 获取该批次的所有回答
+            List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
+            
+            // 过滤出主观题的回答
+            answers = answers.stream()
+                    .filter(answer -> {
+                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                            return false;
+                        }
+                        return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
+                    })
+                    .collect(Collectors.toList());
+            
+            if (answers.isEmpty()) {
+                logger.info("批次中没有主观题回答需要评测，批次ID: {}", batchId);
+                return Map.of("status", "completed", "message", "没有主观题需要评测");
+            }
+            
+            // 更新总回答数
+            evaluationRun.setTotalAnswersCount(answers.size());
+            
+            // 获取评测标准
+            List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
+            
+            // 如果是恢复评测，从上次中断的位置继续
+            Long startAnswerId = evaluationRun.getCurrentBatchStartId();
+            if (startAnswerId == null) {
+                startAnswerId = answers.get(0).getId();
+                evaluationRun.setCurrentBatchStartId(startAnswerId);
+            }
+            
+            // 设置批次大小
+            int batchSize = evaluationRun.getBatchSize() != null ? evaluationRun.getBatchSize() : 50;
+            
+            // 分批处理回答
+            for (int i = 0; i < answers.size(); i += batchSize) {
+                // 检查是否需要暂停
+                if (evaluationRun.getStatus() == RunStatus.PAUSED) {
+                    logger.info("评测运行已暂停，批次ID: {}", batchId);
+                    break;
+                }
+                
+                // 获取当前批次的回答
+                int endIndex = Math.min(i + batchSize, answers.size());
+                List<LlmAnswer> batchAnswers = answers.subList(i, endIndex);
+                
+                try {
+                    // 更新当前批次信息
+                    evaluationRun.setCurrentBatchStartId(batchAnswers.get(0).getId());
+                    evaluationRun.setCurrentBatchEndId(batchAnswers.get(batchAnswers.size() - 1).getId());
+                    evaluationRun.setRetryCount(0);
+                    evaluationRunRepository.save(evaluationRun);
+                    
+                    // 处理当前批次
+                    processBatchAnswers(batchAnswers, evaluator, criteria, evaluationRun, userId);
+                    
+                    // 更新进度
+                    updateEvaluationProgress(evaluationRun, endIndex, answers.size());
+                    
+                } catch (Exception e) {
+                    handleBatchProcessingError(evaluationRun, e);
+                    
+                    // 如果超过最大重试次数，暂停评测
+                    if (evaluationRun.getRetryCount() >= evaluationRun.getMaxRetries()) {
+                        pauseEvaluationRun(evaluationRun.getId());
+                        break;
+                    }
+                }
+            }
+            
+            // 检查是否所有回答都已评测完成
+            if (evaluationRun.getCompletedAnswersCount() >= evaluationRun.getTotalAnswersCount()) {
+                completeEvaluationRun(evaluationRun);
+            }
+            
+            // 返回评测结果
+            return getEvaluationRunProgress(evaluationRun.getId());
+            
+        } catch (Exception e) {
+            logger.error("批量评测主观题失败", e);
+            evaluationRun.setStatus(RunStatus.FAILED);
+            evaluationRun.setErrorMessage(e.getMessage());
+            evaluationRunRepository.save(evaluationRun);
+            throw new RuntimeException("批量评测主观题失败: " + e.getMessage(), e);
+        }
     }
 } 

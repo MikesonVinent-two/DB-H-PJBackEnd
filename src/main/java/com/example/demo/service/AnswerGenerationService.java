@@ -131,7 +131,6 @@ public interface AnswerGenerationService {
         private String description;
         private Long datasetVersionId;
         private Long answerAssemblyConfigId;
-        private Long evaluationAssemblyConfigId;
         private List<Long> llmModelIds;
         private java.util.Map<String, Object> globalParameters;
         private java.util.Map<Long, java.util.Map<String, Object>> modelSpecificParameters;
@@ -175,14 +174,6 @@ public interface AnswerGenerationService {
         
         public void setAnswerAssemblyConfigId(Long answerAssemblyConfigId) {
             this.answerAssemblyConfigId = answerAssemblyConfigId;
-        }
-        
-        public Long getEvaluationAssemblyConfigId() {
-            return evaluationAssemblyConfigId;
-        }
-        
-        public void setEvaluationAssemblyConfigId(Long evaluationAssemblyConfigId) {
-            this.evaluationAssemblyConfigId = evaluationAssemblyConfigId;
         }
         
         public List<Long> getLlmModelIds() {

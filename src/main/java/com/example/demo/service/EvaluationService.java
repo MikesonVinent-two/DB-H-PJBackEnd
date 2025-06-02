@@ -250,6 +250,28 @@ public interface EvaluationService {
     Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
     
     /**
+     * 评测批次的主观题（使用指定的评测提示词）
+     * @param batchId 批次ID
+     * @param evaluatorId 评测者ID（必须是AI模型类型）
+     * @param userId 用户ID
+     * @param subjectivePromptId 主观题评测提示词ID（可选）
+     * @return 评测结果统计
+     */
+    Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId);
+    
+    /**
+     * 批量评测主观题，支持指定主观题评测提示词和评测组装配置
+     * 
+     * @param batchId 批次ID
+     * @param evaluatorId 评测者ID
+     * @param userId 用户ID
+     * @param subjectivePromptId 主观题评测提示词ID
+     * @param evaluationAssemblyConfigId 评测组装配置ID
+     * @return 评测结果
+     */
+    Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId, Long evaluationAssemblyConfigId);
+    
+    /**
      * 重新评测单个主观题回答（强制覆盖已有评测）
      * 
      * @param llmAnswerId LLM回答ID

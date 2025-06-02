@@ -32,13 +32,19 @@ class WebSocketClient {
             }
 
             // 创建SockJS对象
-            const socket = new SockJS(`${this.serverUrl}/ws`);
+            // 使用绝对路径，确保包含上下文路径/api
+            const socket = new SockJS(`${this.serverUrl}/api/ws`);
+            
+            // 启用调试日志，帮助排查问题
+            console.log(`尝试连接WebSocket: ${this.serverUrl}/api/ws`);
             
             // 创建STOMP客户端
             this.stompClient = Stomp.over(socket);
             
-            // 禁用调试日志
-            this.stompClient.debug = null;
+            // 启用STOMP客户端调试日志
+            this.stompClient.debug = function(str) {
+                console.log(`STOMP: ${str}`);
+            };
             
             // 连接到服务器
             this.stompClient.connect(

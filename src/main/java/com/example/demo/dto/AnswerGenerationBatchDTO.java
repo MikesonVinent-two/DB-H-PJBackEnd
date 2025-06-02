@@ -16,7 +16,6 @@ public class AnswerGenerationBatchDTO {
     private BatchStatus status;
     private LocalDateTime creationTime;
     private Long answerAssemblyConfigId;
-    private Long evaluationAssemblyConfigId;
     private Map<String, Object> globalParameters;
     private Long createdByUserId;
     private String createdByUsername;
@@ -110,14 +109,6 @@ public class AnswerGenerationBatchDTO {
     
     public void setAnswerAssemblyConfigId(Long answerAssemblyConfigId) {
         this.answerAssemblyConfigId = answerAssemblyConfigId;
-    }
-    
-    public Long getEvaluationAssemblyConfigId() {
-        return evaluationAssemblyConfigId;
-    }
-    
-    public void setEvaluationAssemblyConfigId(Long evaluationAssemblyConfigId) {
-        this.evaluationAssemblyConfigId = evaluationAssemblyConfigId;
     }
     
     public Map<String, Object> getGlobalParameters() {

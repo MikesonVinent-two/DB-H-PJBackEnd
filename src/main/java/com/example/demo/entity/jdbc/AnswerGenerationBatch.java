@@ -46,7 +46,6 @@ public class AnswerGenerationBatch {
     private LocalDateTime creationTime = LocalDateTime.now();
     private BatchStatus status = BatchStatus.PENDING;
     private AnswerPromptAssemblyConfig answerAssemblyConfig;
-    private EvaluationPromptAssemblyConfig evaluationAssemblyConfig;
     private AnswerQuestionTypePrompt singleChoicePrompt;
     private AnswerQuestionTypePrompt multipleChoicePrompt;
     private AnswerQuestionTypePrompt simpleFactPrompt;
@@ -129,14 +128,6 @@ public class AnswerGenerationBatch {
 
     public void setAnswerAssemblyConfig(AnswerPromptAssemblyConfig answerAssemblyConfig) {
         this.answerAssemblyConfig = answerAssemblyConfig;
-    }
-
-    public EvaluationPromptAssemblyConfig getEvaluationAssemblyConfig() {
-        return evaluationAssemblyConfig;
-    }
-
-    public void setEvaluationAssemblyConfig(EvaluationPromptAssemblyConfig evaluationAssemblyConfig) {
-        this.evaluationAssemblyConfig = evaluationAssemblyConfig;
     }
 
     public Map<String, Object> getGlobalParameters() {
