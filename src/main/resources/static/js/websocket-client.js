@@ -32,11 +32,11 @@ class WebSocketClient {
             }
 
             // 创建SockJS对象
-            // 使用绝对路径，确保包含上下文路径/api
-            const socket = new SockJS(`${this.serverUrl}/api/ws`);
+            // 使用/ws路径
+            const socket = new SockJS(`${this.serverUrl}/ws`);
             
             // 启用调试日志，帮助排查问题
-            console.log(`尝试连接WebSocket: ${this.serverUrl}/api/ws`);
+            console.log(`尝试连接WebSocket: ${this.serverUrl}/ws`);
             
             // 创建STOMP客户端
             this.stompClient = Stomp.over(socket);

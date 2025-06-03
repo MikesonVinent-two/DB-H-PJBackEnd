@@ -990,6 +990,26 @@ public class AnswerGenerationServiceImpl implements AnswerGenerationService {
         return result;
     }
     
+    @Override
+    public List<AnswerGenerationBatchDTO> getAllBatches() {
+        logger.debug("获取所有批次");
+        
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.setReadOnly(true);
+        
+        return txTemplate.execute(status -> {
+            try {
+                List<AnswerGenerationBatch> batches = batchRepository.findAll();
+                return batches.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+            } catch (Exception e) {
+                logger.error("获取所有批次失败", e);
+                throw e;
+            }
+        });
+    }
+    
     // 辅助方法
     private AnswerGenerationBatchDTO convertToDTO(AnswerGenerationBatch batch) {
         if (batch == null) {

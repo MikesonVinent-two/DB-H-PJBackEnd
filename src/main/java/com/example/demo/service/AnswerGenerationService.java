@@ -124,6 +124,13 @@ public interface AnswerGenerationService {
     Map<String, Object> testBatchModelsConnectivity(Long batchId);
     
     /**
+     * 获取所有批次
+     * 
+     * @return 所有批次的列表
+     */
+    List<AnswerGenerationBatchDTO> getAllBatches();
+    
+    /**
      * 批次创建请求内部类
      */
     public static class AnswerGenerationBatchCreateRequest {

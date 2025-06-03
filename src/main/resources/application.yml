@@ -22,6 +22,8 @@ server:
     accept-count: 1000
     max-keep-alive-requests: 10000
     keep-alive-timeout: 120s
+  websocket:
+    path: /ws
 
 spring:
   main:
@@ -49,6 +51,7 @@ spring:
     max-text-message-size: 8192
     max-binary-message-size: 8192
     max-session-idle-timeout: 60000
+    base-path: /ws
   # Redis配置
   data:
     redis:

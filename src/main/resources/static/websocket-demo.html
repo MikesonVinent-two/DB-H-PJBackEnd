@@ -210,7 +210,7 @@
         const statusCompletedQuestions = document.getElementById('status-completed-questions');
         
         // 创建WebSocket客户端
-        const wsClient = new WebSocketClient(window.location.origin);
+        const wsClient = new WebSocketClient('http://localhost:8080/api');
         
         // 订阅ID
         let globalSubscriptionId = null;

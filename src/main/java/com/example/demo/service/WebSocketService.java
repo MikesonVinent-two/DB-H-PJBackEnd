@@ -1,15 +1,15 @@
 package com.example.demo.service;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.WebSocketMessage;
 import com.example.demo.dto.WebSocketMessage.MessageType;
-import com.example.demo.entity.jdbc.AnswerGenerationBatch.BatchStatus;
-import com.example.demo.entity.jdbc.ModelAnswerRun.RunStatus;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * WebSocket服务实现类，用于向客户端发送消息
@@ -126,5 +126,20 @@ public class WebSocketService {
         
         // 同时发送到全局错误频道
         messagingTemplate.convertAndSend("/topic/errors", wsMessage);
+    }
+    
+    /**
+     * 发送所有批次状态更新
+     * 
+     * @param batches 批次状态列表
+     */
+    public void sendAllBatchesStatus(List<AnswerGenerationBatchDTO> batches) {
+        String destination = "/topic/batches/all";
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("batches", batches);
+        payload.put("timestamp", System.currentTimeMillis());
+        
+        WebSocketMessage message = new WebSocketMessage(MessageType.STATUS_CHANGE, payload);
+        messagingTemplate.convertAndSend(destination, message);
     }
 } 

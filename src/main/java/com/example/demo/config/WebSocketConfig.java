@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import org.springframework.web.socket.handler.WebSocketHandlerDecorator;
 import org.springframework.web.socket.handler.WebSocketHandlerDecoratorFactory;
 import org.springframework.web.socket.server.HandshakeInterceptor;
@@ -31,6 +33,9 @@ import org.springframework.web.socket.server.support.DefaultHandshakeHandler;
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     private static final Logger logger = LoggerFactory.getLogger(WebSocketConfig.class);
+    
+    @Value("${spring.websocket.base-path:/ws}")
+    private String websocketPath;
     
     /**
      * 配置消息代理
@@ -59,21 +64,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 自定义握手处理器
         CustomHandshakeHandler handshakeHandler = new CustomHandshakeHandler();
         
-        // 注册STOMP端点，客户端通过这个端点连接到WebSocket服务器
-        registry.addEndpoint("/ws")
+        // 注册STOMP端点，支持SockJS
+        registry.addEndpoint(websocketPath)
                 .setAllowedOriginPatterns("*")
                 .setHandshakeHandler(handshakeHandler)
                 .addInterceptors(new DetailedLoggingHandshakeInterceptor())
                 .withSockJS()
                 .setSessionCookieNeeded(false);
         
-        // 同时注册带有上下文路径的端点
-        registry.addEndpoint("/api/ws")
+        // 添加原生WebSocket端点
+        registry.addEndpoint(websocketPath)
                 .setAllowedOriginPatterns("*")
                 .setHandshakeHandler(handshakeHandler)
-                .addInterceptors(new DetailedLoggingHandshakeInterceptor())
-                .withSockJS()
-                .setSessionCookieNeeded(false);
+                .addInterceptors(new DetailedLoggingHandshakeInterceptor());
+    }
+    
+    /**
+     * 配置WebSocket传输
+     */
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.setMessageSizeLimit(8192)
+                   .setSendBufferSizeLimit(8192)
+                   .setSendTimeLimit(10000);
     }
     
     /**
