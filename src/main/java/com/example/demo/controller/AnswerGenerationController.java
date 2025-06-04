@@ -332,4 +332,11 @@ public class AnswerGenerationController {
             return ResponseEntity.status(500).body(errorResponse);
         }
     }
+    
+    @GetMapping("/batches")
+    public ResponseEntity<List<AnswerGenerationBatchDTO>> getAllBatches() {
+        logger.debug("获取所有批次");
+        List<AnswerGenerationBatchDTO> batches = answerGenerationService.getAllBatches();
+        return ResponseEntity.ok(batches);
+    }
 } 

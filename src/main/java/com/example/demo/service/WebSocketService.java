@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,7 @@ import com.example.demo.dto.WebSocketMessage.MessageType;
 public class WebSocketService {
     
     private final SimpMessagingTemplate messagingTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketService.class);
     
     public WebSocketService(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
@@ -46,6 +49,22 @@ public class WebSocketService {
     public void sendRunMessage(Long runId, MessageType type, Map<String, Object> payload) {
         String destination = "/topic/run/" + runId;
         WebSocketMessage message = new WebSocketMessage(type, payload);
+        
+        // 添加详细日志，特别是对问题完成消息
+        if (type == MessageType.QUESTION_COMPLETED) {
+            // 详细记录问题完成消息
+            Object questionId = payload.get("questionId");
+            Object questionText = payload.get("questionText");
+            Object completedCount = payload.get("completedCount");
+            
+            logger.info("发送问题完成消息: 运行ID={}, 问题ID={}, 已完成数量={}, 目的地={}",
+                runId, questionId, completedCount, destination);
+            logger.debug("问题完成消息内容: 问题文本={}", questionText);
+        } else {
+            // 记录其他类型的消息
+            logger.debug("发送运行消息: 运行ID={}, 类型={}, 目的地={}", runId, type, destination);
+        }
+        
         messagingTemplate.convertAndSend(destination, message);
     }
     

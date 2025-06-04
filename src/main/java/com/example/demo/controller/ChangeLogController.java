@@ -35,7 +35,7 @@ import jakarta.validation.Valid;
  * 变更日志控制器
  */
 @RestController
-@RequestMapping("/api/changelogs")
+@RequestMapping("/changelogs")
 public class ChangeLogController {
 
     private final ChangeLogService changeLogService;

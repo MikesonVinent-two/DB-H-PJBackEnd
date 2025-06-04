@@ -17,6 +17,7 @@ import org.springframework.stereotype.Controller;
 
 import com.example.demo.dto.AnswerGenerationBatchDTO;
 import com.example.demo.dto.WebSocketMessage;
+import com.example.demo.service.AnswerGenerationService;
 import com.example.demo.service.WebSocketService;
 
 /**
@@ -28,10 +29,12 @@ public class WebSocketController {
     private static final Logger logger = LoggerFactory.getLogger(WebSocketController.class);
     
     private final WebSocketService webSocketService;
+    private final AnswerGenerationService answerGenerationService;
     
     @Autowired
-    public WebSocketController(WebSocketService webSocketService) {
+    public WebSocketController(WebSocketService webSocketService, AnswerGenerationService answerGenerationService) {
         this.webSocketService = webSocketService;
+        this.answerGenerationService = answerGenerationService;
     }
     
     /**

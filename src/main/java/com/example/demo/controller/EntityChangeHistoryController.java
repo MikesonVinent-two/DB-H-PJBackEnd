@@ -19,7 +19,7 @@ import com.example.demo.service.EntityChangeHistoryService;
  * 实体变更历史控制器
  */
 @RestController
-@RequestMapping("/api/entity-history")
+@RequestMapping("/entity-history")
 public class EntityChangeHistoryController {
 
     private final EntityChangeHistoryService entityChangeHistoryService;

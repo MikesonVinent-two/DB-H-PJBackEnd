@@ -79,7 +79,7 @@ public class CrowdsourcedAnswerRepository {
     
     private static final String SQL_EXISTS_BY_STANDARD_QUESTION_ID_AND_USER_ID_AND_TASK_BATCH_ID = 
             "SELECT COUNT(*) FROM CROWDSOURCED_ANSWERS " +
-            "WHERE STANDARD_QUESTION_ID=? AND USER_ID=? AND TASK_BATCH_ID=?";
+            "WHERE STANDARD_QUESTION_ID=? AND USER_ID=? AND (TASK_BATCH_ID=? OR (TASK_BATCH_ID IS NULL AND ? IS NULL))";
     
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM CROWDSOURCED_ANSWERS ORDER BY SUBMISSION_TIME DESC";
@@ -436,13 +436,20 @@ public class CrowdsourcedAnswerRepository {
      */
     public boolean existsByStandardQuestionIdAndUserIdAndTaskBatchId(
             Long standardQuestionId, Long userId, Long taskBatchId) {
-        Integer count = jdbcTemplate.queryForObject(
-            SQL_EXISTS_BY_STANDARD_QUESTION_ID_AND_USER_ID_AND_TASK_BATCH_ID, 
-            Integer.class, 
-            standardQuestionId,
-            userId,
-            taskBatchId
-        );
+        String sql;
+        Object[] params;
+        
+        if (taskBatchId == null) {
+            // 如果taskBatchId为null，则查询所有该用户对该问题的回答，不考虑批次
+            sql = "SELECT COUNT(*) FROM CROWDSOURCED_ANSWERS WHERE STANDARD_QUESTION_ID=? AND USER_ID=?";
+            params = new Object[] { standardQuestionId, userId };
+        } else {
+            // 如果taskBatchId不为null，则查询特定批次中该用户对该问题的回答
+            sql = "SELECT COUNT(*) FROM CROWDSOURCED_ANSWERS WHERE STANDARD_QUESTION_ID=? AND USER_ID=? AND TASK_BATCH_ID=?";
+            params = new Object[] { standardQuestionId, userId, taskBatchId };
+        }
+        
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, params);
         return count != null && count > 0;
     }
 
