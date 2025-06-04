@@ -291,6 +291,7 @@ public class StandardQuestionController {
      * @param keyword 关键词
      * @param userId 当前用户ID，用于判断用户是否已回答
      * @param onlyLatest 是否只返回最新版本（叶子节点）
+     * @param onlyWithStandardAnswers 是否只返回有标准答案的问题
      * @param pageable 分页参数
      * @return 匹配的标准问题列表，包含额外信息
      */
@@ -300,9 +301,10 @@ public class StandardQuestionController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false, defaultValue = "false") Boolean onlyLatest,
+            @RequestParam(required = false, defaultValue = "false") Boolean onlyWithStandardAnswers,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-        logger.info("接收到搜索标准问题请求 - 标签: {}, 关键词: {}, 用户ID: {}, 仅最新版本: {}", 
-            tags, keyword, userId, onlyLatest);
+        logger.info("接收到搜索标准问题请求 - 标签: {}, 关键词: {}, 用户ID: {}, 仅最新版本: {}, 仅有标准答案: {}", 
+            tags, keyword, userId, onlyLatest, onlyWithStandardAnswers);
         
         try {
             // 将逗号分隔的标签转换为列表
@@ -313,7 +315,7 @@ public class StandardQuestionController {
             
             // 调用服务层方法执行搜索
             Map<String, Object> result = standardQuestionService.searchQuestions(
-                    tagList, keyword, userId, onlyLatest, pageable);
+                    tagList, keyword, userId, onlyLatest, onlyWithStandardAnswers, pageable);
             
             logger.info("成功搜索标准问题 - 总数: {}", result.get("total"));
             return ResponseEntity.ok(result);

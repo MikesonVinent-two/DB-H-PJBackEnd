@@ -8,9 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -331,109 +329,50 @@ public class AnswerGenerationTask {
                 }
             }
             
-            // 创建线程池用于并行处理模型运行
-            // 使用已有的线程池或创建一个新的线程池
-            ExecutorService modelExecutor = Executors.newFixedThreadPool(
-                Math.min(runs.size() - startIndex, 5), // 最多5个并行线程
-                r -> {
-                    Thread t = new Thread(r);
-                    t.setName("ModelRun-" + batchId + "-" + t.getId());
-                    return t;
-                }
-            );
-            
-            try {
-                // 创建CompletableFuture列表来跟踪所有运行的处理
-                List<CompletableFuture<Void>> runFutures = new ArrayList<>();
+            // 启动每个运行的处理，从startIndex开始
+            for (int i = startIndex; i < runs.size(); i++) {
+                ModelAnswerRun run = runs.get(i);
+                Long runId = run.getId();
                 
-                // 并行启动每个运行的处理，从startIndex开始
-                for (int i = startIndex; i < runs.size(); i++) {
-                    final ModelAnswerRun run = runs.get(i);
-                    final Long runId = run.getId();
+                // 获取当前状态但不用于判断是否处理
+                String runStatus = jdbcTemplate.queryForObject(
+                    "SELECT status FROM model_answer_runs WHERE id = ?", 
+                    String.class, runId);
+                
+                logger.info("开始处理批次{}的运行: {}，模型: {}, 当前状态: {}", 
+                        batchId, runId, run.getLlmModel().getName(), runStatus);
+                
+                // 直接更新运行状态为GENERATING_ANSWERS
+                jdbcTemplate.update(
+                    "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
+                    LocalDateTime.now(), runId);
                     
-                    // 创建一个CompletableFuture来处理这个运行
-                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                        try {
-                            // 获取当前状态但不用于判断是否处理
-                            String runStatus = jdbcTemplate.queryForObject(
-                                "SELECT status FROM model_answer_runs WHERE id = ?", 
-                                String.class, runId);
-                            
-                            logger.info("开始处理批次{}的运行: {}，模型: {}, 当前状态: {}", 
-                                    batchId, runId, run.getLlmModel().getName(), runStatus);
-                            
-                            // 直接更新运行状态为GENERATING_ANSWERS
-                            jdbcTemplate.update(
-                                "UPDATE model_answer_runs SET status = 'GENERATING_ANSWERS', last_activity_time = ? WHERE id = ?",
-                                LocalDateTime.now(), runId);
-                                
-                            logger.info("运行{}状态已更新为GENERATING_ANSWERS", runId);
-                            
-                            // 更新批次的lastProcessedRun为当前运行
-                            // 注意：在并行处理中，这个字段可能会被多个线程同时更新
-                            // 但这不影响处理逻辑，只是用于记录最后一个处理的运行
-                            jdbcTemplate.update(
-                                "UPDATE answer_generation_batches SET last_processed_run_id = ? WHERE id = ?",
-                                runId, batchId);
-                            logger.info("批次{}的last_processed_run_id已更新为{}", batchId, runId);
-                            
-                            // 检查是否有断点信息
-                            Long lastProcessedQuestionId = run.getLastProcessedQuestionId();
-                            Integer lastProcessedQuestionIndex = run.getLastProcessedQuestionIndex();
-                            
-                            // 创建一个中断标志，用于控制运行处理
-                            AtomicBoolean shouldStop = new AtomicBoolean(false);
-                            
-                            if (lastProcessedQuestionId != null && lastProcessedQuestionIndex != null && lastProcessedQuestionIndex >= 0) {
-                                logger.info("运行{}有断点信息，将从断点处继续: 问题ID={}, 索引={}", 
-                                            runId, lastProcessedQuestionId, lastProcessedQuestionIndex);
-                                
-                                // 从断点处继续处理
-                                startRunAnswerGenerationFromCheckpoint(run, questions, batch.getAnswerRepeatCount(), shouldStop);
-                            } else {
-                                logger.info("运行{}没有断点信息，将从头开始处理", runId);
-                                
-                                // 从头开始处理
-                                startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount(), shouldStop);
-                            }
-                            
-                            logger.info("批次{}的运行{}处理已完成", batchId, runId);
-                        } catch (Exception e) {
-                            logger.error("处理运行{}时发生错误: {}", runId, e.getMessage(), e);
-                            // 更新运行状态为失败
-                            updateRunStatus(run, RunStatus.FAILED, e.getMessage());
-                        }
-                    }, modelExecutor);
+                logger.info("运行{}状态已更新为GENERATING_ANSWERS", runId);
+                
+                // 更新批次的lastProcessedRun为当前运行
+                jdbcTemplate.update(
+                    "UPDATE answer_generation_batches SET last_processed_run_id = ? WHERE id = ?",
+                    runId, batchId);
+                logger.info("批次{}的last_processed_run_id已更新为{}", batchId, runId);
+                
+                // 检查是否有断点信息
+                Long lastProcessedQuestionId = run.getLastProcessedQuestionId();
+                Integer lastProcessedQuestionIndex = run.getLastProcessedQuestionIndex();
+                
+                if (lastProcessedQuestionId != null && lastProcessedQuestionIndex != null && lastProcessedQuestionIndex >= 0) {
+                    logger.info("运行{}有断点信息，将从断点处继续: 问题ID={}, 索引={}", 
+                                runId, lastProcessedQuestionId, lastProcessedQuestionIndex);
                     
-                    // 添加到futures列表
-                    runFutures.add(future);
+                    // 从断点处继续处理
+                    startRunAnswerGenerationFromCheckpoint(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
+                } else {
+                    logger.info("运行{}没有断点信息，将从头开始处理", runId);
+                    
+                    // 从头开始处理
+                    startRunAnswerGeneration(run, questions, batch.getAnswerRepeatCount(), new AtomicBoolean(false));
                 }
                 
-                // 等待所有运行处理完成
-                CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-                    runFutures.toArray(new CompletableFuture[0])
-                );
-                
-                try {
-                    // 等待所有运行完成，但设置一个超时时间（避免永久等待）
-                    allFutures.get(24, TimeUnit.HOURS); // 设置24小时超时
-                    logger.info("批次{}的所有模型运行已完成", batchId);
-                } catch (Exception e) {
-                    logger.error("等待批次{}的运行完成时发生错误: {}", batchId, e.getMessage(), e);
-                }
-                
-            } finally {
-                // 关闭线程池
-                modelExecutor.shutdown();
-                try {
-                    // 等待线程池优雅关闭
-                    if (!modelExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
-                        modelExecutor.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    modelExecutor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
+                logger.info("批次{}的运行{}处理已启动", batchId, runId);
             }
             
             // 批次处理完成后，检查所有运行状态并更新批次状态

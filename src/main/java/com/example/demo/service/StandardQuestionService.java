@@ -147,4 +147,16 @@ public interface StandardQuestionService {
     Map<String, Object> findQuestionsByDataset(Long datasetId, Boolean isInDataset, Boolean onlyLatest, 
                                           Boolean onlyLatestVersion, Boolean onlyWithStandardAnswers, 
                                           List<String> tags, String keyword, Pageable pageable);
+
+    /**
+     * 搜索标准问题
+     * @param tags 标签列表
+     * @param keyword 关键词
+     * @param userId 当前用户ID，用于判断用户是否已回答
+     * @param onlyLatest 是否只返回叶子节点（最新版本，没有子问题的版本）
+     * @param onlyWithStandardAnswers 是否只返回有标准答案的问题
+     * @param pageable 分页参数
+     * @return 搜索结果，包含问题列表和额外信息
+     */
+    Map<String, Object> searchQuestions(List<String> tags, String keyword, Long userId, Boolean onlyLatest, Boolean onlyWithStandardAnswers, Pageable pageable);
 } 
