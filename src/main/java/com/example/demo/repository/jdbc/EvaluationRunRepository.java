@@ -1,18 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.EvaluationRun;
-import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
-import com.example.demo.entity.jdbc.Evaluator;
-import com.example.demo.entity.jdbc.ModelAnswerRun;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.data.domain.Pageable;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -22,9 +9,20 @@ import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationRun.RunStatus;
+import com.example.demo.entity.jdbc.ModelAnswerRun;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -40,18 +38,18 @@ public class EvaluationRunRepository {
             "INSERT INTO evaluation_runs (model_answer_run_id, evaluator_id, run_name, run_description, " +
             "run_time, start_time, end_time, status, parameters, error_message, created_by_user_id, " +
             "last_processed_answer_id, progress_percentage, last_activity_time, completed_answers_count, " +
-            "total_answers_count, failed_evaluations_count, resume_count, completed_at, last_checkpoint_id, " +
+            "total_answers_count, failed_evaluations_count, resume_count, completed_at, " +
             "pause_reason, pause_time, paused_by_user_id, timeout_seconds, is_auto_resume, " +
             "auto_checkpoint_interval, current_batch_start_id, current_batch_end_id, batch_size, " +
             "retry_count, max_retries, last_error_time, consecutive_errors, last_updated) " +
-            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-            "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
+            "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     
     private static final String SQL_UPDATE = 
             "UPDATE evaluation_runs SET model_answer_run_id=?, evaluator_id=?, run_name=?, run_description=?, " +
             "run_time=?, start_time=?, end_time=?, status=?, parameters=?, error_message=?, created_by_user_id=?, " +
             "last_processed_answer_id=?, progress_percentage=?, last_activity_time=?, completed_answers_count=?, " +
-            "total_answers_count=?, failed_evaluations_count=?, resume_count=?, completed_at=?, last_checkpoint_id=?, " +
+            "total_answers_count=?, failed_evaluations_count=?, resume_count=?, completed_at=?, " +
             "pause_reason=?, pause_time=?, paused_by_user_id=?, timeout_seconds=?, is_auto_resume=?, " +
             "auto_checkpoint_interval=?, current_batch_start_id=?, current_batch_end_id=?, batch_size=?, " +
             "retry_count=?, max_retries=?, last_error_time=?, consecutive_errors=?, last_updated=? " +
@@ -239,92 +237,85 @@ public class EvaluationRunRepository {
             ps.setTimestamp(18, evaluationRun.getCompletedAt() != null ? 
                     Timestamp.valueOf(evaluationRun.getCompletedAt()) : null);
             
-            // 设置最后检查点ID
-            if (evaluationRun.getLastCheckpointId() != null) {
-                ps.setLong(19, evaluationRun.getLastCheckpointId());
-            } else {
-                ps.setNull(19, Types.BIGINT);
-            }
-            
             // 设置暂停原因
-            ps.setString(20, evaluationRun.getPauseReason());
+            ps.setString(19, evaluationRun.getPauseReason());
             
             // 设置暂停时间
-            ps.setTimestamp(21, evaluationRun.getPauseTime() != null ? 
+            ps.setTimestamp(20, evaluationRun.getPauseTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getPauseTime()) : null);
             
             // 设置暂停操作用户ID
             if (evaluationRun.getPausedByUserId() != null) {
-                ps.setLong(22, evaluationRun.getPausedByUserId());
+                ps.setLong(21, evaluationRun.getPausedByUserId());
             } else {
-                ps.setNull(22, Types.BIGINT);
+                ps.setNull(21, Types.BIGINT);
             }
             
             // 设置超时时间
             if (evaluationRun.getTimeoutSeconds() != null) {
-                ps.setInt(23, evaluationRun.getTimeoutSeconds());
+                ps.setInt(22, evaluationRun.getTimeoutSeconds());
             } else {
-                ps.setInt(23, 3600); // 默认1小时
+                ps.setInt(22, 3600); // 默认1小时
             }
             
             // 设置是否自动恢复
-            ps.setBoolean(24, evaluationRun.getIsAutoResume());
+            ps.setBoolean(23, evaluationRun.getIsAutoResume());
             
             // 设置自动检查点间隔
             if (evaluationRun.getAutoCheckpointInterval() != null) {
-                ps.setInt(25, evaluationRun.getAutoCheckpointInterval());
+                ps.setInt(24, evaluationRun.getAutoCheckpointInterval());
             } else {
-                ps.setInt(25, 60); // 默认60分钟
+                ps.setInt(24, 60); // 默认60分钟
             }
             
             // 设置当前批次起始ID
             if (evaluationRun.getCurrentBatchStartId() != null) {
-                ps.setLong(26, evaluationRun.getCurrentBatchStartId());
+                ps.setLong(25, evaluationRun.getCurrentBatchStartId());
             } else {
-                ps.setNull(26, Types.BIGINT);
+                ps.setNull(25, Types.BIGINT);
             }
             
             // 设置当前批次结束ID
             if (evaluationRun.getCurrentBatchEndId() != null) {
-                ps.setLong(27, evaluationRun.getCurrentBatchEndId());
+                ps.setLong(26, evaluationRun.getCurrentBatchEndId());
             } else {
-                ps.setNull(27, Types.BIGINT);
+                ps.setNull(26, Types.BIGINT);
             }
             
             // 设置批次大小
             if (evaluationRun.getBatchSize() != null) {
-                ps.setInt(28, evaluationRun.getBatchSize());
+                ps.setInt(27, evaluationRun.getBatchSize());
             } else {
-                ps.setInt(28, 50); // 默认50
+                ps.setInt(27, 50); // 默认50
             }
             
             // 设置重试次数
             if (evaluationRun.getRetryCount() != null) {
-                ps.setInt(29, evaluationRun.getRetryCount());
+                ps.setInt(28, evaluationRun.getRetryCount());
             } else {
-                ps.setInt(29, 0);
+                ps.setInt(28, 0);
             }
             
             // 设置最大重试次数
             if (evaluationRun.getMaxRetries() != null) {
-                ps.setInt(30, evaluationRun.getMaxRetries());
+                ps.setInt(29, evaluationRun.getMaxRetries());
             } else {
-                ps.setInt(30, 3); // 默认3次
+                ps.setInt(29, 3); // 默认3次
             }
             
             // 设置最后错误时间
-            ps.setTimestamp(31, evaluationRun.getLastErrorTime() != null ? 
+            ps.setTimestamp(30, evaluationRun.getLastErrorTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastErrorTime()) : null);
             
             // 设置连续错误次数
             if (evaluationRun.getConsecutiveErrors() != null) {
-                ps.setInt(32, evaluationRun.getConsecutiveErrors());
+                ps.setInt(31, evaluationRun.getConsecutiveErrors());
             } else {
-                ps.setInt(32, 0);
+                ps.setInt(31, 0);
             }
             
             // 设置最后更新时间
-            ps.setTimestamp(33, evaluationRun.getLastUpdated() != null ? 
+            ps.setTimestamp(32, evaluationRun.getLastUpdated() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastUpdated()) : null);
             
             return ps;
@@ -459,96 +450,89 @@ public class EvaluationRunRepository {
             ps.setTimestamp(19, evaluationRun.getCompletedAt() != null ? 
                     Timestamp.valueOf(evaluationRun.getCompletedAt()) : null);
             
-            // 设置最后检查点ID
-            if (evaluationRun.getLastCheckpointId() != null) {
-                ps.setLong(20, evaluationRun.getLastCheckpointId());
-            } else {
-                ps.setNull(20, Types.BIGINT);
-            }
-            
             // 设置暂停原因
-            ps.setString(21, evaluationRun.getPauseReason());
+            ps.setString(20, evaluationRun.getPauseReason());
             
             // 设置暂停时间
-            ps.setTimestamp(22, evaluationRun.getPauseTime() != null ? 
+            ps.setTimestamp(21, evaluationRun.getPauseTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getPauseTime()) : null);
             
             // 设置暂停操作用户ID
             if (evaluationRun.getPausedByUserId() != null) {
-                ps.setLong(23, evaluationRun.getPausedByUserId());
+                ps.setLong(22, evaluationRun.getPausedByUserId());
             } else {
-                ps.setNull(23, Types.BIGINT);
+                ps.setNull(22, Types.BIGINT);
             }
             
             // 设置超时时间
             if (evaluationRun.getTimeoutSeconds() != null) {
-                ps.setInt(24, evaluationRun.getTimeoutSeconds());
+                ps.setInt(23, evaluationRun.getTimeoutSeconds());
             } else {
-                ps.setInt(24, 3600); // 默认1小时
+                ps.setInt(23, 3600); // 默认1小时
             }
             
             // 设置是否自动恢复
-            ps.setBoolean(25, evaluationRun.getIsAutoResume());
+            ps.setBoolean(24, evaluationRun.getIsAutoResume());
             
             // 设置自动检查点间隔
             if (evaluationRun.getAutoCheckpointInterval() != null) {
-                ps.setInt(26, evaluationRun.getAutoCheckpointInterval());
+                ps.setInt(25, evaluationRun.getAutoCheckpointInterval());
             } else {
-                ps.setInt(26, 60); // 默认60分钟
+                ps.setInt(25, 60); // 默认60分钟
             }
             
             // 设置当前批次起始ID
             if (evaluationRun.getCurrentBatchStartId() != null) {
-                ps.setLong(27, evaluationRun.getCurrentBatchStartId());
+                ps.setLong(26, evaluationRun.getCurrentBatchStartId());
             } else {
-                ps.setNull(27, Types.BIGINT);
+                ps.setNull(26, Types.BIGINT);
             }
             
             // 设置当前批次结束ID
             if (evaluationRun.getCurrentBatchEndId() != null) {
-                ps.setLong(28, evaluationRun.getCurrentBatchEndId());
+                ps.setLong(27, evaluationRun.getCurrentBatchEndId());
             } else {
-                ps.setNull(28, Types.BIGINT);
+                ps.setNull(27, Types.BIGINT);
             }
             
             // 设置批次大小
             if (evaluationRun.getBatchSize() != null) {
-                ps.setInt(29, evaluationRun.getBatchSize());
+                ps.setInt(28, evaluationRun.getBatchSize());
             } else {
-                ps.setInt(29, 50); // 默认50
+                ps.setInt(28, 50); // 默认50
             }
             
             // 设置重试次数
             if (evaluationRun.getRetryCount() != null) {
-                ps.setInt(30, evaluationRun.getRetryCount());
+                ps.setInt(29, evaluationRun.getRetryCount());
             } else {
-                ps.setInt(30, 0);
+                ps.setInt(29, 0);
             }
             
             // 设置最大重试次数
             if (evaluationRun.getMaxRetries() != null) {
-                ps.setInt(31, evaluationRun.getMaxRetries());
+                ps.setInt(30, evaluationRun.getMaxRetries());
             } else {
-                ps.setInt(31, 3); // 默认3次
+                ps.setInt(30, 3); // 默认3次
             }
             
             // 设置最后错误时间
-            ps.setTimestamp(32, evaluationRun.getLastErrorTime() != null ? 
+            ps.setTimestamp(31, evaluationRun.getLastErrorTime() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastErrorTime()) : null);
             
             // 设置连续错误次数
             if (evaluationRun.getConsecutiveErrors() != null) {
-                ps.setInt(33, evaluationRun.getConsecutiveErrors());
+                ps.setInt(32, evaluationRun.getConsecutiveErrors());
             } else {
-                ps.setInt(33, 0);
+                ps.setInt(32, 0);
             }
             
             // 设置最后更新时间
-            ps.setTimestamp(34, evaluationRun.getLastUpdated() != null ? 
+            ps.setTimestamp(33, evaluationRun.getLastUpdated() != null ? 
                     Timestamp.valueOf(evaluationRun.getLastUpdated()) : null);
             
             // 设置ID
-            ps.setLong(35, evaluationRun.getId());
+            ps.setLong(34, evaluationRun.getId());
             
             return ps;
         });

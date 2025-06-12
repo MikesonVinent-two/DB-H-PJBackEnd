@@ -93,6 +93,23 @@ public class RawQuestionRepository {
             "GROUP BY rq.ID " +
             "HAVING COUNT(DISTINCT t.TAG_NAME) = ?";
     
+    private static final String SQL_FIND_BY_IDS_AND_TAG_NAMES = 
+            "SELECT DISTINCT rq.* FROM RAW_QUESTIONS rq " +
+            "JOIN RAW_QUESTION_TAGS qt ON rq.ID = qt.RAW_QUESTION_ID " +
+            "JOIN TAGS t ON qt.TAG_ID = t.ID " +
+            "WHERE rq.ID IN (%s) AND t.TAG_NAME IN (%s) " +
+            "GROUP BY rq.ID " +
+            "HAVING COUNT(DISTINCT t.TAG_NAME) = ? " +
+            "ORDER BY rq.ID DESC LIMIT ? OFFSET ?";
+    
+    private static final String SQL_COUNT_BY_IDS_AND_TAG_NAMES = 
+            "SELECT COUNT(DISTINCT rq.ID) FROM RAW_QUESTIONS rq " +
+            "JOIN RAW_QUESTION_TAGS qt ON rq.ID = qt.RAW_QUESTION_ID " +
+            "JOIN TAGS t ON qt.TAG_ID = t.ID " +
+            "WHERE rq.ID IN (%s) AND t.TAG_NAME IN (%s) " +
+            "GROUP BY rq.ID " +
+            "HAVING COUNT(DISTINCT t.TAG_NAME) = ?";
+    
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM RAW_QUESTIONS";
     
@@ -457,7 +474,7 @@ public class RawQuestionRepository {
                 countParams.toArray()
             );
         } catch (EmptyResultDataAccessException e) {
-            // 如果没有结果，则总数?
+            // 如果没有结果，则总数为0
         }
         
         // 查询数据
@@ -465,6 +482,70 @@ public class RawQuestionRepository {
         
         // 创建完整参数列表（包括分页参数）
         List<Object> params = new ArrayList<>(tagNames);
+        params.add(tagCount);
+        params.add(pageable.getPageSize());
+        params.add(pageable.getOffset());
+        
+        List<RawQuestion> content = jdbcTemplate.query(
+            querySql,
+            new RawQuestionRowMapper(),
+            params.toArray()
+        );
+        
+        return new PageImpl<>(content, pageable, total != null ? total : 0);
+    }
+
+    /**
+     * 根据ID列表和标签名称查询问题
+     *
+     * @param ids 问题ID列表
+     * @param tagNames 标签名称列表
+     * @param tagCount 标签数量
+     * @param pageable 分页参数
+     * @return 分页结果
+     */
+    public Page<RawQuestion> findByIdsAndTagNames(List<Long> ids, List<String> tagNames, Long tagCount, Pageable pageable) {
+        if (ids.isEmpty() || tagNames.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        
+        // 构建ID的IN子句
+        String idPlaceholders = String.join(",", ids.stream()
+            .map(id -> "?")
+            .collect(Collectors.toList()));
+        
+        // 构建标签的IN子句
+        String tagPlaceholders = String.join(",", tagNames.stream()
+            .map(tag -> "?")
+            .collect(Collectors.toList()));
+        
+        // 查询总数
+        String countSql = String.format(SQL_COUNT_BY_IDS_AND_TAG_NAMES, idPlaceholders, tagPlaceholders);
+        
+        // 创建计数查询参数
+        List<Object> countParams = new ArrayList<>();
+        countParams.addAll(ids);
+        countParams.addAll(tagNames);
+        countParams.add(tagCount);
+        
+        Integer total = 0;
+        try {
+            total = jdbcTemplate.queryForObject(
+                countSql,
+                Integer.class,
+                countParams.toArray()
+            );
+        } catch (EmptyResultDataAccessException e) {
+            // 如果没有结果，则总数为0
+        }
+        
+        // 查询数据
+        String querySql = String.format(SQL_FIND_BY_IDS_AND_TAG_NAMES, idPlaceholders, tagPlaceholders);
+        
+        // 创建完整参数列表（包括分页参数）
+        List<Object> params = new ArrayList<>();
+        params.addAll(ids);
+        params.addAll(tagNames);
         params.add(tagCount);
         params.add(pageable.getPageSize());
         params.add(pageable.getOffset());

@@ -2,17 +2,18 @@ package com.example.demo.service.impl;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +30,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -37,6 +40,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -320,9 +325,16 @@ public class EvaluationServiceImpl implements EvaluationService {
             promptBuilder.append("}");
         }
         
-        return promptBuilder.toString();
+                String finalPrompt = promptBuilder.toString();
+        
+        // 打印组装好的评测提示词
+        logger.info("\n========== 组装好的评测提示词 ==========");
+        logger.info(finalPrompt);
+        logger.info("========================================\n");
+        
+        return finalPrompt;
     }
-    
+
     /**
      * 组装评测提示词，使用指定的主观题评测提示词ID
      */
@@ -809,7 +821,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 添加系统消息
             Map<String, String> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请以JSON格式返回评测结果。");
+            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请以JSON格式返回评测结果，并保证有一个键叫做'总分'。");
             messages.add(systemMessage);
             
             // 添加用户消息
@@ -824,6 +836,18 @@ public class EvaluationServiceImpl implements EvaluationService {
             
             // 发送请求
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
+            // 打印完整请求内容
+            try {
+                String requestJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestBody);
+                logger.info("\n========== 评测请求内容 ==========");
+                logger.info("请求URL: " + apiUrl);
+                logger.info("请求头: Authorization: Bearer " + (apiKey != null ? apiKey.substring(0, 3) + "..." : "null"));
+                logger.info("请求体: \n" + requestJson);
+                logger.info("====================================\n");
+            } catch (Exception e) {
+                logger.error("打印请求内容失败: {}", e.getMessage());
+            }
             
             try {
                 logger.info("正在向AI服务发送请求: {}", apiUrl);
@@ -971,7 +995,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 添加系统消息
             Map<String, String> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请以JSON格式返回评测结果。");
+            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量，并保证有一个键叫做'总分'。");
             messages.add(systemMessage);
             
             // 添加用户消息
@@ -986,6 +1010,18 @@ public class EvaluationServiceImpl implements EvaluationService {
             
             // 发送请求
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
+            // 打印完整请求内容
+            try {
+                String requestJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestBody);
+                logger.info("\n========== 评测请求内容 ==========");
+                logger.info("请求URL: " + apiUrl);
+                logger.info("请求头: Authorization: Bearer " + (apiKey != null ? apiKey.substring(0, 3) + "..." : "null"));
+                logger.info("请求体: \n" + requestJson);
+                logger.info("====================================\n");
+            } catch (Exception e) {
+                logger.error("打印请求内容失败: {}", e.getMessage());
+            }
             
             try {
                 logger.info("发送请求到: {}", apiUrl);
@@ -1119,6 +1155,12 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Override
     public List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType) {
         return evaluationCriterionRepository.findByQuestionType(questionType);
+    }
+    
+    @Override
+    public List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType, int page, int size) {
+        // 获取未删除的评测标准并分页
+        return evaluationCriterionRepository.findActiveByQuestionTypeOrderByOrderIndexPaged(questionType, page, size);
     }
     
     @Override
@@ -2334,7 +2376,24 @@ public class EvaluationServiceImpl implements EvaluationService {
             for (Map<String, Object> detailScore : detailScores) {
                 EvaluationDetail detail = new EvaluationDetail();
                 detail.setEvaluation(evaluation);
-                detail.setCriterionName((String) detailScore.get("criterion"));
+                
+                // 获取评测标准名称
+                String criterionName = (String) detailScore.get("criterion");
+                detail.setCriterionName(criterionName);
+                
+                // 尝试查找对应的评测标准
+                if (detailScore.containsKey("criterionId") && detailScore.get("criterionId") != null) {
+                    Long criterionId = Long.valueOf(detailScore.get("criterionId").toString());
+                    evaluationCriterionRepository.findById(criterionId).ifPresent(detail::setCriterion);
+                } else {
+                    // 如果没有criterionId，可以尝试通过criterionName查找
+                    List<EvaluationCriterion> matchingCriteria = evaluationCriterionRepository.findByCriterionName(criterionName);
+                    if (!matchingCriteria.isEmpty()) {
+                        detail.setCriterion(matchingCriteria.get(0));
+                    }
+                    // 如果找不到对应的评测标准，criterion将保持为null，这是可以接受的
+                }
+                
                 detail.setScore(new BigDecimal(detailScore.get("score").toString()));
                 detail.setComments((String) detailScore.get("comments"));
                 detail.setCreatedAt(LocalDateTime.now());
@@ -3497,7 +3556,22 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Override
     @Transactional
     public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId) {
-        logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}", batchId, evaluatorId, userId, subjectivePromptId);
+        return evaluateBatchSubjectiveQuestions(batchId, evaluatorId, userId, subjectivePromptId, null, null);
+    }
+
+    // 删除重复的方法
+
+    @Transactional
+    public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId, Long evaluationAssemblyConfigId) {
+        return evaluateBatchSubjectiveQuestions(batchId, evaluatorId, userId, subjectivePromptId, evaluationAssemblyConfigId, null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, 
+            Long subjectivePromptId, Long evaluationAssemblyConfigId, List<Long> criteriaIds) {
+        logger.info("批量评测主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 提示词ID: {}, 组装配置ID: {}, 评测标准IDs: {}", 
+                batchId, evaluatorId, userId, subjectivePromptId, evaluationAssemblyConfigId, criteriaIds);
         
         // 验证评测者和用户
         Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
@@ -3511,21 +3585,39 @@ public class EvaluationServiceImpl implements EvaluationService {
         // 获取或创建评测运行记录
         EvaluationRun evaluationRun = getOrCreateEvaluationRun(batchId, evaluatorId, userId);
         
+        // 设置评测提示词ID和评测组装配置ID
+        if (evaluationRun.getClass().getDeclaredMethods().toString().contains("setSubjectivePromptId")) {
+            try {
+                evaluationRun.getClass().getMethod("setSubjectivePromptId", Long.class).invoke(evaluationRun, subjectivePromptId);
+            } catch (Exception e) {
+                logger.warn("无法设置主观题评测提示词ID: {}", e.getMessage());
+            }
+        }
+        
+        if (evaluationRun.getClass().getDeclaredMethods().toString().contains("setEvaluationAssemblyConfigId")) {
+            try {
+                evaluationRun.getClass().getMethod("setEvaluationAssemblyConfigId", Long.class).invoke(evaluationRun, evaluationAssemblyConfigId);
+            } catch (Exception e) {
+                logger.warn("无法设置评测组装配置ID: {}", e.getMessage());
+            }
+        }
+        
+        evaluationRunRepository.save(evaluationRun);
+        
         try {
-            // 获取所有需要评测的主观题回答
-                                    // 获取该批次的所有回答
-                        List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
-                        
-                        // 过滤出主观题的回答
-                        answers = answers.stream()
-                                .filter(answer -> {
-                                    if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                                        logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
-                                        return false;
-                                    }
-                                    return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
-                                })
-                                .collect(Collectors.toList());
+            // 获取该批次的所有回答
+            List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
+            
+            // 过滤出主观题的回答
+            answers = answers.stream()
+                    .filter(answer -> {
+                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
+                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
+                            return false;
+                        }
+                        return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
+                    })
+                    .collect(Collectors.toList());
             
             if (answers.isEmpty()) {
                 logger.info("批次中没有主观题回答需要评测，批次ID: {}", batchId);
@@ -3535,595 +3627,111 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 更新总回答数
             evaluationRun.setTotalAnswersCount(answers.size());
             
-            // 获取评测标准
-            List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
-            
-            // 如果是恢复评测，从上次中断的位置继续
-            Long startAnswerId = evaluationRun.getCurrentBatchStartId();
-            if (startAnswerId == null) {
-                startAnswerId = answers.get(0).getId();
-                evaluationRun.setCurrentBatchStartId(startAnswerId);
-            }
-            
-            // 设置批次大小
-            int batchSize = evaluationRun.getBatchSize() != null ? evaluationRun.getBatchSize() : 50;
-            
-            // 分批处理回答
-            for (int i = 0; i < answers.size(); i += batchSize) {
-                // 检查是否需要暂停
-                if (evaluationRun.getStatus() == RunStatus.PAUSED) {
-                    logger.info("评测运行已暂停，批次ID: {}", batchId);
-                    break;
-                }
-                
-                // 获取当前批次的回答
-                int endIndex = Math.min(i + batchSize, answers.size());
-                List<LlmAnswer> batchAnswers = answers.subList(i, endIndex);
-                
-                try {
-                    // 更新当前批次信息
-                    evaluationRun.setCurrentBatchStartId(batchAnswers.get(0).getId());
-                    evaluationRun.setCurrentBatchEndId(batchAnswers.get(batchAnswers.size() - 1).getId());
-                    evaluationRun.setRetryCount(0);
-                    evaluationRunRepository.save(evaluationRun);
-                    
-                    // 处理当前批次
-                    processBatchAnswers(batchAnswers, evaluator, criteria, evaluationRun, userId);
-                    
-                    // 更新进度
-                    updateEvaluationProgress(evaluationRun, endIndex, answers.size());
-                    
-                } catch (Exception e) {
-                    handleBatchProcessingError(evaluationRun, e);
-                    
-                    // 如果超过最大重试次数，暂停评测
-                    if (evaluationRun.getRetryCount() >= evaluationRun.getMaxRetries()) {
-                        pauseEvaluationRun(evaluationRun.getId());
-                        break;
+            // 获取指定的评测标准
+            List<EvaluationCriterion> criteria;
+            if (criteriaIds != null && !criteriaIds.isEmpty()) {
+                // 使用JDBC查询指定ID的评测标准
+                StringBuilder idPlaceholders = new StringBuilder();
+                for (int i = 0; i < criteriaIds.size(); i++) {
+                    idPlaceholders.append("?");
+                    if (i < criteriaIds.size() - 1) {
+                        idPlaceholders.append(",");
                     }
                 }
-            }
-            
-            // 检查是否所有回答都已评测完成
-            if (evaluationRun.getCompletedAnswersCount() >= evaluationRun.getTotalAnswersCount()) {
-                completeEvaluationRun(evaluationRun);
-            }
-            
-            // 返回评测结果
-            return getEvaluationRunProgress(evaluationRun.getId());
-            
-        } catch (Exception e) {
-            logger.error("批量评测主观题失败", e);
-            evaluationRun.setStatus(RunStatus.FAILED);
-            evaluationRun.setErrorMessage(e.getMessage());
-            evaluationRunRepository.save(evaluationRun);
-            throw new RuntimeException("批量评测主观题失败: " + e.getMessage(), e);
-        }
-    }
-    
-    /**
-     * 获取或创建评测运行记录
-     */
-    private EvaluationRun getOrCreateEvaluationRun(Long batchId, Long evaluatorId, Long userId) {
-        // 查找是否存在未完成的评测运行
-        List<EvaluationRun> existingRuns = evaluationRunRepository
-                .findByModelAnswerRunIdAndEvaluatorIdAndStatusNot(
-                        batchId, evaluatorId, RunStatus.COMPLETED);
-        
-        if (!existingRuns.isEmpty()) {
-            return existingRuns.get(0);
-        }
-        
-        // 创建新的评测运行记录
-        EvaluationRun evaluationRun = new EvaluationRun();
-        evaluationRun.setModelAnswerRunId(batchId);
-        evaluationRun.setEvaluatorId(evaluatorId);
-        evaluationRun.setRunName("主观题批量评测-" + batchId);
-        evaluationRun.setStatus(RunStatus.IN_PROGRESS);
-        evaluationRun.setCreatedBy(userId);
-        evaluationRun.setRunTime(LocalDateTime.now());
-        evaluationRun.setLastActivityTime(LocalDateTime.now());
-        evaluationRun.setBatchSize(50);
-        evaluationRun.setMaxRetries(3);
-        
-        return evaluationRunRepository.save(evaluationRun);
-    }
-    
-    /**
-     * 处理一批回答
-     */
-    private void processBatchAnswers(List<LlmAnswer> answers, Evaluator evaluator, 
-                                   List<EvaluationCriterion> criteria, 
-                                   EvaluationRun evaluationRun, Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
-        
-                    for (LlmAnswer answer : answers) {
-                // 每次处理答案前检查中断标志
-                if (shouldInterruptEvaluation(evaluationRun.getId())) {
-                    logger.info("检测到评测运行{}的中断信号，停止处理剩余答案", evaluationRun.getId());
-                    return;
+                
+                String criteriaQuery = "SELECT * FROM EVALUATION_CRITERIA WHERE ID IN (" + idPlaceholders + ")";
+                List<Map<String, Object>> criteriaData = jdbcTemplate.queryForList(criteriaQuery, criteriaIds.toArray());
+                
+                criteria = new ArrayList<>();
+                for (Map<String, Object> data : criteriaData) {
+                    EvaluationCriterion criterion = new EvaluationCriterion();
+                    criterion.setId((Long) data.get("ID"));
+                    criterion.setName((String) data.get("NAME"));
+                    criterion.setDescription((String) data.get("DESCRIPTION"));
+                    criterion.setDataType(EvaluationCriterion.DataType.valueOf((String) data.get("DATA_TYPE")));
+                    criterion.setScoreRange((String) data.get("SCORE_RANGE"));
+                    criterion.setWeight(new BigDecimal(((Number) data.get("WEIGHT")).toString()));
+                    criterion.setIsRequired((Boolean) data.get("IS_REQUIRED"));
+                    criteria.add(criterion);
                 }
                 
-                try {
-                    // 评测单个回答
-                    evaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria, evaluationRun);
-                    
-                    // 更新完成数量
-                    evaluationRun.setCompletedAnswersCount(evaluationRun.getCompletedAnswersCount() + 1);
-                    evaluationRun.setConsecutiveErrors(0);  // 重置连续错误计数
-                
-            } catch (Exception e) {
-                logger.error("评测单个回答失败，回答ID: " + answer.getId(), e);
-                evaluationRun.setFailedEvaluationsCount(evaluationRun.getFailedEvaluationsCount() + 1);
-                evaluationRun.setConsecutiveErrors(evaluationRun.getConsecutiveErrors() + 1);
-                
-                // 如果连续错误次数过多，抛出异常中断当前批次
-                if (evaluationRun.getConsecutiveErrors() >= 3) {
-                    throw new RuntimeException("连续评测失败次数过多");
+                if (criteria.isEmpty()) {
+                    throw new IllegalArgumentException("未找到指定的评测标准");
                 }
-            }
-        }
-        
-        // 更新评测运行状态
-        evaluationRun.setLastActivityTime(LocalDateTime.now());
-        evaluationRunRepository.save(evaluationRun);
-    }
-    
-    /**
-     * 处理批处理错误
-     */
-    private void handleBatchProcessingError(EvaluationRun evaluationRun, Exception e) {
-        logger.error("处理批次失败", e);
-        
-        evaluationRun.setRetryCount(evaluationRun.getRetryCount() + 1);
-        evaluationRun.setLastErrorTime(LocalDateTime.now());
-        evaluationRun.setErrorMessage(e.getMessage());
-        
-        // 如果配置了自动恢复，等待一段时间后继续
-        if (evaluationRun.getIsAutoResume()) {
-            try {
-                Thread.sleep(5000); // 等待5秒后重试
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        
-        evaluationRunRepository.save(evaluationRun);
-    }
-    
-    /**
-     * 更新评测进度
-     */
-    private void updateEvaluationProgress(EvaluationRun evaluationRun, int currentCount, int totalCount) {
-        BigDecimal progress = new BigDecimal(currentCount)
-                .multiply(new BigDecimal(100))
-                .divide(new BigDecimal(totalCount), 2, RoundingMode.HALF_UP);
-        
-        evaluationRun.setProgressPercentage(progress);
-        evaluationRun.setLastActivityTime(LocalDateTime.now());
-        evaluationRunRepository.save(evaluationRun);
-    }
-    
-    /**
-     * 完成评测运行
-     */
-    private void completeEvaluationRun(EvaluationRun evaluationRun) {
-        evaluationRun.setStatus(RunStatus.COMPLETED);
-        evaluationRun.setCompletedAt(LocalDateTime.now());
-        evaluationRun.setProgressPercentage(new BigDecimal(100));
-        evaluationRunRepository.save(evaluationRun);
-        
-        logger.info("评测运行完成，运行ID: {}", evaluationRun.getId());
-    }
-
-    /**
-     * 评测单个主观题回答
-     * 这个方法需要在单独的事务中执行，以避免一个回答的评测失败影响其他回答
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public BigDecimal evaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
-                                        List<EvaluationCriterion> criteria, EvaluationRun evaluationRun) {
-        try {
-            // 确保加载完整的问题信息
-            answer = getLlmAnswerWithQuestions(answer);
-            
-            // 验证数据完整性
-            if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                logger.warn("回答ID: {}关联的标准问题为空，无法进行评测", answer.getId());
-                throw new IllegalStateException("回答关联的标准问题为空，无法进行评测");
-            }
-            
-            // 获取标准问题和参考答案
-            StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
-            
-            // 获取参考答案
-            String referenceAnswer = "";
-            if (question.getQuestionType() == QuestionType.SUBJECTIVE) {
-                // 获取主观题标准答案
-                StandardSubjectiveAnswer standardAnswer = standardSubjectiveAnswerRepository.findByStandardQuestionId(question.getId())
-                    .orElse(null);
-                if (standardAnswer != null) {
-                    referenceAnswer = standardAnswer.getAnswerText();
-                }
-            }
-            
-            // 获取重复索引
-            Integer repeatIndex = answer.getRepeatIndex();
-            if (repeatIndex == null) {
-                repeatIndex = 0;
-            }
-            
-            // 检查是否已经存在评测记录
-            boolean existsBeforeSave = false;
-            List<Evaluation> existingEvaluations = evaluationRepository.findByLlmAnswerIdAndEvaluatorId(answer.getId(), evaluator.getId());
-            if (!existingEvaluations.isEmpty()) {
-                existsBeforeSave = true;
-                logger.info("回答ID: {}已经存在评测记录，将进行覆盖", answer.getId());
-            }
-            
-            // 创建评测记录
-            Evaluation evaluation = new Evaluation();
-            evaluation.setLlmAnswer(answer);
-            evaluation.setEvaluator(evaluator);
-            evaluation.setCreatedByUser(user);
-            evaluation.setEvaluationTime(LocalDateTime.now());
-            evaluation.setStatus(EvaluationStatus.PENDING);
-            
-            // 组装评测提示词
-            String prompt = assembleEvaluationPrompt(
-                    question, 
-                    answer.getAnswerText(), 
-                    referenceAnswer, 
-                    criteria,
-                    evaluationRun);
-            
-            // 调用AI服务进行评测
-            String aiResponse = callAIService(prompt, evaluator.getLlmModel().getId());
-            
-            // 解析评测结果
-            Map<String, Object> evaluationResults = parseAIResponse(aiResponse);
-            
-            // 提取总分
-            BigDecimal score = BigDecimal.ZERO;
-            if (evaluationResults.containsKey("总分")) {
-                try {
-                    score = new BigDecimal(evaluationResults.get("总分").toString());
-                } catch (NumberFormatException e) {
-                    logger.warn("无法解析总分: {}", evaluationResults.get("总分"));
-                }
-            }
-            
-            // 保存评测结果
-            evaluation.setEvaluationResults(evaluationResults);
-            evaluation.setStatus(EvaluationStatus.SUCCESS);
-            
-            // 检查是否存在唯一键约束冲突
-            if (existsBeforeSave) {
-                logger.warn("检测到唯一键约束冲突风险! 该主观题回答(ID:{}, 重复索引:{})已被同一评测者(ID:{})评测过", 
-                    answer.getId(), repeatIndex, evaluator.getId());
-            }
-            
-            // 保存评测记录
-            evaluation = evaluationRepository.save(evaluation);
-            
-            // 在评测记录中保存分数信息
-            // 主观题分数通常是0-10分，需要转换为0-100的标准化分数
-            BigDecimal normalizedScore = score;
-            
-            evaluation.setRawScore(score);
-            evaluation.setNormalizedScore(normalizedScore);
-            evaluation.setScoreType("SUBJECTIVE");
-            evaluation.setScoringMethod("AI");
-            
-            evaluation = evaluationRepository.save(evaluation);
-            
-            logger.info("成功评测主观题回答，回答ID: {}, 重复索引: {}, 评分: {}", answer.getId(), repeatIndex, score);
-            
-            return score;
-        } catch (Exception e) {
-            logger.error("评测主观题回答失败，回答ID: " + answer.getId(), e);
-            throw e;
-        }
-    }
-    
-    // 兼容旧代码的重载方法
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public BigDecimal evaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
-                                        List<EvaluationCriterion> criteria) {
-        return evaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria, null);
-    }
-
-    /**
-     * 重新评测单个主观题回答（强制覆盖已有评测）
-     * 这个方法会删除已有的评测记录，并创建新的评测
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public BigDecimal reEvaluateSingleSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, 
-                                        List<EvaluationCriterion> criteria) {
-        try {
-            // 确保加载完整的问题信息
-            answer = getLlmAnswerWithQuestions(answer);
-            
-            if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                logger.warn("无法评测回答ID: {}，因为其关联的标准问题为空", answer.getId());
-                return BigDecimal.ZERO;
-            }
-            
-            StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
-            
-            // 确保是主观题
-            if (question.getQuestionType() != QuestionType.SUBJECTIVE) {
-                throw new IllegalArgumentException("不是主观题类型: " + question.getId());
-            }
-            
-            // 获取repeatIndex，如果为null则默认为0
-            Integer repeatIndex = answer.getRepeatIndex();
-            if (repeatIndex == null) {
-                repeatIndex = 0;
-            }
-            
-            // 先删除现有评测记录（使用单独的事务）
-            deleteExistingEvaluations(answer.getId(), evaluator.getId());
-            
-            // 获取标准答案
-            StandardSubjectiveAnswer standardAnswer = standardSubjectiveAnswerRepository
-                    .findByStandardQuestionId(question.getId())
-                    .orElseThrow(() -> new IllegalStateException("找不到主观题的标准答案: " + question.getId()));
-            
-            // 创建评测记录
-            Evaluation evaluation = new Evaluation();
-            evaluation.setLlmAnswer(answer);
-            evaluation.setEvaluator(evaluator);
-            evaluation.setEvaluationType(EvaluationType.AI_MODEL);
-            evaluation.setStatus(EvaluationStatus.PROCESSING);
-            evaluation.setCreationTime(LocalDateTime.now());
-            evaluation.setCreatedByUser(user);
-            
-            evaluation = evaluationRepository.save(evaluation);
-            
-            // 调用AI评测
-            Map<String, Object> evaluationResult = evaluateSubjectiveWithAI(
-                    answer.getAnswerText(),
-                    question.getQuestionText(),
-                    standardAnswer.getAnswerText(),
-                    criteria,
-                    evaluator.getId());
-            
-            // 添加重复索引信息
-            evaluationResult.put("repeatIndex", repeatIndex);
-            
-            // 更新评测记录
-            BigDecimal score = new BigDecimal(evaluationResult.get("score").toString());
-            evaluation.setScore(score);
-            evaluation.setComments((String) evaluationResult.get("comments"));
-            evaluation.setEvaluationResults(evaluationResult);
-            evaluation.setStatus(EvaluationStatus.SUCCESS);
-            evaluation.setCompletionTime(LocalDateTime.now());
-            
-            // 保存评测记录
-            evaluation = evaluationRepository.save(evaluation);
-            
-            // 在评测记录中保存分数信息
-            // 主观题分数通常是0-10分，需要转换为0-100的标准化分数
-            BigDecimal normalizedScore = score;
-            
-            evaluation.setRawScore(score);
-            evaluation.setNormalizedScore(normalizedScore);
-            evaluation.setScoreType("SUBJECTIVE");
-            evaluation.setScoringMethod("AI");
-            
-            evaluation = evaluationRepository.save(evaluation);
-            
-            logger.info("成功重新评测主观题回答，回答ID: {}, 重复索引: {}, 评分: {}", answer.getId(), repeatIndex, score);
-            
-            return score;
-        } catch (Exception e) {
-            logger.error("重新评测主观题回答失败，回答ID: " + answer.getId(), e);
-            throw e;
-        }
-    }
-
-    /**
-     * 在单独的事务中删除现有评测记录
-     * 这样可以确保删除操作在创建新评测前完成提交
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void deleteExistingEvaluations(Long llmAnswerId, Long evaluatorId) {
-        // 检查是否已存在相同的评测记录
-        List<Evaluation> existingEvaluations = evaluationRepository.findByLlmAnswerIdAndEvaluatorId(
-                llmAnswerId, evaluatorId);
-        
-        if (!existingEvaluations.isEmpty()) {
-            logger.info("发现已有评测记录，将删除，回答ID: {}, 评测者ID: {}, 记录数: {}", 
-                    llmAnswerId, evaluatorId, existingEvaluations.size());
-            
-            for (Evaluation oldEvaluation : existingEvaluations) {
-                // 不再需要删除AnswerScore记录
-                // 删除关联的评测详情
-                evaluationDetailRepository.deleteByEvaluationId(oldEvaluation.getId());
-            }
-            
-            // 删除评测记录
-            evaluationRepository.deleteAll(existingEvaluations);
-            
-            // 强制刷新以确保删除操作立即生效
-            evaluationRepository.flush();
-        }
-    }
-
-    /**
-     * 实现接口方法，重新评测单个主观题回答
-     */
-    @Override
-    @Transactional
-    public BigDecimal reEvaluateSubjectiveAnswer(Long llmAnswerId, Long evaluatorId, Long userId) {
-        logger.info("开始重新评测主观题回答，回答ID: {}, 评测者ID: {}, 用户ID: {}", 
-                llmAnswerId, evaluatorId, userId);
-        
-        try {
-            // 获取LLM回答
-            LlmAnswer llmAnswer = llmAnswerRepository.findById(llmAnswerId)
-                    .orElseThrow(() -> new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId));
-            
-            // 确保加载完整的问题信息
-            llmAnswer = getLlmAnswerWithQuestions(llmAnswer);
-            
-            // 验证数据完整性
-            if (llmAnswer.getDatasetQuestionMapping() == null || llmAnswer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                logger.warn("回答ID: {}关联的标准问题为空，无法进行评测", llmAnswerId);
-                throw new IllegalStateException("回答关联的标准问题为空，无法进行评测");
-            }
-            
-            // 验证回答是否为主观题
-            StandardQuestion question = llmAnswer.getDatasetQuestionMapping().getStandardQuestion();
-            if (question.getQuestionType() != QuestionType.SUBJECTIVE) {
-                throw new IllegalArgumentException("指定的回答不是主观题: " + llmAnswerId);
-            }
-            
-            // 获取评测者信息
-            Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
-                    .orElseThrow(() -> new EntityNotFoundException("评测者不存在: " + evaluatorId));
-            
-            // 获取用户信息
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new EntityNotFoundException("用户不存在: " + userId));
-            
-            // 获取评测标准
-            List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
-            
-            // 调用实际的重新评测方法
-            BigDecimal score = reEvaluateSingleSubjectiveAnswer(llmAnswer, evaluator, user, criteria);
-            
-            logger.info("重新评测主观题回答成功，回答ID: {}, 得分: {}", llmAnswerId, score);
-            return score;
-            
-        } catch (Exception e) {
-            logger.error("重新评测主观题回答失败", e);
-            throw new RuntimeException("重新评测主观题回答失败: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
-    @Transactional
-    public Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId) {
-        logger.debug("开始批量重新评测批次的主观题，批次ID: {}", batchId);
-        
-        // 验证评测者和用户
-        Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测者: " + evaluatorId));
-        
-        // 验证评测者类型是AI
-        if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
-            throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
-        }
-        
-        // 验证评测者关联了AI模型
-        if (evaluator.getLlmModel() == null) {
-            throw new IllegalArgumentException("评测者未关联AI模型: " + evaluatorId);
-        }
-        
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到指定的用户: " + userId));
-        
-        // 获取批次下的所有模型运行
-        List<ModelAnswerRun> modelRuns = modelAnswerRunRepository.findByAnswerGenerationBatchId(batchId);
-        if (modelRuns.isEmpty()) {
-            throw new IllegalArgumentException("找不到指定批次的模型运行: " + batchId);
-        }
-        
-        // 统计信息
-        Map<String, Object> result = new HashMap<>();
-        int totalAnswers = 0;
-        int successCount = 0;
-        int failedCount = 0;
-        BigDecimal totalScore = BigDecimal.ZERO;
-        
-        // 按重复索引分组的统计数据
-        Map<Integer, Integer> repeatIndexCount = new HashMap<>();
-        Map<Integer, BigDecimal> repeatIndexScoreSum = new HashMap<>();
-        
-        // 获取主观题评测标准
-        List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
-        
-        // 处理每个模型运行
-        for (ModelAnswerRun modelRun : modelRuns) {
-            // 获取该运行下的所有回答
-            List<LlmAnswer> allAnswers = llmAnswerRepository.findByModelAnswerRunIdWithQuestions(modelRun.getId());
-            
-            // 过滤出主观题回答
-            List<LlmAnswer> subjectiveAnswers = allAnswers.stream()
-                    .filter(answer -> {
-                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
-                            return false;
-                        }
-                        StandardQuestion question = answer.getDatasetQuestionMapping().getStandardQuestion();
-                        return question.getQuestionType() == QuestionType.SUBJECTIVE;
-                    })
-                    .collect(Collectors.toList());
-            
-            logger.debug("找到{}个主观题回答需要重新评测", subjectiveAnswers.size());
-            totalAnswers += subjectiveAnswers.size();
-            
-            // 批量重新评测主观题回答
-            for (LlmAnswer answer : subjectiveAnswers) {
-                try {
-                    // 在单独的事务中重新评测每个回答
-                    BigDecimal score = reEvaluateSingleSubjectiveAnswer(answer, evaluator, user, criteria);
-                    
-                    // 更新统计数据
-                    totalScore = totalScore.add(score);
-                    successCount++;
-                    
-                    // 按重复索引更新统计
-                    int repeatIndex = answer.getRepeatIndex() != null ? answer.getRepeatIndex() : 0;
-                    repeatIndexCount.put(repeatIndex, repeatIndexCount.getOrDefault(repeatIndex, 0) + 1);
-                    repeatIndexScoreSum.put(repeatIndex, 
-                            repeatIndexScoreSum.getOrDefault(repeatIndex, BigDecimal.ZERO).add(score));
-                    
-                } catch (Exception e) {
-                    logger.error("重新评测主观题回答失败，回答ID: " + answer.getId(), e);
-                    failedCount++;
-                }
-            }
-        }
-        
-        // 计算总体统计数据
-        result.put("totalAnswers", totalAnswers);
-        result.put("successCount", successCount);
-        result.put("failedCount", failedCount);
-        
-        // 计算平均分
-        BigDecimal averageScore = BigDecimal.ZERO;
-        if (successCount > 0) {
-            averageScore = totalScore.divide(new BigDecimal(successCount), 2, RoundingMode.HALF_UP);
-        }
-        result.put("averageScore", averageScore);
-        
-        // 按重复索引计算统计数据
-        Map<String, Object> repeatIndexStats = new HashMap<>();
-        for (Integer repeatIndex : repeatIndexCount.keySet()) {
-            Map<String, Object> indexStat = new HashMap<>();
-            int count = repeatIndexCount.get(repeatIndex);
-            BigDecimal sum = repeatIndexScoreSum.get(repeatIndex);
-            
-            indexStat.put("count", count);
-            
-            // 计算该重复索引的平均分
-            if (count > 0) {
-                BigDecimal average = sum.divide(new BigDecimal(count), 2, RoundingMode.HALF_UP);
-                indexStat.put("averageScore", average);
             } else {
-                indexStat.put("averageScore", BigDecimal.ZERO);
+                // 如果未指定评测标准，则使用默认的主观题评测标准
+                criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
             }
             
-            repeatIndexStats.put("repeat_" + repeatIndex, indexStat);
+            // 创建Lambda中需要的final变量
+            final List<LlmAnswer> finalAnswers = new ArrayList<>(answers);
+            final Evaluator finalEvaluator = evaluator;
+            final List<EvaluationCriterion> finalCriteria = new ArrayList<>(criteria);
+            final Long finalUserId = userId;
+            final Long finalRunId = evaluationRun.getId();
+            final JdbcTemplate finalJdbcTemplate = jdbcTemplate;
+            
+            // 异步处理批次答案
+            evaluationExecutor.submit(() -> {
+                try {
+                    int total = finalAnswers.size();
+                    int processed = 0;
+                    
+                    for (LlmAnswer answer : finalAnswers) {
+                        try {
+                            // 执行评测
+                            // 获取用户信息
+                            String userSql = "SELECT * FROM users WHERE id = ?";
+                            Map<String, Object> userData = finalJdbcTemplate.queryForMap(userSql, finalUserId);
+                            
+                            User user = new User();
+                            user.setId(finalUserId);
+                            user.setUsername((String) userData.get("username"));
+                            
+                            evaluateSubjectiveAnswer(answer, finalEvaluator, user, finalCriteria);
+                            processed++;
+                            
+                            // 更新进度
+                            String updateProgressSql = "UPDATE evaluation_runs SET processed_answers_count = ?, progress = ? WHERE id = ?";
+                            finalJdbcTemplate.update(updateProgressSql, processed, (int)((processed * 100.0) / total), finalRunId);
+                            
+        } catch (Exception e) {
+                            logger.error("处理回答时发生错误", e);
+                            // 更新错误状态
+                            String updateErrorSql = "UPDATE evaluation_runs SET status = 'ERROR', error_message = ? WHERE id = ?";
+                            finalJdbcTemplate.update(updateErrorSql, e.getMessage(), finalRunId);
+            throw e;
         }
-        result.put("repeatIndexStatistics", repeatIndexStats);
-        
-        logger.info("批次主观题重新评测完成，总计: {}, 成功: {}, 失败: {}", totalAnswers, successCount, failedCount);
-        return result;
+    }
+    
+                    // 完成评测
+                    String completeRunSql = "UPDATE evaluation_runs SET status = 'COMPLETED', end_time = ? WHERE id = ?";
+                    finalJdbcTemplate.update(completeRunSql, Timestamp.valueOf(LocalDateTime.now()), finalRunId);
+                    
+        } catch (Exception e) {
+                    logger.error("批量评测过程中发生错误", e);
+                }
+            });
+            
+            // 立即返回响应
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("message", "批量评测已开始");
+            result.put("evaluationRunId", evaluationRun.getId());
+            result.put("batchId", batchId);
+            result.put("status", "PROCESSING");
+            
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("处理评测请求时发生异常", e);
+            
+        Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "批量评测启动失败: " + e.getMessage());
+            
+            return result;
+        }
     }
 
     /**
@@ -4237,7 +3845,24 @@ public class EvaluationServiceImpl implements EvaluationService {
             for (Map<String, Object> detailScore : detailScores) {
                 EvaluationDetail detail = new EvaluationDetail();
                 detail.setEvaluation(evaluation);
-                detail.setCriterionName((String) detailScore.get("criterion"));
+                
+                // 获取评测标准名称
+                String criterionName = (String) detailScore.get("criterion");
+                detail.setCriterionName(criterionName);
+                
+                // 尝试查找对应的评测标准
+                if (detailScore.containsKey("criterionId") && detailScore.get("criterionId") != null) {
+                    Long criterionId = Long.valueOf(detailScore.get("criterionId").toString());
+                    evaluationCriterionRepository.findById(criterionId).ifPresent(detail::setCriterion);
+                } else {
+                    // 如果没有criterionId，可以尝试通过criterionName查找
+                    List<EvaluationCriterion> matchingCriteria = evaluationCriterionRepository.findByCriterionName(criterionName);
+                    if (!matchingCriteria.isEmpty()) {
+                        detail.setCriterion(matchingCriteria.get(0));
+                    }
+                    // 如果找不到对应的评测标准，criterion将保持为null，这是可以接受的
+                }
+                
                 detail.setScore(new BigDecimal(detailScore.get("score").toString()));
                 detail.setComments((String) detailScore.get("comments"));
                 detail.setCreatedAt(LocalDateTime.now());
@@ -4485,7 +4110,14 @@ public class EvaluationServiceImpl implements EvaluationService {
             promptBuilder.append("请根据以上信息，评估学生回答的质量，给出详细的评分和评价。");
         }
         
-        return promptBuilder.toString();
+        String finalPrompt = promptBuilder.toString();
+        
+        // 打印组装好的评测提示词
+        logger.info("\n========== 组装好的评测提示词 ==========");
+        logger.info(finalPrompt);
+        logger.info("========================================\n");
+        
+        return finalPrompt;
     }
 
     /**
@@ -4495,6 +4127,11 @@ public class EvaluationServiceImpl implements EvaluationService {
      * @return 解析后的评测结果
      */
     private Map<String, Object> parseAIResponse(String aiResponse) {
+        // 打印AI评测响应
+        logger.info("\n========== AI评测响应内容 ==========");
+        logger.info(aiResponse);
+        logger.info("====================================\n");
+        
         Map<String, Object> result = new HashMap<>();
         
         try {
@@ -4551,237 +4188,791 @@ public class EvaluationServiceImpl implements EvaluationService {
         return result;
     }
 
-    // @Override
-    // @Transactional
-    // public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId) {
-    //     logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}", batchId, evaluatorId, userId, subjectivePromptId);
-        
-    //     // 验证评测者和用户
-    //     Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
-    //             .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测者: " + evaluatorId));
-        
-    //     // 验证评测者类型是AI
-    //     if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
-    //         throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
-    //     }
-        
-    //     // 获取或创建评测运行记录
-    //     EvaluationRun evaluationRun = getOrCreateEvaluationRun(batchId, evaluatorId, userId);
-        
-    //     try {
-    //         // 获取所有需要评测的主观题回答
-    //                                 // 获取该批次的所有回答
-    //                     List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
-                        
-    //                     // 过滤出主观题的回答
-    //                     answers = answers.stream()
-    //                             .filter(answer -> {
-    //                                 if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-    //                                     logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
-    //                                     return false;
-    //                                 }
-    //                                 return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
-    //                             })
-    //                             .collect(Collectors.toList());
-            
-    //         if (answers.isEmpty()) {
-    //             logger.info("批次中没有主观题回答需要评测，批次ID: {}", batchId);
-    //             return Map.of("status", "completed", "message", "没有主观题需要评测");
-    //         }
-            
-    //         // 更新总回答数
-    //         evaluationRun.setTotalAnswersCount(answers.size());
-            
-    //         // 获取评测标准
-    //         List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
-            
-    //         // 如果是恢复评测，从上次中断的位置继续
-    //         Long startAnswerId = evaluationRun.getCurrentBatchStartId();
-    //         if (startAnswerId == null) {
-    //             startAnswerId = answers.get(0).getId();
-    //             evaluationRun.setCurrentBatchStartId(startAnswerId);
-    //         }
-            
-    //         // 设置批次大小
-    //         int batchSize = evaluationRun.getBatchSize() != null ? evaluationRun.getBatchSize() : 50;
-            
-    //         // 分批处理回答
-    //         for (int i = 0; i < answers.size(); i += batchSize) {
-    //             // 检查是否需要暂停
-    //             if (evaluationRun.getStatus() == RunStatus.PAUSED) {
-    //                 logger.info("评测运行已暂停，批次ID: {}", batchId);
-    //                 break;
-    //             }
-                
-    //             // 获取当前批次的回答
-    //             int endIndex = Math.min(i + batchSize, answers.size());
-    //             List<LlmAnswer> batchAnswers = answers.subList(i, endIndex);
-                
-    //             try {
-    //                 // 更新当前批次信息
-    //                 evaluationRun.setCurrentBatchStartId(batchAnswers.get(0).getId());
-    //                 evaluationRun.setCurrentBatchEndId(batchAnswers.get(batchAnswers.size() - 1).getId());
-    //                 evaluationRun.setRetryCount(0);
-    //                 evaluationRunRepository.save(evaluationRun);
-                    
-    //                 // 处理当前批次
-    //                 processBatchAnswers(batchAnswers, evaluator, criteria, evaluationRun, userId);
-                    
-    //                 // 更新进度
-    //                 updateEvaluationProgress(evaluationRun, endIndex, answers.size());
-                    
-    //             } catch (Exception e) {
-    //                 handleBatchProcessingError(evaluationRun, e);
-                    
-    //                 // 如果超过最大重试次数，暂停评测
-    //                 if (evaluationRun.getRetryCount() >= evaluationRun.getMaxRetries()) {
-    //                     pauseEvaluationRun(evaluationRun.getId());
-    //                     break;
-    //                 }
-    //             }
-    //         }
-            
-    //         // 检查是否所有回答都已评测完成
-    //         if (evaluationRun.getCompletedAnswersCount() >= evaluationRun.getTotalAnswersCount()) {
-    //             completeEvaluationRun(evaluationRun);
-    //         }
-            
-    //         // 返回评测结果
-    //         return getEvaluationRunProgress(evaluationRun.getId());
-            
-    //     } catch (Exception e) {
-    //         logger.error("批量评测主观题失败", e);
-    //         evaluationRun.setStatus(RunStatus.FAILED);
-    //         evaluationRun.setErrorMessage(e.getMessage());
-    //         evaluationRunRepository.save(evaluationRun);
-    //         throw new RuntimeException("批量评测主观题失败: " + e.getMessage(), e);
-    //     }
-    // }
-    
     @Override
-    @Transactional
-    public Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId, Long evaluationAssemblyConfigId) {
-        logger.debug("开始批量评测批次的主观题，批次ID: {}, 评测者ID: {}, 用户ID: {}, 主观题评测提示词ID: {}, 评测组装配置ID: {}", 
-                batchId, evaluatorId, userId, subjectivePromptId, evaluationAssemblyConfigId);
+    public Map<String, Object> getObjectiveDetailedResults(Long batchId, List<Long> modelIds, int page, int size) {
+        logger.info("获取客观题评测详细结果，批次ID: {}, 模型IDs: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, page, size);
         
-        // 验证评测者和用户
-        Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到指定的评测者: " + evaluatorId));
-        
-        // 验证评测者类型是AI
-        if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
-            throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
-        }
-        
-        // 创建评测运行记录的参数
-        Map<String, Object> params = new HashMap<>();
-        params.put("batchId", batchId);
-        params.put("evaluationType", "SUBJECTIVE_BATCH");
-        
-        if (subjectivePromptId != null) {
-            params.put("subjectivePromptId", subjectivePromptId);
-        }
-        
-        if (evaluationAssemblyConfigId != null) {
-            params.put("evaluationAssemblyConfigId", evaluationAssemblyConfigId);
-        }
-        
-        // 创建评测运行记录
-        EvaluationRun evaluationRun = createEvaluationRun(
-                batchId, 
-                evaluatorId, 
-                "批量主观题评测-" + batchId, 
-                null, 
-                params, 
-                userId);
+        Map<String, Object> result = new HashMap<>();
         
         try {
-            // 获取所有需要评测的主观题回答
-            // 获取该批次的所有回答
-            List<LlmAnswer> answers = llmAnswerRepository.findByBatchIdWithQuestions(batchId);
+            // 前端传入的页码已经是从0开始，不需要再减1
+            Pageable pageable = PageRequest.of(page, size);
             
-            // 过滤出主观题的回答
-            answers = answers.stream()
-                    .filter(answer -> {
-                        if (answer.getDatasetQuestionMapping() == null || answer.getDatasetQuestionMapping().getStandardQuestion() == null) {
-                            logger.warn("跳过回答ID: {}，因为其关联的标准问题为空", answer.getId());
-                            return false;
-                        }
-                        return answer.getDatasetQuestionMapping().getStandardQuestion().getQuestionType() == QuestionType.SUBJECTIVE;
-                    })
-                    .collect(Collectors.toList());
+            // 获取批次中的客观题答案及其评测结果
+            List<Map<String, Object>> evaluationResults = llmAnswerRepository.findObjectiveAnswersWithEvaluations(
+                    batchId, modelIds, pageable);
             
-            if (answers.isEmpty()) {
-                logger.info("批次中没有主观题回答需要评测，批次ID: {}", batchId);
-                return Map.of("status", "completed", "message", "没有主观题需要评测");
+            // 获取总记录数
+            long totalCount = llmAnswerRepository.countObjectiveAnswersWithEvaluations(
+                    batchId, modelIds);
+            
+            // 计算总页数
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 构建返回结果
+            result.put("items", evaluationResults);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            result.put("success", true);
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("获取客观题评测详细结果时发生错误", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            return result;
+        }
+    }
+
+    @Override
+    public Map<String, Object> getSubjectiveDetailedResults(Long batchId, List<Long> modelIds, Long evaluatorId, int page, int size) {
+        logger.info("获取主观题大模型评测详细结果，批次ID: {}, 模型IDs: {}, 评测者ID: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, evaluatorId, page, size);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 前端传入的页码已经是从0开始，不需要再减1
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // 获取批次中的主观题答案及其评测结果
+            List<Map<String, Object>> evaluationResults = llmAnswerRepository.findSubjectiveAnswersWithEvaluations(
+                    batchId, modelIds, evaluatorId, pageable);
+            
+            // 获取总记录数
+            long totalCount = llmAnswerRepository.countSubjectiveAnswersWithEvaluations(
+                    batchId, modelIds, evaluatorId);
+            
+            // 计算总页数
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 构建返回结果
+            result.put("items", evaluationResults);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            result.put("success", true);
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("获取主观题大模型评测详细结果失败", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            return result;
+        }
+    }
+    
+    @Override
+    public Map<String, Object> getSubjectiveDetailedResultsWithAllEvaluators(Long batchId, List<Long> modelIds, int page, int size) {
+        logger.info("获取主观题所有评测员的评测详细结果，批次ID: {}, 模型IDs: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, page, size);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 前端传入的页码已经是从0开始，不需要再减1
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // 获取批次中的主观题答案及其所有评测员的评测结果
+            List<Map<String, Object>> evaluationResults = llmAnswerRepository.findSubjectiveAnswersWithAllEvaluations(
+                    batchId, modelIds, pageable);
+            
+            // 获取总记录数
+            long totalCount = llmAnswerRepository.countSubjectiveAnswersWithAllEvaluations(
+                    batchId, modelIds);
+            
+            // 计算总页数
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 构建返回结果
+            result.put("items", evaluationResults);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            result.put("success", true);
+            
+            return result;
+        } catch (Exception e) {
+            logger.error("获取主观题所有评测员的评测详细结果失败", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            return result;
+        }
+    }
+
+    /**
+     * 获取待人工评测的回答列表
+     * 
+     * @param userId 用户ID
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param questionType 问题类型
+     * @param page 页码
+     * @param size 每页大小
+     * @return 待评测回答列表
+     */
+    @Override
+    public Map<String, Object> getPendingHumanEvaluations(Long userId, Long evaluatorId, Long batchId, List<Long> modelIds, 
+                                                   String questionType, int page, int size) {
+        logger.info("获取待人工评测回答列表，用户ID: {}, 评测者ID: {}, 批次ID: {}, 模型IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 前端传入的页码已经是从0开始，不需要再减1
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // 使用指定的评测者ID
+            List<Long> evaluatorIds = Collections.singletonList(evaluatorId);
+            // 验证评测者ID是否有效
+            if (!evaluatorRepository.existsById(evaluatorId)) {
+                logger.warn("评测者ID {}不存在", evaluatorId);
+                result.put("items", Collections.emptyList());
+                result.put("totalItems", 0);
+                result.put("totalPages", 0);
+                result.put("currentPage", page);
+                result.put("pageSize", size);
+                result.put("success", true);
+                return result;
             }
             
-            // 更新总回答数
-            evaluationRun.setTotalAnswersCount(answers.size());
+            // 将问题类型字符串转换为枚举类型
+            QuestionType questionTypeEnum = null;
+            if (questionType != null && !questionType.isEmpty()) {
+                try {
+                    questionTypeEnum = QuestionType.valueOf(questionType);
+                } catch (IllegalArgumentException e) {
+                    logger.warn("无效的问题类型: {}", questionType);
+                }
+            }
+            
+            // 获取未被评测过的回答
+            List<Map<String, Object>> pendingAnswers = llmAnswerRepository.findPendingAnswersForHumanEvaluation(
+                    evaluatorIds, batchId, modelIds, questionTypeEnum, pageable);
+            
+            // 获取总记录数
+            long totalCount = llmAnswerRepository.countPendingAnswersForHumanEvaluation(
+                    evaluatorIds, batchId, modelIds, questionTypeEnum);
+            
+            // 计算总页数
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 处理回答数据，添加标准问题和标准答案信息
+            List<Map<String, Object>> detailedAnswers = new ArrayList<>();
+            for (Map<String, Object> answer : pendingAnswers) {
+                Map<String, Object> detailedAnswer = new HashMap<>(answer);
+                
+                // 获取标准问题
+                Long questionId = (Long) answer.get("questionId");
+                StandardQuestion question = standardQuestionRepository.findById(questionId).orElse(null);
+                if (question != null) {
+                    detailedAnswer.put("questionText", question.getQuestionText());
+                    detailedAnswer.put("questionType", question.getQuestionType());
+                    detailedAnswer.put("difficultyLevel", question.getDifficultyLevel());
+                    
+                    // 获取标准答案
+                    Map<String, Object> standardAnswer = getStandardAnswerForQuestion(questionId);
+                    if (standardAnswer != null && !standardAnswer.isEmpty()) {
+                        detailedAnswer.put("standardAnswer", standardAnswer);
+                    }
+                }
+                
+                // 获取模型信息
+                Long modelId = (Long) answer.get("modelId");
+                LlmModel model = llmModelRepository.findById(modelId).orElse(null);
+                if (model != null) {
+                    detailedAnswer.put("modelName", model.getName());
+                    detailedAnswer.put("modelVersion", model.getVersion());
+                }
+                
+                // 获取评测标准
+                if (question != null && question.getQuestionType() != null) {
+                    List<EvaluationCriterion> criteria = evaluationCriterionRepository.findByQuestionType(question.getQuestionType());
+                    if (!criteria.isEmpty()) {
+                        List<Map<String, Object>> criteriaData = new ArrayList<>();
+                        for (EvaluationCriterion criterion : criteria) {
+                            Map<String, Object> criterionData = new HashMap<>();
+                            criterionData.put("id", criterion.getId());
+                            criterionData.put("name", criterion.getName());
+                            criterionData.put("description", criterion.getDescription());
+                            criterionData.put("maxScore", criterion.getMaxScore());
+                            criterionData.put("weight", criterion.getWeight());
+                            criteriaData.add(criterionData);
+                        }
+                        detailedAnswer.put("evaluationCriteria", criteriaData);
+                    }
+                }
+                
+                detailedAnswers.add(detailedAnswer);
+            }
+            
+            // 构建返回结果
+            result.put("items", detailedAnswers);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            result.put("success", true);
+            
+        } catch (Exception e) {
+            logger.error("获取待人工评测回答列表时发生错误", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * 获取用户已评测的回答列表
+     * 
+     * @param userId 用户ID
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param questionType 问题类型
+     * @param page 页码
+     * @param size 每页大小
+     * @return 已评测回答列表
+     */
+    @Override
+    public Map<String, Object> getCompletedHumanEvaluations(Long userId, Long evaluatorId, Long batchId, List<Long> modelIds, 
+                                                    String questionType, int page, int size) {
+        logger.info("获取用户已评测回答列表，用户ID: {}, 评测者ID: {}, 批次ID: {}, 模型IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 前端传入的页码已经是从0开始，不需要再减1
+            Pageable pageable = PageRequest.of(page, size);
+            
+            // 使用指定的评测者ID
+            List<Long> evaluatorIds = Collections.singletonList(evaluatorId);
+            // 验证评测者ID是否有效
+            if (!evaluatorRepository.existsById(evaluatorId)) {
+                logger.warn("评测者ID {}不存在", evaluatorId);
+                result.put("items", Collections.emptyList());
+                result.put("totalItems", 0);
+                result.put("totalPages", 0);
+                result.put("currentPage", page);
+                result.put("pageSize", size);
+                result.put("success", true);
+                return result;
+            }
+            
+            // 强制设置问题类型为主观题，忽略传入的问题类型参数
+            QuestionType questionTypeEnum = QuestionType.SUBJECTIVE;
+            
+            // 获取已评测的回答
+            List<Map<String, Object>> completedEvaluations = evaluationRepository.findCompletedHumanEvaluations(
+                    evaluatorIds, batchId, modelIds, questionTypeEnum, pageable);
+            
+            // 获取总记录数
+            long totalCount = evaluationRepository.countCompletedHumanEvaluations(
+                    evaluatorIds, batchId, modelIds, questionTypeEnum);
+            
+            // 计算总页数
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 处理评测数据，添加详细信息
+            List<Map<String, Object>> detailedEvaluations = new ArrayList<>();
+            for (Map<String, Object> evaluation : completedEvaluations) {
+                Map<String, Object> detailedEvaluation = new HashMap<>(evaluation);
+                
+                // 获取标准问题
+                Long questionId = (Long) evaluation.get("questionId");
+                StandardQuestion question = standardQuestionRepository.findById(questionId).orElse(null);
+                if (question != null) {
+                    detailedEvaluation.put("questionText", question.getQuestionText());
+                    detailedEvaluation.put("questionType", question.getQuestionType());
+                    detailedEvaluation.put("difficultyLevel", question.getDifficultyLevel());
+                    
+                    // 获取标准答案
+                    Map<String, Object> standardAnswer = getStandardAnswerForQuestion(questionId);
+                    if (standardAnswer != null && !standardAnswer.isEmpty()) {
+                        detailedEvaluation.put("standardAnswer", standardAnswer);
+                    }
+                }
+                
+                // 获取模型信息
+                Long modelId = (Long) evaluation.get("modelId");
+                LlmModel model = llmModelRepository.findById(modelId).orElse(null);
+                if (model != null) {
+                    detailedEvaluation.put("modelName", model.getName());
+                    detailedEvaluation.put("modelVersion", model.getVersion());
+                }
+                
+                // 获取评测详情
+                Long evaluationId = (Long) evaluation.get("evaluationId");
+                if (evaluationId != null) {
+                    List<EvaluationDetail> details = evaluationDetailRepository.findByEvaluationId(evaluationId);
+                    
+                    if (!details.isEmpty()) {
+                        List<Map<String, Object>> detailsData = new ArrayList<>();
+                        for (EvaluationDetail detail : details) {
+                            Map<String, Object> detailData = new HashMap<>();
+                            detailData.put("id", detail.getId());
+                            // 添加空值检查，如果criterion为null，则使用null作为criterionId
+                            if (detail.getCriterion() != null) {
+                                detailData.put("criterionId", detail.getCriterion().getId());
+                            } else {
+                                detailData.put("criterionId", null);
+                            }
+                            detailData.put("criterionName", detail.getCriterionName());
+                            detailData.put("score", detail.getScore());
+                            detailData.put("comments", detail.getComments());
+                            detailsData.add(detailData);
+                        }
+                        detailedEvaluation.put("evaluationDetails", detailsData);
+                    }
+                }
+                
+                detailedEvaluations.add(detailedEvaluation);
+            }
+            
+            // 构建返回结果
+            result.put("items", detailedEvaluations);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            result.put("success", true);
+            
+        } catch (Exception e) {
+            logger.error("获取用户已评测回答列表时发生错误", e);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * 一步式人工评测（创建并提交评测）
+     *
+     * @param llmAnswerId LLM回答ID
+     * @param userId 用户ID
+     * @return 评测记录
+     */
+    @Override
+    @Transactional
+    public Evaluation oneStepHumanEvaluation(Long llmAnswerId, Long userId) {
+        logger.info("执行一步式人工评测，回答ID: {}, 用户ID: {}", llmAnswerId, userId);
+        
+        // 获取用户关联的评测者ID
+        List<Long> evaluatorIds = evaluatorRepository.findHumanEvaluatorIdsByUserId(userId);
+        if (evaluatorIds.isEmpty()) {
+            throw new RuntimeException("用户没有关联的人类评测者");
+        }
+        Long evaluatorId = evaluatorIds.get(0);
+        
+        // 创建评测记录
+        Evaluation evaluation = createHumanEvaluation(llmAnswerId, evaluatorId, userId);
+        
+        // 返回创建的评测记录
+        return evaluation;
+    }
+
+    // 删除重复的方法定义
+    
+
+    
+    /**
+     * 获取或创建评测运行记录
+     */
+    @Override
+    @Transactional
+    public EvaluationRun getOrCreateEvaluationRun(Long batchId, Long evaluatorId, Long userId) {
+        // 查找是否已存在评测运行记录
+        String findSql = "SELECT * FROM evaluation_runs WHERE batch_id = ? AND evaluator_id = ? ORDER BY id DESC LIMIT 1";
+        List<Map<String, Object>> existingRuns = jdbcTemplate.queryForList(findSql, batchId, evaluatorId);
+        
+        if (!existingRuns.isEmpty()) {
+            Map<String, Object> runData = existingRuns.get(0);
+            EvaluationRun evaluationRun = new EvaluationRun();
+            evaluationRun.setId((Long) runData.get("id"));
+            evaluationRun.setEvaluatorId(evaluatorId);
+            evaluationRun.setStatus(RunStatus.valueOf((String) runData.get("status")));
+            
+            return evaluationRun;
+        }
+        
+        // 创建新的评测运行记录
+        String insertSql = "INSERT INTO evaluation_runs (batch_id, evaluator_id, created_by_user_id, status, start_time) VALUES (?, ?, ?, ?, ?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+            ps.setLong(1, batchId);
+            ps.setLong(2, evaluatorId);
+            ps.setLong(3, userId);
+            ps.setString(4, RunStatus.PENDING.toString());
+            ps.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
+            return ps;
+        }, keyHolder);
+        
+        Long runId = keyHolder.getKey().longValue();
+        
+        EvaluationRun evaluationRun = new EvaluationRun();
+        evaluationRun.setId(runId);
+        evaluationRun.setEvaluatorId(evaluatorId);
+        evaluationRun.setStatus(RunStatus.PENDING);
+        
+        return evaluationRun;
+    }
+
+    @Override
+    @Transactional
+    public BigDecimal reEvaluateSubjectiveAnswer(Long llmAnswerId, Long evaluatorId, Long userId) {
+        // 获取回答信息
+        String answerSql = "SELECT la.*, sq.question_text, sq.question_type FROM llm_answers la " +
+                "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                "WHERE la.id = ?";
+        Map<String, Object> answerData = jdbcTemplate.queryForMap(answerSql, llmAnswerId);
+        if (answerData == null || answerData.isEmpty()) {
+            throw new EntityNotFoundException("找不到指定的LLM回答: " + llmAnswerId);
+        }
+        
+        // 构建LlmAnswer对象
+        LlmAnswer llmAnswer = new LlmAnswer();
+        llmAnswer.setId(llmAnswerId);
+        llmAnswer.setAnswerText((String) answerData.get("answer_text"));
+        
+        // 获取评测者信息
+        String evaluatorSql = "SELECT * FROM evaluators WHERE id = ?";
+        Map<String, Object> evaluatorData = jdbcTemplate.queryForMap(evaluatorSql, evaluatorId);
+        if (evaluatorData == null || evaluatorData.isEmpty()) {
+            throw new EntityNotFoundException("找不到指定的评测者: " + evaluatorId);
+        }
+        
+        Evaluator evaluator = new Evaluator();
+        evaluator.setId(evaluatorId);
+        evaluator.setName((String) evaluatorData.get("name"));
+        evaluator.setEvaluatorType(Evaluator.EvaluatorType.valueOf((String) evaluatorData.get("type")));
+        
+        // 获取用户信息
+        String userSql = "SELECT * FROM users WHERE id = ?";
+        Map<String, Object> userData = jdbcTemplate.queryForMap(userSql, userId);
+        if (userData == null || userData.isEmpty()) {
+            throw new EntityNotFoundException("找不到指定的用户: " + userId);
+        }
+        
+        User user = new User();
+        user.setId(userId);
+        user.setUsername((String) userData.get("username"));
             
             // 获取评测标准
             List<EvaluationCriterion> criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
             
-            // 如果是恢复评测，从上次中断的位置继续
-            Long startAnswerId = evaluationRun.getCurrentBatchStartId();
-            if (startAnswerId == null) {
-                startAnswerId = answers.get(0).getId();
-                evaluationRun.setCurrentBatchStartId(startAnswerId);
+        // 执行评测
+        return evaluateSubjectiveAnswer(llmAnswer, evaluator, user, criteria);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId) {
+        return reEvaluateBatchSubjectiveQuestions(batchId, evaluatorId, userId, null, null, null);
+    }
+    
+    @Override
+    @Transactional
+    public Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId,
+            Long subjectivePromptId, Long evaluationAssemblyConfigId, List<Long> criteriaIds) {
+        // 验证评测者和用户
+        String evaluatorSql = "SELECT * FROM evaluators WHERE id = ?";
+        Map<String, Object> evaluatorData = jdbcTemplate.queryForMap(evaluatorSql, evaluatorId);
+        if (evaluatorData == null || evaluatorData.isEmpty()) {
+            throw new EntityNotFoundException("找不到指定的评测者: " + evaluatorId);
+        }
+        
+        String evaluatorType = (String) evaluatorData.get("type");
+        // 验证评测者类型是AI
+        if (!evaluatorType.equals("AI_MODEL")) {
+            throw new IllegalArgumentException("评测者不是AI模型: " + evaluatorId);
+        }
+        
+        // 获取批次下的所有主观题回答
+        String answersSql = "SELECT la.id, la.answer_text, sq.question_text, sq.question_type " +
+                "FROM llm_answers la " +
+                "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                "WHERE mar.answer_generation_batch_id = ? AND sq.question_type = 'SUBJECTIVE'";
+        
+        List<Map<String, Object>> answersData = jdbcTemplate.queryForList(answersSql, batchId);
+        
+        if (answersData.isEmpty()) {
+            return Map.of("status", "completed", "message", "没有主观题需要重新评测");
+        }
+        
+        // 获取评测标准
+        final List<EvaluationCriterion> criteria;
+        if (criteriaIds != null && !criteriaIds.isEmpty()) {
+            // 使用JDBC查询指定ID的评测标准
+            StringBuilder idPlaceholders = new StringBuilder();
+            for (int i = 0; i < criteriaIds.size(); i++) {
+                idPlaceholders.append("?");
+                if (i < criteriaIds.size() - 1) {
+                    idPlaceholders.append(",");
+                }
             }
             
-            // 设置批次大小
-            int batchSize = evaluationRun.getBatchSize() != null ? evaluationRun.getBatchSize() : 50;
+            String criteriaQuery = "SELECT * FROM EVALUATION_CRITERIA WHERE ID IN (" + idPlaceholders + ")";
+            List<Map<String, Object>> criteriaData = jdbcTemplate.queryForList(criteriaQuery, criteriaIds.toArray());
             
-            // 分批处理回答
-            for (int i = 0; i < answers.size(); i += batchSize) {
-                // 检查是否需要暂停
-                if (evaluationRun.getStatus() == RunStatus.PAUSED) {
-                    logger.info("评测运行已暂停，批次ID: {}", batchId);
-                    break;
-                }
+            List<EvaluationCriterion> tempCriteria = new ArrayList<>();
+            for (Map<String, Object> data : criteriaData) {
+                EvaluationCriterion criterion = new EvaluationCriterion();
+                criterion.setId((Long) data.get("ID"));
+                criterion.setName((String) data.get("NAME"));
+                criterion.setDescription((String) data.get("DESCRIPTION"));
+                criterion.setDataType(EvaluationCriterion.DataType.valueOf((String) data.get("DATA_TYPE")));
+                criterion.setScoreRange((String) data.get("SCORE_RANGE"));
+                criterion.setWeight(new BigDecimal(((Number) data.get("WEIGHT")).toString()));
+                criterion.setIsRequired((Boolean) data.get("IS_REQUIRED"));
+                tempCriteria.add(criterion);
+            }
+            
+            if (tempCriteria.isEmpty()) {
+                logger.warn("未找到指定的评测标准，将使用默认标准");
+                criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
+            } else {
+                criteria = tempCriteria;
+            }
+        } else {
+            // 如果未指定评测标准，则使用默认的主观题评测标准
+            criteria = getCriteriaForQuestionType(QuestionType.SUBJECTIVE);
+        }
+        
+        // 创建评测运行记录
+        EvaluationRun evaluationRun = getOrCreateEvaluationRun(batchId, evaluatorId, userId);
+        
+        // 更新总回答数
+        String updateRunSql = "UPDATE evaluation_runs SET total_answers_count = ? WHERE id = ?";
+        jdbcTemplate.update(updateRunSql, answersData.size(), evaluationRun.getId());
+        
+        // 异步处理批次答案
+        evaluationExecutor.submit(() -> {
+            try {
+                int total = answersData.size();
+                int processed = 0;
                 
-                // 获取当前批次的回答
-                int endIndex = Math.min(i + batchSize, answers.size());
-                List<LlmAnswer> batchAnswers = answers.subList(i, endIndex);
-                
-                try {
-                    // 更新当前批次信息
-                    evaluationRun.setCurrentBatchStartId(batchAnswers.get(0).getId());
-                    evaluationRun.setCurrentBatchEndId(batchAnswers.get(batchAnswers.size() - 1).getId());
-                    evaluationRun.setRetryCount(0);
-                    evaluationRunRepository.save(evaluationRun);
-                    
-                    // 处理当前批次
-                    processBatchAnswers(batchAnswers, evaluator, criteria, evaluationRun, userId);
+                for (Map<String, Object> answerData : answersData) {
+                    try {
+                        Long answerId = (Long) answerData.get("id");
+                        String answerText = (String) answerData.get("answer_text");
+                        String questionText = (String) answerData.get("question_text");
+                        
+                        // 构建LlmAnswer对象
+                        LlmAnswer answer = new LlmAnswer();
+                        answer.setId(answerId);
+                        answer.setAnswerText(answerText);
+                        
+                        // 构建评测者对象
+                        Evaluator evaluator = new Evaluator();
+                        evaluator.setId(evaluatorId);
+                        evaluator.setEvaluatorType(Evaluator.EvaluatorType.AI_MODEL);
+                        
+                        // 构建用户对象
+                        User user = new User();
+                        user.setId(userId);
+                        
+                        // 执行评测
+                        evaluateSubjectiveAnswer(answer, evaluator, user, criteria);
+                        
+                        processed++;
                     
                     // 更新进度
-                    updateEvaluationProgress(evaluationRun, endIndex, answers.size());
+                        String updateProgressSql = "UPDATE evaluation_runs SET processed_answers_count = ?, progress = ? WHERE id = ?";
+                        jdbcTemplate.update(updateProgressSql, processed, (int)((processed * 100.0) / total), evaluationRun.getId());
                     
                 } catch (Exception e) {
-                    handleBatchProcessingError(evaluationRun, e);
-                    
-                    // 如果超过最大重试次数，暂停评测
-                    if (evaluationRun.getRetryCount() >= evaluationRun.getMaxRetries()) {
-                        pauseEvaluationRun(evaluationRun.getId());
-                        break;
+                        logger.error("处理回答时发生错误", e);
+                        // 更新错误状态
+                        String updateErrorSql = "UPDATE evaluation_runs SET status = 'ERROR', error_message = ? WHERE id = ?";
+                        jdbcTemplate.update(updateErrorSql, e.getMessage(), evaluationRun.getId());
+                        throw e;
                     }
                 }
+                
+                // 完成评测
+                String completeRunSql = "UPDATE evaluation_runs SET status = 'COMPLETED', end_time = ? WHERE id = ?";
+                jdbcTemplate.update(completeRunSql, Timestamp.valueOf(LocalDateTime.now()), evaluationRun.getId());
+                
+            } catch (Exception e) {
+                logger.error("批量评测过程中发生错误", e);
+            }
+        });
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "批量重新评测已开始");
+        result.put("evaluationRunId", evaluationRun.getId());
+        result.put("batchId", batchId);
+        result.put("totalAnswers", answersData.size());
+        
+        return result;
+    }
+
+    /**
+     * 组装评测提示词，使用String类型的问题文本
+     */
+    private String assembleEvaluationPrompt(String questionText, String answerText, 
+                                    String referenceAnswer, List<EvaluationCriterion> criteria) {
+        StandardQuestion question = new StandardQuestion();
+        question.setQuestionText(questionText);
+        return assembleEvaluationPrompt(question, answerText, referenceAnswer, criteria);
+    }
+
+    private BigDecimal evaluateSubjectiveAnswer(LlmAnswer answer, Evaluator evaluator, User user, List<EvaluationCriterion> criteria) {
+        try {
+            // 获取问题和标准答案
+            String questionSql = "SELECT sq.question_text, sq.id as question_id " +
+                    "FROM llm_answers la " +
+                    "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                    "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                    "WHERE la.id = ?";
+            Map<String, Object> questionData = jdbcTemplate.queryForMap(questionSql, answer.getId());
+            
+            String questionText = (String) questionData.get("question_text");
+            Long questionId = (Long) questionData.get("question_id");
+            
+            // 获取参考答案
+            String refAnswerSql = "SELECT answer_text FROM standard_subjective_answers WHERE question_id = ? LIMIT 1";
+            String referenceAnswer = "";
+            try {
+                referenceAnswer = jdbcTemplate.queryForObject(refAnswerSql, String.class, questionId);
+        } catch (Exception e) {
+                logger.warn("未找到问题ID: {}的参考答案", questionId);
             }
             
-            // 检查是否所有回答都已评测完成
-            if (evaluationRun.getCompletedAnswersCount() >= evaluationRun.getTotalAnswersCount()) {
-                completeEvaluationRun(evaluationRun);
+            // 组装评测提示词
+            StandardQuestion question = new StandardQuestion();
+            question.setQuestionText(questionText);
+            String prompt = assembleEvaluationPrompt(question, answer.getAnswerText(), referenceAnswer, criteria);
+            
+            // 调用AI服务进行评测
+            String aiResponse = callAIService(prompt, evaluator.getId());
+            
+            // 解析AI响应
+            Map<String, Object> evaluationResult = parseAIResponse(aiResponse);
+            
+            // 获取总分
+            BigDecimal overallScore = new BigDecimal(evaluationResult.getOrDefault("总分", 0).toString());
+            
+            // 保存评测结果
+            String checkExistingSql = "SELECT id FROM evaluations WHERE llm_answer_id = ? AND evaluator_id = ?";
+            Long existingId = null;
+            try {
+                existingId = jdbcTemplate.queryForObject(checkExistingSql, Long.class, answer.getId(), evaluator.getId());
+            } catch (EmptyResultDataAccessException e) {
+                // 不存在，忽略
             }
             
-            // 返回评测结果
-            return getEvaluationRunProgress(evaluationRun.getId());
+            if (existingId != null) {
+                // 更新现有评测
+                String updateSql = "UPDATE evaluations SET overall_score = ?, comments = ?, evaluation_results = ?, " +
+                        "updated_at = ?, updated_by_user_id = ? WHERE id = ?";
+                jdbcTemplate.update(updateSql, 
+                        overallScore, 
+                        evaluationResult.getOrDefault("总体评语", "").toString(),
+                        new ObjectMapper().writeValueAsString(evaluationResult),
+                        Timestamp.valueOf(LocalDateTime.now()),
+                        user.getId(),
+                        existingId);
+            } else {
+                // 创建新评测
+                String insertSql = "INSERT INTO evaluations (llm_answer_id, evaluator_id, overall_score, comments, " +
+                        "evaluation_results, created_at, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                jdbcTemplate.update(insertSql,
+                        answer.getId(),
+                        evaluator.getId(),
+                        overallScore,
+                        evaluationResult.getOrDefault("总体评语", "").toString(),
+                        new ObjectMapper().writeValueAsString(evaluationResult),
+                        Timestamp.valueOf(LocalDateTime.now()),
+                        user.getId());
+            }
+            
+            return overallScore;
             
         } catch (Exception e) {
-            logger.error("批量评测主观题失败", e);
-            evaluationRun.setStatus(RunStatus.FAILED);
-            evaluationRun.setErrorMessage(e.getMessage());
-            evaluationRunRepository.save(evaluationRun);
-            throw new RuntimeException("批量评测主观题失败: " + e.getMessage(), e);
+            logger.error("评测主观题回答时发生错误", e);
+            throw new RuntimeException("评测失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 更新评测进度
+     */
+    @Transactional
+    public void updateEvaluationProgress(EvaluationRun evaluationRun, int processedCount, int remainingCount) {
+        int totalCount = processedCount + remainingCount;
+        int progressPercentage = totalCount > 0 ? (processedCount * 100) / totalCount : 0;
+        
+        // 更新评测运行状态
+        jdbcTemplate.update(
+            "UPDATE evaluation_runs SET completed_answers_count = ?, total_answers_count = ?, " +
+            "progress_percentage = ?, last_activity_time = ?, last_updated = ? WHERE id = ?",
+            processedCount, totalCount, progressPercentage, LocalDateTime.now(), 
+            LocalDateTime.now(), evaluationRun.getId());
+        
+        logger.info("更新评测运行{}进度: {}/{}，完成率: {}%", 
+                evaluationRun.getId(), processedCount, totalCount, progressPercentage);
+    }
+
+    @Override
+    @Transactional
+    public EvaluationCriterion saveEvaluationCriterion(EvaluationCriterion criterion) {
+        logger.info("保存评测标准，名称: {}, ID: {}", criterion.getName(), criterion.getId());
+        
+        // 设置创建时间（如果是新建）
+        if (criterion.getId() == null && criterion.getCreatedAt() == null) {
+            criterion.setCreatedAt(LocalDateTime.now());
+        }
+        
+        // 保存评测标准
+        return evaluationCriterionRepository.save(criterion);
+    }
+
+    @Override
+    public EvaluationCriterion getEvaluationCriterionById(Long criterionId) {
+        logger.info("获取评测标准，ID: {}", criterionId);
+        
+        return evaluationCriterionRepository.findById(criterionId)
+                .orElseThrow(() -> new EntityNotFoundException("未找到ID为" + criterionId + "的评测标准"));
+    }
+
+    @Override
+    public List<EvaluationCriterion> getAllEvaluationCriteria(int page, int size) {
+        logger.info("获取所有评测标准，页码: {}, 每页大小: {}", page, size);
+        
+        Pageable pageable = PageRequest.of(page, size);
+        Page<EvaluationCriterion> criteriaPage = evaluationCriterionRepository.findAll(pageable);
+        
+        return criteriaPage.getContent();
+    }
+
+    @Override
+    @Transactional
+    public void deleteEvaluationCriterion(Long criterionId, Long userId) {
+        logger.info("删除评测标准，ID: {}, 操作用户ID: {}", criterionId, userId);
+        
+        // 获取评测标准
+        EvaluationCriterion criterion = evaluationCriterionRepository.findById(criterionId)
+                .orElseThrow(() -> new EntityNotFoundException("未找到ID为" + criterionId + "的评测标准"));
+        
+        // 软删除（设置删除时间）
+        criterion.setDeletedAt(LocalDateTime.now());
+        
+        // 保存更改
+        evaluationCriterionRepository.save(criterion);
     }
 } 

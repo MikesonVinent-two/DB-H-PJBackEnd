@@ -1,8 +1,20 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.DatasetQuestionMapping;
-import com.example.demo.entity.jdbc.LlmAnswer;
-import com.example.demo.entity.jdbc.ModelAnswerRun;
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,17 +23,10 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import com.example.demo.entity.jdbc.DatasetQuestionMapping;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.example.demo.entity.jdbc.ModelAnswerRun;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 基于JDBC的LLM回答仓库实现
@@ -30,6 +35,7 @@ import java.util.stream.Collectors;
 public class LlmAnswerRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
     private static final String SQL_INSERT = 
             "INSERT INTO llm_answers (model_answer_run_id, dataset_question_mapping_id, answer_text, " +
@@ -89,9 +95,123 @@ public class LlmAnswerRepository {
     private static final String SQL_FIND_BY_IDS = 
             "SELECT * FROM llm_answers WHERE id IN (%s)";
 
+    private static final String SQL_FIND_OBJECTIVE_ANSWERS_WITH_EVALUATIONS = 
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, e.overall_score as score " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT') " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "ORDER BY sq.id, lm.id " +
+            "LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_OBJECTIVE_ANSWERS_WITH_EVALUATIONS = 
+            "SELECT COUNT(*) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT') " +
+            "AND (? IS NULL OR lm.id IN (%s))";
+            
+    private static final String SQL_FIND_SUBJECTIVE_ANSWERS_WITH_EVALUATIONS = 
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, e.overall_score as score, " +
+            "e.comments, e.evaluation_results " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id AND e.evaluator_id = ? " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "ORDER BY sq.id, lm.id " +
+            "LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_SUBJECTIVE_ANSWERS_WITH_EVALUATIONS = 
+            "SELECT COUNT(*) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' " +
+            "AND (? IS NULL OR lm.id IN (%s))";
+            
+    private static final String SQL_FIND_PENDING_ANSWERS_FOR_HUMAN_EVALUATION = 
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, sq.difficulty as difficulty_level " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id AND e.evaluator_id IN (%s) " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND e.id IS NULL " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "AND (? IS NULL OR sq.question_type = ?) " +
+            "ORDER BY sq.id, lm.id " +
+            "LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_PENDING_ANSWERS_FOR_HUMAN_EVALUATION = 
+            "SELECT COUNT(*) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id AND e.evaluator_id IN (%s) " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND e.id IS NULL " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "AND (? IS NULL OR sq.question_type = ?)";
+
+    private static final String SQL_FIND_SUBJECTIVE_ANSWERS_WITH_ALL_EVALUATIONS = 
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, " +
+            "e.id as evaluation_id, e.overall_score as score, e.comments, e.evaluation_results, " +
+            "ev.id as evaluator_id, ev.name as evaluator_name, ev.type as evaluator_type, " +
+            "u.id as user_id, u.username as username " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id " +
+            "LEFT JOIN evaluators ev ON e.evaluator_id = ev.id " +
+            "LEFT JOIN users u ON e.created_by_user_id = u.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "ORDER BY sq.id, lm.id, ev.id " +
+            "LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_SUBJECTIVE_ANSWERS_WITH_ALL_EVALUATIONS = 
+            "SELECT COUNT(DISTINCT la.id) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' " +
+            "AND (? IS NULL OR lm.id IN (%s))";
+
     @Autowired
     public LlmAnswerRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -706,5 +826,500 @@ public class LlmAnswerRepository {
         } catch (EmptyResultDataAccessException e) {
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * 获取客观题回答及其评测结果
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param pageable 分页信息
+     * @return 包含回答和评测信息的Map列表
+     */
+    public List<Map<String, Object>> findObjectiveAnswersWithEvaluations(Long batchId, List<Long> modelIds, org.springframework.data.domain.Pageable pageable) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, e.overall_score as score " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT') "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        sqlBuilder.append("ORDER BY sq.id, lm.id LIMIT ? OFFSET ?");
+        params.add(pageable.getPageSize());
+        params.add(pageable.getOffset());
+        
+        String sql = sqlBuilder.toString();
+        
+        return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("answerId", rs.getLong("answer_id"));
+            result.put("answerText", rs.getString("answer_text"));
+            result.put("runId", rs.getLong("run_id"));
+            result.put("modelId", rs.getLong("model_id"));
+            result.put("modelName", rs.getString("model_name"));
+            result.put("questionId", rs.getLong("question_id"));
+            result.put("questionText", rs.getString("question_text"));
+            result.put("questionType", rs.getString("question_type"));
+            result.put("score", rs.getBigDecimal("score"));
+            return result;
+        });
+    }
+    
+    /**
+     * 统计客观题回答及其评测结果的总数
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @return 总记录数
+     */
+    public long countObjectiveAnswersWithEvaluations(Long batchId, List<Long> modelIds) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT COUNT(*) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT') "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        String sql = sqlBuilder.toString();
+        
+        return jdbcTemplate.queryForObject(sql, params.toArray(), Long.class);
+    }
+    
+    /**
+     * 获取主观题回答及其评测结果
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param evaluatorId 评测者ID
+     * @param pageable 分页信息
+     * @return 包含回答和评测信息的Map列表
+     */
+    public List<Map<String, Object>> findSubjectiveAnswersWithEvaluations(Long batchId, List<Long> modelIds, Long evaluatorId, org.springframework.data.domain.Pageable pageable) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, e.overall_score as score, " +
+            "e.comments, e.evaluation_results " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id AND e.evaluator_id = ? " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(evaluatorId);
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        sqlBuilder.append("ORDER BY sq.id, lm.id LIMIT ? OFFSET ?");
+        params.add(pageable.getPageSize());
+        params.add(pageable.getOffset());
+        
+        String sql = sqlBuilder.toString();
+        
+        return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("answerId", rs.getLong("answer_id"));
+            result.put("answerText", rs.getString("answer_text"));
+            result.put("runId", rs.getLong("run_id"));
+            result.put("modelId", rs.getLong("model_id"));
+            result.put("modelName", rs.getString("model_name"));
+            result.put("questionId", rs.getLong("question_id"));
+            result.put("questionText", rs.getString("question_text"));
+            result.put("questionType", rs.getString("question_type"));
+            result.put("score", rs.getBigDecimal("score"));
+            result.put("comments", rs.getString("comments"));
+            
+            String evaluationResults = rs.getString("evaluation_results");
+            if (evaluationResults != null) {
+                try {
+                    result.put("evaluationResults", objectMapper.readValue(evaluationResults, Map.class));
+                } catch (Exception e) {
+                    result.put("evaluationResults", new HashMap<>());
+                }
+            } else {
+                result.put("evaluationResults", new HashMap<>());
+            }
+            
+            return result;
+        });
+    }
+    
+    /**
+     * 统计主观题回答及其评测结果的总数
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param evaluatorId 评测者ID
+     * @return 总记录数
+     */
+    public long countSubjectiveAnswersWithEvaluations(Long batchId, List<Long> modelIds, Long evaluatorId) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT COUNT(*) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        String sql = sqlBuilder.toString();
+        
+        return jdbcTemplate.queryForObject(sql, params.toArray(), Long.class);
+    }
+    
+    /**
+     * 获取待人工评测的回答
+     *
+     * @param evaluatorIds 评测者ID列表
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param questionType 问题类型，如果为null则查询所有类型
+     * @param pageable 分页信息
+     * @return 包含待评测回答信息的Map列表
+     */
+    public List<Map<String, Object>> findPendingAnswersForHumanEvaluation(
+            List<Long> evaluatorIds, Long batchId, List<Long> modelIds, 
+            com.example.demo.entity.jdbc.QuestionType questionType, 
+            org.springframework.data.domain.Pageable pageable) {
+        
+        String evaluatorInClause = String.join(",", Collections.nCopies(evaluatorIds.size(), "?"));
+        String sql;
+        Object[] params;
+        
+        if (modelIds != null && !modelIds.isEmpty()) {
+            // 有模型ID列表，使用 IN 子句
+            String modelInClause = String.join(",", Collections.nCopies(modelIds.size(), "?"));
+            sql = String.format(SQL_FIND_PENDING_ANSWERS_FOR_HUMAN_EVALUATION, evaluatorInClause, modelInClause);
+            
+            params = new Object[evaluatorIds.size() + modelIds.size() + 6];
+            
+            int paramIndex = 0;
+            for (Long evaluatorId : evaluatorIds) {
+                params[paramIndex++] = evaluatorId;
+            }
+            
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = 1; // 非空标志
+            
+            for (Long modelId : modelIds) {
+                params[paramIndex++] = modelId;
+            }
+            
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+            params[paramIndex++] = pageable.getPageSize();
+            params[paramIndex++] = pageable.getOffset();
+        } else {
+            // 没有模型ID列表，不使用 IN 子句
+            sql = String.format(SQL_FIND_PENDING_ANSWERS_FOR_HUMAN_EVALUATION, evaluatorInClause, "");
+            
+            params = new Object[evaluatorIds.size() + 5];
+            
+            int paramIndex = 0;
+            for (Long evaluatorId : evaluatorIds) {
+                params[paramIndex++] = evaluatorId;
+            }
+            
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = null;
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+            params[paramIndex++] = pageable.getPageSize();
+            params[paramIndex++] = pageable.getOffset();
+        }
+        
+        return jdbcTemplate.query(sql, params, (rs, rowNum) -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("answerId", rs.getLong("answer_id"));
+            result.put("answerText", rs.getString("answer_text"));
+            result.put("runId", rs.getLong("run_id"));
+            result.put("modelId", rs.getLong("model_id"));
+            result.put("modelName", rs.getString("model_name"));
+            result.put("questionId", rs.getLong("question_id"));
+            result.put("questionText", rs.getString("question_text"));
+            result.put("questionType", rs.getString("question_type"));
+            result.put("difficultyLevel", rs.getString("difficulty_level"));
+            return result;
+        });
+    }
+    
+    /**
+     * 统计待人工评测的回答总数
+     *
+     * @param evaluatorIds 评测者ID列表
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param questionType 问题类型，如果为null则查询所有类型
+     * @return 总记录数
+     */
+    public long countPendingAnswersForHumanEvaluation(
+            List<Long> evaluatorIds, Long batchId, List<Long> modelIds, 
+            com.example.demo.entity.jdbc.QuestionType questionType) {
+        
+        String evaluatorInClause = String.join(",", Collections.nCopies(evaluatorIds.size(), "?"));
+        String sql;
+        Object[] params;
+        
+        if (modelIds != null && !modelIds.isEmpty()) {
+            // 有模型ID列表，使用 IN 子句
+            String modelInClause = String.join(",", Collections.nCopies(modelIds.size(), "?"));
+            sql = String.format(SQL_COUNT_PENDING_ANSWERS_FOR_HUMAN_EVALUATION, evaluatorInClause, modelInClause);
+            
+            params = new Object[evaluatorIds.size() + modelIds.size() + 4];
+            
+            int paramIndex = 0;
+            for (Long evaluatorId : evaluatorIds) {
+                params[paramIndex++] = evaluatorId;
+            }
+            
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = 1; // 非空标志
+            
+            for (Long modelId : modelIds) {
+                params[paramIndex++] = modelId;
+            }
+            
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+        } else {
+            // 没有模型ID列表，不使用 IN 子句
+            sql = String.format(SQL_COUNT_PENDING_ANSWERS_FOR_HUMAN_EVALUATION, evaluatorInClause, "");
+            
+            params = new Object[evaluatorIds.size() + 3];
+            
+            int paramIndex = 0;
+            for (Long evaluatorId : evaluatorIds) {
+                params[paramIndex++] = evaluatorId;
+            }
+            
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = null;
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+        }
+        
+        return jdbcTemplate.queryForObject(sql, params, Long.class);
+    }
+
+    /**
+     * 获取主观题回答及其所有评测员的评测结果
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param pageable 分页信息
+     * @return 包含回答和所有评测员评测信息的Map列表
+     */
+    public List<Map<String, Object>> findSubjectiveAnswersWithAllEvaluations(Long batchId, List<Long> modelIds, org.springframework.data.domain.Pageable pageable) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
+            "sq.id as question_id, sq.question_text, sq.question_type, " +
+            "e.id as evaluation_id, e.overall_score as score, e.comments, e.evaluation_results, " +
+            "ev.id as evaluator_id, ev.name as evaluator_name, ev.type as evaluator_type, " +
+            "u.id as user_id, u.username as username " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "LEFT JOIN evaluations e ON la.id = e.llm_answer_id " +
+            "LEFT JOIN evaluators ev ON e.evaluator_id = ev.id " +
+            "LEFT JOIN users u ON e.created_by_user_id = u.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        sqlBuilder.append("ORDER BY sq.id, lm.id, ev.id LIMIT ? OFFSET ?");
+        params.add(pageable.getPageSize());
+        params.add(pageable.getOffset());
+        
+        String sql = sqlBuilder.toString();
+        
+        // 使用Map来按答案ID分组
+        Map<Long, Map<String, Object>> answerMap = new HashMap<>();
+        
+        jdbcTemplate.query(sql, params.toArray(), (rs) -> {
+            Long answerId = rs.getLong("answer_id");
+            
+            // 如果这个答案还没有处理过，创建基础信息
+            if (!answerMap.containsKey(answerId)) {
+                Map<String, Object> answer = new HashMap<>();
+                answer.put("answerId", answerId);
+                answer.put("answerText", rs.getString("answer_text"));
+                answer.put("runId", rs.getLong("run_id"));
+                answer.put("modelId", rs.getLong("model_id"));
+                answer.put("modelName", rs.getString("model_name"));
+                answer.put("questionId", rs.getLong("question_id"));
+                answer.put("questionText", rs.getString("question_text"));
+                answer.put("questionType", rs.getString("question_type"));
+                answer.put("evaluations", new ArrayList<Map<String, Object>>());
+                answerMap.put(answerId, answer);
+            }
+            
+            // 获取当前答案的评测列表
+            Map<String, Object> currentAnswer = answerMap.get(answerId);
+            List<Map<String, Object>> evaluations = (List<Map<String, Object>>) currentAnswer.get("evaluations");
+            
+            // 如果有评测结果，添加到评测列表中
+            Long evaluationId = rs.getLong("evaluation_id");
+            if (!rs.wasNull()) {
+                Map<String, Object> evaluation = new HashMap<>();
+                evaluation.put("evaluationId", evaluationId);
+                evaluation.put("score", rs.getBigDecimal("score"));
+                evaluation.put("comments", rs.getString("comments"));
+                evaluation.put("evaluatorId", rs.getLong("evaluator_id"));
+                evaluation.put("evaluatorName", rs.getString("evaluator_name"));
+                evaluation.put("evaluatorType", rs.getString("evaluator_type"));
+                evaluation.put("userId", rs.getLong("user_id"));
+                evaluation.put("username", rs.getString("username"));
+                
+                String evaluationResults = rs.getString("evaluation_results");
+                if (evaluationResults != null) {
+                    try {
+                        evaluation.put("evaluationResults", objectMapper.readValue(evaluationResults, Map.class));
+                    } catch (Exception e) {
+                        evaluation.put("evaluationResults", new HashMap<>());
+                    }
+                } else {
+                    evaluation.put("evaluationResults", new HashMap<>());
+                }
+                
+                evaluations.add(evaluation);
+            }
+        });
+        
+        // 将Map转换为List返回
+        return new ArrayList<>(answerMap.values());
+    }
+    
+    /**
+     * 统计主观题回答的总数（用于获取所有评测员的评测结果）
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @return 总记录数
+     */
+    public long countSubjectiveAnswersWithAllEvaluations(Long batchId, List<Long> modelIds) {
+        StringBuilder sqlBuilder = new StringBuilder(
+            "SELECT COUNT(DISTINCT la.id) " +
+            "FROM llm_answers la " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND sq.question_type = 'SUBJECTIVE' "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(batchId);
+        
+        // 只有在有模型ID列表且不为空时才添加 IN 子句
+        if (modelIds != null && !modelIds.isEmpty()) {
+            sqlBuilder.append("AND lm.id IN (");
+            for (int i = 0; i < modelIds.size(); i++) {
+                if (i > 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append("?");
+                params.add(modelIds.get(i));
+            }
+            sqlBuilder.append(") ");
+        }
+        
+        String sql = sqlBuilder.toString();
+        
+        return jdbcTemplate.queryForObject(sql, params.toArray(), Long.class);
     }
 } 

@@ -137,9 +137,18 @@ public class RawDataController {
     // 搜索原始问题（分页）
     @GetMapping("/questions/search")
     public ResponseEntity<Page<RawQuestionDisplayDTO>> searchRawQuestions(
-            @RequestParam String keyword,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) List<String> tags,
+            @RequestParam(required = false) Boolean unStandardized,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(rawDataService.searchRawQuestions(keyword, pageable));
+        
+        // 如果只有关键词，使用简单搜索
+        if (keyword != null && !keyword.isEmpty() && (tags == null || tags.isEmpty()) && unStandardized == null) {
+            return ResponseEntity.ok(rawDataService.searchRawQuestions(keyword, pageable));
+        }
+        
+        // 否则使用高级搜索
+        return ResponseEntity.ok(rawDataService.advancedSearchRawQuestions(keyword, tags, unStandardized, pageable));
     }
     
     // 添加测试数据

@@ -1,14 +1,18 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.Evaluation;
-import com.example.demo.entity.jdbc.EvaluationType;
-import com.example.demo.entity.jdbc.EvaluationRun;
-import com.example.demo.entity.jdbc.Evaluator;
-import com.example.demo.entity.jdbc.LlmAnswer;
-import com.example.demo.entity.jdbc.User;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,18 +21,14 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.sql.Types;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.Evaluation;
+import com.example.demo.entity.jdbc.EvaluationRun;
+import com.example.demo.entity.jdbc.EvaluationType;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.LlmAnswer;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 基于JDBC的评测仓库实现
@@ -100,6 +100,40 @@ public class EvaluationRepository {
     
     private static final String SQL_FIND_ALL = 
             "SELECT * FROM evaluations";
+
+    private static final String SQL_FIND_COMPLETED_HUMAN_EVALUATIONS = 
+            "SELECT e.*, la.id as answer_id, la.answer_text, mar.id as run_id, " +
+            "lm.id as model_id, lm.name as model_name, sq.id as question_id, " +
+            "sq.question_text, sq.question_type, sq.difficulty as difficulty_level " +
+            "FROM evaluations e " +
+            "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND ev.evaluator_type = 'HUMAN' " +
+            "AND ev.user_id = ? " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "AND (? IS NULL OR sq.question_type = ?) " +
+            "ORDER BY e.evaluation_time DESC " +
+            "LIMIT ? OFFSET ?";
+            
+    private static final String SQL_COUNT_COMPLETED_HUMAN_EVALUATIONS = 
+            "SELECT COUNT(*) " +
+            "FROM evaluations e " +
+            "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+            "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+            "JOIN llm_models lm ON mar.llm_model_id = lm.id " +
+            "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+            "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+            "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+            "WHERE mar.answer_generation_batch_id = ? " +
+            "AND ev.evaluator_type = 'HUMAN' " +
+            "AND ev.user_id = ? " +
+            "AND (? IS NULL OR lm.id IN (%s)) " +
+            "AND (? IS NULL OR sq.question_type = ?)";
 
     @Autowired
     public EvaluationRepository(JdbcTemplate jdbcTemplate, UserRepository UserRepository, ObjectMapper objectMapper) {
@@ -534,6 +568,142 @@ public class EvaluationRepository {
      */
     public List<Evaluation> findAll() {
         return jdbcTemplate.query(SQL_FIND_ALL, new EvaluationRowMapper());
+    }
+
+    /**
+     * 获取已完成的人工评测
+     *
+     * @param evaluatorIds 评测者ID列表
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param questionType 问题类型，如果为null则查询所有类型
+     * @param pageable 分页信息
+     * @return 包含已完成评测信息的Map列表
+     */
+    public List<Map<String, Object>> findCompletedHumanEvaluations(
+            List<Long> evaluatorIds, Long batchId, List<Long> modelIds, 
+            com.example.demo.entity.jdbc.QuestionType questionType, 
+            org.springframework.data.domain.Pageable pageable) {
+        
+        String sql;
+        Object[] params;
+        
+        if (modelIds != null && !modelIds.isEmpty()) {
+            // 有模型ID列表，使用IN子句
+            String modelInClause = String.join(",", Collections.nCopies(modelIds.size(), "?"));
+            sql = String.format(SQL_FIND_COMPLETED_HUMAN_EVALUATIONS, modelInClause);
+            
+            params = new Object[modelIds.size() + 7];
+            
+            int paramIndex = 0;
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = 1; // 非空标志
+            
+            for (Long modelId : modelIds) {
+                params[paramIndex++] = modelId;
+            }
+            
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+            params[paramIndex++] = pageable.getPageSize();
+            params[paramIndex++] = pageable.getOffset();
+        } else {
+            // 没有模型ID列表，使用1=0条件（永假）代替空的IN子句
+            sql = SQL_FIND_COMPLETED_HUMAN_EVALUATIONS.replace("lm.id IN (%s)", "1=1");
+            
+            params = new Object[7];
+            
+            int paramIndex = 0;
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = null; // 使用null表示不应用模型过滤
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+            params[paramIndex++] = pageable.getPageSize();
+            params[paramIndex++] = pageable.getOffset();
+        }
+        
+        return jdbcTemplate.query(sql, params, (rs, rowNum) -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("evaluationId", rs.getLong("id"));
+            result.put("answerId", rs.getLong("answer_id"));
+            result.put("answerText", rs.getString("answer_text"));
+            result.put("runId", rs.getLong("run_id"));
+            result.put("modelId", rs.getLong("model_id"));
+            result.put("modelName", rs.getString("model_name"));
+            result.put("questionId", rs.getLong("question_id"));
+            result.put("questionText", rs.getString("question_text"));
+            result.put("questionType", rs.getString("question_type"));
+            result.put("difficultyLevel", rs.getString("difficulty_level"));
+            result.put("score", rs.getBigDecimal("overall_score"));
+            result.put("comments", rs.getString("comments"));
+            result.put("evaluationTime", rs.getTimestamp("evaluation_time"));
+            
+            String evaluationResults = rs.getString("evaluation_results");
+            if (evaluationResults != null) {
+                try {
+                    result.put("evaluationResults", objectMapper.readValue(evaluationResults, Map.class));
+                } catch (Exception e) {
+                    result.put("evaluationResults", new HashMap<>());
+                }
+            } else {
+                result.put("evaluationResults", new HashMap<>());
+            }
+            
+            return result;
+        });
+    }
+    
+    /**
+     * 统计已完成的人工评测总数
+     *
+     * @param evaluatorIds 评测者ID列表
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表，如果为null则查询所有模型
+     * @param questionType 问题类型，如果为null则查询所有类型
+     * @return 总记录数
+     */
+    public long countCompletedHumanEvaluations(
+            List<Long> evaluatorIds, Long batchId, List<Long> modelIds, 
+            com.example.demo.entity.jdbc.QuestionType questionType) {
+        
+        String sql;
+        Object[] params;
+        
+        if (modelIds != null && !modelIds.isEmpty()) {
+            // 有模型ID列表，使用IN子句
+            String modelInClause = String.join(",", Collections.nCopies(modelIds.size(), "?"));
+            sql = String.format(SQL_COUNT_COMPLETED_HUMAN_EVALUATIONS, modelInClause);
+            
+            params = new Object[modelIds.size() + 5];
+            
+            int paramIndex = 0;
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = 1; // 非空标志
+            
+            for (Long modelId : modelIds) {
+                params[paramIndex++] = modelId;
+            }
+            
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+        } else {
+            // 没有模型ID列表，使用1=1条件代替空的IN子句
+            sql = SQL_COUNT_COMPLETED_HUMAN_EVALUATIONS.replace("lm.id IN (%s)", "1=1");
+            
+            params = new Object[5];
+            
+            int paramIndex = 0;
+            params[paramIndex++] = batchId;
+            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = null; // 使用null表示不应用模型过滤
+            params[paramIndex++] = questionType == null ? null : 1; // 非空标志
+            params[paramIndex++] = questionType == null ? null : questionType.name();
+        }
+        
+        return jdbcTemplate.queryForObject(sql, params, Long.class);
     }
 
     /**

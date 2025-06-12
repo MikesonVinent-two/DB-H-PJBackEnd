@@ -195,6 +195,49 @@ public interface EvaluationService {
     List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType);
     
     /**
+     * 获取特定问题类型的评测标准（分页，排除已删除）
+     * 
+     * @param questionType 问题类型
+     * @param page 页码
+     * @param size 每页大小
+     * @return 评测标准列表
+     */
+    List<EvaluationCriterion> getCriteriaForQuestionType(QuestionType questionType, int page, int size);
+    
+    /**
+     * 保存评测标准（新增或更新）
+     * 
+     * @param criterion 评测标准对象
+     * @return 保存后的评测标准对象
+     */
+    EvaluationCriterion saveEvaluationCriterion(EvaluationCriterion criterion);
+    
+    /**
+     * 根据ID获取评测标准
+     * 
+     * @param criterionId 评测标准ID
+     * @return 评测标准对象
+     */
+    EvaluationCriterion getEvaluationCriterionById(Long criterionId);
+    
+    /**
+     * 获取所有评测标准（分页）
+     * 
+     * @param page 页码
+     * @param size 每页大小
+     * @return 评测标准列表
+     */
+    List<EvaluationCriterion> getAllEvaluationCriteria(int page, int size);
+    
+    /**
+     * 删除评测标准
+     * 
+     * @param criterionId 评测标准ID
+     * @param userId 操作用户ID
+     */
+    void deleteEvaluationCriterion(Long criterionId, Long userId);
+    
+    /**
      * 计算文本相似度
      * 
      * @param text1 第一个文本
@@ -260,16 +303,18 @@ public interface EvaluationService {
     Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId);
     
     /**
-     * 批量评测主观题，支持指定主观题评测提示词和评测组装配置
+     * 批量评测主观题，支持指定评测标准ID列表
      * 
      * @param batchId 批次ID
      * @param evaluatorId 评测者ID
      * @param userId 用户ID
      * @param subjectivePromptId 主观题评测提示词ID
      * @param evaluationAssemblyConfigId 评测组装配置ID
+     * @param criteriaIds 评测标准ID列表
      * @return 评测结果
      */
-    Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, Long subjectivePromptId, Long evaluationAssemblyConfigId);
+    Map<String, Object> evaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId, 
+            Long subjectivePromptId, Long evaluationAssemblyConfigId, List<Long> criteriaIds);
     
     /**
      * 重新评测单个主观题回答（强制覆盖已有评测）
@@ -290,6 +335,81 @@ public interface EvaluationService {
      * @return 评测结果统计
      */
     Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId);
+    
+    /**
+     * 批量重新评测主观题（强制覆盖已有评测）- 支持指定评测提示词和评测标准
+     * @param batchId 批次ID
+     * @param evaluatorId 评测者ID
+     * @param userId 用户ID
+     * @param subjectivePromptId 主观题评测提示词ID
+     * @param evaluationAssemblyConfigId 评测组装配置ID
+     * @param criteriaIds 评测标准ID列表
+     * @return 评测结果
+     */
+    Map<String, Object> reEvaluateBatchSubjectiveQuestions(Long batchId, Long evaluatorId, Long userId,
+            Long subjectivePromptId, Long evaluationAssemblyConfigId, List<Long> criteriaIds);
+    
+    /**
+     * 获取客观题机器评测详细结果
+     * 
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param page 页码
+     * @param size 每页大小
+     * @return 客观题评测详细结果
+     */
+    Map<String, Object> getObjectiveDetailedResults(Long batchId, List<Long> modelIds, int page, int size);
+    
+    /**
+     * 获取主观题大模型评测详细结果
+     * 
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param evaluatorId 评测者ID（大模型）
+     * @param page 页码
+     * @param size 每页大小
+     * @return 主观题评测详细结果
+     */
+    Map<String, Object> getSubjectiveDetailedResults(Long batchId, List<Long> modelIds, Long evaluatorId, int page, int size);
+    
+    /**
+     * 获取主观题所有评测员的评测详细结果
+     * 
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param page 页码
+     * @param size 每页大小
+     * @return 包含所有评测员评测结果的主观题评测详细结果
+     */
+    Map<String, Object> getSubjectiveDetailedResultsWithAllEvaluators(Long batchId, List<Long> modelIds, int page, int size);
+    
+    /**
+     * 获取待人工评测的回答列表
+     * 
+     * @param userId 用户ID
+     * @param evaluatorId 评测者ID
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param questionType 问题类型
+     * @param page 页码
+     * @param size 每页大小
+     * @return 待评测回答列表
+     */
+    Map<String, Object> getPendingHumanEvaluations(Long userId, Long evaluatorId, Long batchId, List<Long> modelIds, String questionType, int page, int size);
+    
+    /**
+     * 获取用户已评测的回答列表
+     * 
+     * @param userId 用户ID
+     * @param evaluatorId 评测者ID
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表
+     * @param questionType 问题类型
+     * @param page 页码
+     * @param size 每页大小
+     * @return 已评测回答列表
+     */
+    Map<String, Object> getCompletedHumanEvaluations(Long userId, Long evaluatorId, Long batchId, List<Long> modelIds, String questionType, int page, int size);
     
     /**
      * 创建并提交人工评测（一步式操作）
@@ -322,4 +442,23 @@ public interface EvaluationService {
      * @return 包含标准答案信息的Map
      */
     Map<String, Object> getStandardAnswerForQuestion(Long questionId);
+    
+    /**
+     * 获取或创建评测运行记录
+     *
+     * @param batchId 批次ID
+     * @param evaluatorId 评测员ID
+     * @param userId 用户ID
+     * @return 评测运行记录
+     */
+    EvaluationRun getOrCreateEvaluationRun(Long batchId, Long evaluatorId, Long userId);
+    
+    /**
+     * 一步式人工评测（创建并提交评测）
+     *
+     * @param llmAnswerId LLM回答ID
+     * @param userId 用户ID
+     * @return 评测记录
+     */
+    Evaluation oneStepHumanEvaluation(Long llmAnswerId, Long userId);
 } 

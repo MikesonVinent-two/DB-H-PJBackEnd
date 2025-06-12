@@ -1,7 +1,7 @@
 package com.example.demo.entity.jdbc;
 
-import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -115,6 +115,27 @@ public class EvaluationCriterion {
 
     public void setScoreRange(String scoreRange) {
         this.scoreRange = scoreRange;
+    }
+    
+    /**
+     * 获取评分标准的最大分数
+     * @return 最大分数
+     */
+    public BigDecimal getMaxScore() {
+        if (scoreRange == null || scoreRange.isEmpty()) {
+            return BigDecimal.ONE; // 默认最大分数为1
+        }
+        
+        try {
+            // 假设scoreRange格式为"0-5"或"1-10"这样的范围格式
+            String[] parts = scoreRange.split("-");
+            if (parts.length == 2) {
+                return new BigDecimal(parts[1].trim());
+            }
+            return BigDecimal.ONE;
+        } catch (Exception e) {
+            return BigDecimal.ONE;
+        }
     }
     
     public List<String> getApplicableQuestionTypes() {

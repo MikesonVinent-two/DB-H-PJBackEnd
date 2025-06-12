@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,6 +32,7 @@ import com.example.demo.entity.jdbc.EvaluationRun;
 import com.example.demo.entity.jdbc.LlmAnswer;
 import com.example.demo.entity.jdbc.QuestionType;
 import com.example.demo.entity.jdbc.StandardQuestion;
+import com.example.demo.entity.jdbc.User;
 import com.example.demo.repository.jdbc.LlmAnswerRepository;
 import com.example.demo.service.EvaluationService;
 import com.example.demo.util.ApiConstants;
@@ -249,11 +251,106 @@ public class EvaluationController {
      */
     @GetMapping("/criteria")
     public ResponseEntity<List<EvaluationCriterion>> getEvaluationCriteria(
-            @RequestParam QuestionType questionType) {
+            @RequestParam QuestionType questionType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         
-        logger.info("接收到获取评测标准请求，问题类型: {}", questionType);
+        logger.info("接收到获取评测标准请求，问题类型: {}, 页码: {}, 每页大小: {}", questionType, page, size);
         
-        List<EvaluationCriterion> criteria = evaluationService.getCriteriaForQuestionType(questionType);
+        List<EvaluationCriterion> criteria = evaluationService.getCriteriaForQuestionType(questionType, page, size);
+        
+        return ResponseEntity.ok(criteria);
+    }
+    
+    /**
+     * 创建评测标准
+     */
+    @PostMapping("/criteria")
+    public ResponseEntity<EvaluationCriterion> createEvaluationCriterion(
+            @RequestBody EvaluationCriterion criterion,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到创建评测标准请求，标准名称: {}", criterion.getName());
+        
+        // 设置创建者
+        User user = new User();
+        user.setId(userId);
+        criterion.setCreatedByUser(user);
+        
+        EvaluationCriterion savedCriterion = evaluationService.saveEvaluationCriterion(criterion);
+        
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedCriterion);
+    }
+    
+    /**
+     * 更新评测标准
+     */
+    @PutMapping("/criteria/{criterionId}")
+    public ResponseEntity<EvaluationCriterion> updateEvaluationCriterion(
+            @PathVariable Long criterionId,
+            @RequestBody EvaluationCriterion criterion,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到更新评测标准请求，标准ID: {}", criterionId);
+        
+        // 确保ID一致
+        criterion.setId(criterionId);
+        
+        // 设置更新者
+        User user = new User();
+        user.setId(userId);
+        criterion.setCreatedByUser(user);
+        
+        EvaluationCriterion updatedCriterion = evaluationService.saveEvaluationCriterion(criterion);
+        
+        return ResponseEntity.ok(updatedCriterion);
+    }
+    
+    /**
+     * 删除评测标准
+     */
+    @DeleteMapping("/criteria/{criterionId}")
+    public ResponseEntity<Map<String, Object>> deleteEvaluationCriterion(
+            @PathVariable Long criterionId,
+            @RequestParam Long userId) {
+        
+        logger.info("接收到删除评测标准请求，标准ID: {}", criterionId);
+        
+        evaluationService.deleteEvaluationCriterion(criterionId, userId);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "评测标准已删除");
+        response.put("criterionId", criterionId);
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 获取评测标准详情
+     */
+    @GetMapping("/criteria/{criterionId}")
+    public ResponseEntity<EvaluationCriterion> getEvaluationCriterionById(
+            @PathVariable Long criterionId) {
+        
+        logger.info("接收到获取评测标准详情请求，标准ID: {}", criterionId);
+        
+        EvaluationCriterion criterion = evaluationService.getEvaluationCriterionById(criterionId);
+        
+        return ResponseEntity.ok(criterion);
+    }
+    
+    /**
+     * 获取所有评测标准
+     */
+    @GetMapping("/criteria/all")
+    public ResponseEntity<List<EvaluationCriterion>> getAllEvaluationCriteria(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取所有评测标准请求，页码: {}, 每页大小: {}", page, size);
+        
+        List<EvaluationCriterion> criteria = evaluationService.getAllEvaluationCriteria(page, size);
         
         return ResponseEntity.ok(criteria);
     }
@@ -382,6 +479,64 @@ public class EvaluationController {
     }
     
     /**
+     * 获取客观题机器评测详细结果
+     * 返回客观题评测详细结果，包括每个问题的模型回答、标准答案和评分，以及每个模型的平均分
+     */
+    @GetMapping("/objective/results")
+    public ResponseEntity<Map<String, Object>> getObjectiveDetailedResults(
+            @RequestParam Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取客观题评测详细结果请求，批次ID: {}, 模型IDs: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, page, size);
+        
+        Map<String, Object> results = evaluationService.getObjectiveDetailedResults(batchId, modelIds, page, size);
+        
+        return ResponseEntity.ok(results);
+    }
+    
+    /**
+     * 获取主观题大模型评测详细结果
+     * 返回主观题大模型评测详细结果，包括评测标准得分、总体评语和改进建议
+     */
+    @GetMapping("/subjective/results")
+    public ResponseEntity<Map<String, Object>> getSubjectiveDetailedResults(
+            @RequestParam Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam Long evaluatorId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取主观题评测详细结果请求，批次ID: {}, 模型IDs: {}, 评测者ID: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, evaluatorId, page, size);
+        
+        Map<String, Object> results = evaluationService.getSubjectiveDetailedResults(batchId, modelIds, evaluatorId, page, size);
+        
+        return ResponseEntity.ok(results);
+    }
+    
+    /**
+     * 获取主观题所有评测员的评测详细结果
+     * 返回主观题所有评测员的评测详细结果，包括每个评测员的评分、评语和评测详情
+     */
+    @GetMapping("/subjective/results/all-evaluators")
+    public ResponseEntity<Map<String, Object>> getSubjectiveDetailedResultsWithAllEvaluators(
+            @RequestParam Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取主观题所有评测员的评测详细结果请求，批次ID: {}, 模型IDs: {}, 页码: {}, 每页大小: {}", 
+                batchId, modelIds, page, size);
+        
+        Map<String, Object> results = evaluationService.getSubjectiveDetailedResultsWithAllEvaluators(batchId, modelIds, page, size);
+        
+        return ResponseEntity.ok(results);
+    }
+    
+    /**
      * 评测一个批次中的所有客观题（单选题、多选题和简单事实题）
      */
     @PostMapping("/batch/{batchId}/objective-questions")
@@ -421,52 +576,160 @@ public class EvaluationController {
         
         logger.info("接收到批量评测主观题请求，批次ID: {}", request.getBatchId());
         
-        // 创建评测运行记录
-        Map<String, Object> params = new HashMap<>();
-        params.put(ApiConstants.KEY_BATCH_ID, request.getBatchId());
-        params.put("evaluationType", "SUBJECTIVE_BATCH");
-        
-        // 如果指定了主观题评测提示词ID，则添加到参数中
-        if (request.getSubjectivePromptId() != null) {
-            params.put("subjectivePromptId", request.getSubjectivePromptId());
-            logger.info("使用指定的主观题评测提示词，ID: {}", request.getSubjectivePromptId());
+        try {
+            // 创建评测运行记录
+            EvaluationRun evaluationRun = evaluationService.getOrCreateEvaluationRun(
+                    request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+            
+            // 异步执行评测任务
+            CompletableFuture.runAsync(() -> {
+                try {
+                    evaluationService.evaluateBatchSubjectiveQuestions(
+                            request.getBatchId(), 
+                            request.getEvaluatorId(), 
+                            request.getUserId(),
+                            request.getSubjectivePromptId(),
+                            request.getEvaluationAssemblyConfigId(),
+                            request.getCriteriaIds());
+                } catch (Exception e) {
+                    logger.error("异步批量评测主观题失败", e);
+                }
+            });
+            
+            // 立即返回响应
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("message", "批量评测已开始");
+            result.put("evaluationRunId", evaluationRun.getId());
+            result.put("batchId", request.getBatchId());
+            result.put("status", "PROCESSING");
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("处理评测请求时发生异常", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "批量评测启动失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
         }
+    }
+    
+    /**
+     * 获取待人工评测的回答列表
+     * 返回未被指定用户评测过的回答，并附上对应的标准问题和标准答案
+     */
+    @GetMapping("/human/pending")
+    public ResponseEntity<Map<String, Object>> getPendingHumanEvaluations(
+            @RequestParam Long userId,
+            @RequestParam Long evaluatorId,
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(required = false) String questionType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         
-        // 如果指定了评测组装配置ID，则添加到参数中
-        if (request.getEvaluationAssemblyConfigId() != null) {
-            params.put("evaluationAssemblyConfigId", request.getEvaluationAssemblyConfigId());
-            logger.info("使用指定的评测组装配置，ID: {}", request.getEvaluationAssemblyConfigId());
-        }
+        logger.info("接收到获取待人工评测回答列表请求，用户ID: {}, 评测者ID: {}, 批次ID: {}, 模型IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
         
-        EvaluationRun evaluationRun = evaluationService.createEvaluationRun(
-                request.getBatchId(),
-                request.getEvaluatorId(),
-                "批量主观题评测-" + request.getBatchId(),
-                null,
-                params,  // 使用Map<String, Object>类型的参数
-                request.getUserId());
+        Map<String, Object> results = evaluationService.getPendingHumanEvaluations(
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
         
-        // 异步启动评测
-        CompletableFuture.runAsync(() -> {
-            try {
-                evaluationService.evaluateBatchSubjectiveQuestions(
-                    request.getBatchId(), 
-                    request.getEvaluatorId(), 
-                    request.getUserId(),
-                    request.getSubjectivePromptId(),
-                    request.getEvaluationAssemblyConfigId());  // 传递评测组装配置ID
-            } catch (Exception e) {
-                logger.error("批量评测主观题失败", e);
+        return ResponseEntity.ok(results);
+    }
+    
+    /**
+     * 获取用户已评测的回答列表
+     * 返回用户已评测过的回答列表及评测结果
+     */
+    @GetMapping("/human/completed")
+    public ResponseEntity<Map<String, Object>> getCompletedHumanEvaluations(
+            @RequestParam Long userId,
+            @RequestParam Long evaluatorId,
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(required = false) String questionType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        
+        logger.info("接收到获取已完成人工评测回答列表请求，用户ID: {}, 评测者ID: {}, 批次ID: {}, 模型IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
+        
+        Map<String, Object> results = evaluationService.getCompletedHumanEvaluations(
+                userId, evaluatorId, batchId, modelIds, questionType, page, size);
+        
+        return ResponseEntity.ok(results);
+    }
+    
+    /**
+     * 一步式人工评测
+     */
+    @PostMapping("/human/one-step")
+    public ResponseEntity<Map<String, Object>> oneStepHumanEvaluation(
+            @RequestBody CreateAndSubmitHumanEvaluationRequest request) {
+        
+        logger.info("接收到一步式人工评测请求，回答ID: {}, 用户ID: {}", 
+                request.getLlmAnswerId(), request.getUserId());
+
+        try {
+            Evaluation evaluation = evaluationService.oneStepHumanEvaluation(
+                    request.getLlmAnswerId(), request.getUserId());
+            
+            // 构建API响应
+            Map<String, Object> response = new HashMap<>();
+            response.put(ApiConstants.KEY_SUCCESS, true);
+            response.put(ApiConstants.KEY_MESSAGE, "评测提交成功");
+            
+            // 构建返回数据
+            Map<String, Object> data = new HashMap<>();
+            data.put("evaluationId", evaluation.getId());
+            data.put("llmAnswerId", evaluation.getLlmAnswer().getId());
+            data.put("evaluatorId", evaluation.getEvaluator().getId());
+            data.put("overallScore", evaluation.getScore());
+            data.put(ApiConstants.KEY_COMMENTS, evaluation.getComments());
+            
+            // 获取详细评分项
+            List<EvaluationDetail> details = evaluationService.getEvaluationDetails(evaluation.getId());
+            List<Map<String, Object>> detailScores = new ArrayList<>();
+            
+            for (EvaluationDetail detail : details) {
+                Map<String, Object> detailScore = new HashMap<>();
+                detailScore.put("id", detail.getId());
+                // 添加空值检查，如果criterion为null，则使用criterionName作为标识
+                if (detail.getCriterion() != null) {
+                    detailScore.put("criterionId", detail.getCriterion().getId());
+                } else {
+                    // 使用criterionName作为标识，或者提供一个默认值
+                    detailScore.put("criterionId", null);
+                }
+                detailScore.put("criterionName", detail.getCriterionName());
+                detailScore.put(ApiConstants.KEY_SCORE, detail.getScore());
+                detailScore.put(ApiConstants.KEY_COMMENTS, detail.getComments());
+                detailScores.add(detailScore);
             }
-        });
-        
-        // 立即返回响应
-        Map<String, Object> response = new HashMap<>();
-        response.put(ApiConstants.KEY_MESSAGE, "评测任务已启动");
-        response.put(ApiConstants.KEY_RUN_ID, evaluationRun.getId());
-        response.put(ApiConstants.KEY_STATUS, "STARTED");
-        
-        return ResponseEntity.ok(response);
+            
+            data.put("detailScores", detailScores);
+            data.put("createdBy", evaluation.getCreatedByUser().getId());
+            data.put("createdAt", evaluation.getCreationTime());
+            data.put(ApiConstants.KEY_STATUS, evaluation.getStatus());
+            
+            response.put("data", data);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("处理一步式人工评测请求时发生异常", e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put(ApiConstants.KEY_SUCCESS, false);
+            errorResponse.put(ApiConstants.KEY_MESSAGE, "评测提交失败");
+            errorResponse.put(ApiConstants.KEY_ERROR, Map.of(
+                "code", "EVALUATION_ERROR",
+                "details", e.getMessage()
+            ));
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
     
     /**
@@ -480,7 +743,12 @@ public class EvaluationController {
         
         try {
             Map<String, Object> result = evaluationService.reEvaluateBatchSubjectiveQuestions(
-                    request.getBatchId(), request.getEvaluatorId(), request.getUserId());
+                    request.getBatchId(), 
+                    request.getEvaluatorId(), 
+                    request.getUserId(),
+                    request.getSubjectivePromptId(),
+                    request.getEvaluationAssemblyConfigId(),
+                    request.getCriteriaIds());
             
             result.put("success", true);
             result.put("message", "批量重新评测成功");
@@ -570,7 +838,13 @@ public class EvaluationController {
             for (EvaluationDetail detail : details) {
                 Map<String, Object> detailScore = new HashMap<>();
                 detailScore.put("id", detail.getId());
-                detailScore.put("criterionId", detail.getCriterion().getId());
+                // 添加空值检查，如果criterion为null，则使用criterionName作为标识
+                if (detail.getCriterion() != null) {
+                    detailScore.put("criterionId", detail.getCriterion().getId());
+                } else {
+                    // 使用criterionName作为标识，或者提供一个默认值
+                    detailScore.put("criterionId", null);
+                }
                 detailScore.put("criterionName", detail.getCriterionName());
                 detailScore.put(ApiConstants.KEY_SCORE, detail.getScore());
                 detailScore.put(ApiConstants.KEY_COMMENTS, detail.getComments());
@@ -639,7 +913,13 @@ public class EvaluationController {
             for (EvaluationDetail detail : details) {
                 Map<String, Object> detailScore = new HashMap<>();
                 detailScore.put("id", detail.getId());
-                detailScore.put("criterionId", detail.getCriterion().getId());
+                // 添加空值检查，如果criterion为null，则使用criterionName作为标识
+                if (detail.getCriterion() != null) {
+                    detailScore.put("criterionId", detail.getCriterion().getId());
+                } else {
+                    // 使用criterionName作为标识，或者提供一个默认值
+                    detailScore.put("criterionId", null);
+                }
                 detailScore.put("criterionName", detail.getCriterionName());
                 detailScore.put(ApiConstants.KEY_SCORE, detail.getScore());
                 detailScore.put(ApiConstants.KEY_COMMENTS, detail.getComments());
@@ -1009,6 +1289,7 @@ public class EvaluationController {
         private Long userId;
         private Long subjectivePromptId;
         private Long evaluationAssemblyConfigId;
+        private List<Long> criteriaIds;
         
         public Long getBatchId() {
             return batchId;
@@ -1048,6 +1329,14 @@ public class EvaluationController {
         
         public void setEvaluationAssemblyConfigId(Long evaluationAssemblyConfigId) {
             this.evaluationAssemblyConfigId = evaluationAssemblyConfigId;
+        }
+        
+        public List<Long> getCriteriaIds() {
+            return criteriaIds;
+        }
+        
+        public void setCriteriaIds(List<Long> criteriaIds) {
+            this.criteriaIds = criteriaIds;
         }
     }
     
@@ -1138,6 +1427,132 @@ public class EvaluationController {
         
         logger.info("找到{}个未评测的回答，当前页{}显示{}条", totalCount, page, pagedAnswers.size());
         return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 获取批量主观题评测的进度
+     */
+    @GetMapping("/batch/subjective/{batchId}/progress")
+    public ResponseEntity<Map<String, Object>> getSubjectiveEvaluationProgress(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId) {
+        
+        logger.info("接收到查询批量主观题评测进度请求，批次ID: {}, 评测者ID: {}", batchId, evaluatorId);
+        
+        try {
+            // 查找评测运行记录
+            List<EvaluationRun> runs = evaluationService.getEvaluationRuns(batchId, evaluatorId, null, 0, 1);
+            
+            if (runs.isEmpty()) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("success", false);
+                result.put("message", "未找到对应的评测运行记录");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(result);
+            }
+            
+            EvaluationRun run = runs.get(0);
+            
+            // 获取评测进度
+            Map<String, Object> progress = evaluationService.getEvaluationRunProgress(run.getId());
+            
+            // 添加额外信息
+            progress.put("success", true);
+            progress.put("batchId", batchId);
+            progress.put("evaluatorId", evaluatorId);
+            
+            return ResponseEntity.ok(progress);
+            
+        } catch (Exception e) {
+            logger.error("查询批量主观题评测进度失败", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "查询评测进度失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    /**
+     * 取消批量主观题评测任务
+     */
+    @PostMapping("/batch/subjective/{batchId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelSubjectiveEvaluation(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId) {
+        
+        logger.info("接收到取消批量主观题评测请求，批次ID: {}, 评测者ID: {}", batchId, evaluatorId);
+        
+        try {
+            // 查找评测运行记录
+            List<EvaluationRun> runs = evaluationService.getEvaluationRuns(batchId, evaluatorId, null, 0, 1);
+            
+            if (runs.isEmpty()) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("success", false);
+                result.put("message", "未找到对应的评测运行记录");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(result);
+            }
+            
+            EvaluationRun run = runs.get(0);
+            
+            // 暂停评测任务
+            boolean paused = evaluationService.pauseEvaluationRun(run.getId());
+            
+            Map<String, Object> result = new HashMap<>();
+            if (paused) {
+                result.put("success", true);
+                result.put("message", "评测任务已取消");
+            } else {
+                result.put("success", false);
+                result.put("message", "无法取消评测任务，可能任务已完成或已取消");
+            }
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("取消批量主观题评测失败", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "取消评测任务失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    /**
+     * 获取批量主观题评测的结果
+     */
+    @GetMapping("/batch/subjective/{batchId}/results")
+    public ResponseEntity<Map<String, Object>> getSubjectiveEvaluationResults(
+            @PathVariable Long batchId,
+            @RequestParam Long evaluatorId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取批量主观题评测结果请求，批次ID: {}, 评测者ID: {}", batchId, evaluatorId);
+        
+        try {
+            // 获取评测结果
+            Map<String, Object> results = evaluationService.getSubjectiveDetailedResults(
+                    batchId, modelIds, evaluatorId, page, size);
+            
+            // 添加额外信息
+            results.put("success", true);
+            
+            return ResponseEntity.ok(results);
+            
+        } catch (Exception e) {
+            logger.error("获取批量主观题评测结果失败", e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "获取评测结果失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
     }
     
     @ExceptionHandler(Exception.class)

@@ -3,7 +3,9 @@ package com.example.demo.service.impl;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -11,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -324,6 +327,85 @@ public class RawDataServiceImpl implements RawDataService {
         return rawQuestionRepository.findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(
                 keyword, keyword, pageable)
                 .map(this::convertToDisplayDTO);
+    }
+
+    @Override
+    public Page<RawQuestionDisplayDTO> advancedSearchRawQuestions(String keyword, List<String> tags, 
+            Boolean unStandardized, Pageable pageable) {
+        // 使用Set来防止重复结果
+        Map<Long, RawQuestion> resultMap = new HashMap<>();
+        
+        // 1. 如果有关键词，先按关键词搜索
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            Page<RawQuestion> keywordResults = rawQuestionRepository.findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(
+                    keyword, keyword, Pageable.unpaged());
+            keywordResults.forEach(q -> resultMap.put(q.getId(), q));
+        }
+        
+        // 2. 如果有标签，按标签搜索
+        if (tags != null && !tags.isEmpty()) {
+            Page<RawQuestion> tagResults;
+            if (resultMap.isEmpty() && keyword == null) {
+                // 如果没有关键词搜索结果，直接按标签搜索
+                tagResults = questionRepository.findByTagNames(tags, (long)tags.size(), Pageable.unpaged());
+            } else {
+                // 如果有关键词搜索结果，在关键词结果中过滤标签
+                List<Long> questionIds = new ArrayList<>(resultMap.keySet());
+                if (questionIds.isEmpty()) {
+                    return Page.empty(pageable);
+                }
+                // 这里需要实现一个新的repository方法来支持按ID列表和标签名过滤
+                tagResults = questionRepository.findByIdsAndTagNames(questionIds, tags, (long)tags.size(), Pageable.unpaged());
+            }
+            // 更新结果集
+            resultMap.clear();
+            tagResults.forEach(q -> resultMap.put(q.getId(), q));
+        }
+        
+        // 3. 如果需要过滤标准化状态
+        if (unStandardized != null) {
+            List<Long> standardizedIds = standardQuestionRepository.findDistinctOriginalRawQuestionIds();
+            
+            if (unStandardized) {
+                // 只保留未标准化的问题
+                resultMap.keySet().removeIf(standardizedIds::contains);
+            } else {
+                // 如果是false，不需要特别过滤，因为我们要返回所有问题
+                // 如果resultMap为空且有其他过滤条件，我们需要初始化resultMap
+                if (resultMap.isEmpty() && (keyword != null || (tags != null && !tags.isEmpty()))) {
+                    return Page.empty(pageable);
+                } else if (resultMap.isEmpty()) {
+                    // 如果没有任何过滤条件，获取所有问题
+                    Page<RawQuestion> allQuestions = rawQuestionRepository.findAll(Pageable.unpaged());
+                    allQuestions.forEach(q -> resultMap.put(q.getId(), q));
+                }
+            }
+        } else if (resultMap.isEmpty() && keyword == null && (tags == null || tags.isEmpty())) {
+            // 如果没有任何过滤条件，获取所有问题
+            Page<RawQuestion> allQuestions = rawQuestionRepository.findAll(Pageable.unpaged());
+            allQuestions.forEach(q -> resultMap.put(q.getId(), q));
+        }
+        
+        // 将结果转换为列表并排序
+        List<RawQuestion> resultList = new ArrayList<>(resultMap.values());
+        resultList.sort((q1, q2) -> q2.getId().compareTo(q1.getId())); // 按ID降序排序
+        
+        // 手动分页
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), resultList.size());
+        
+        if (start >= resultList.size()) {
+            return Page.empty(pageable);
+        }
+        
+        List<RawQuestion> pageContent = resultList.subList(start, end);
+        
+        // 转换为DTO并返回
+        return new PageImpl<>(
+                pageContent.stream().map(this::convertToDisplayDTO).collect(Collectors.toList()),
+                pageable,
+                resultList.size()
+        );
     }
 
     @Override

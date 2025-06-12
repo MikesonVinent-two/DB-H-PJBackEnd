@@ -31,6 +31,17 @@ public interface RawDataService {
     Page<RawQuestionDisplayDTO> searchRawQuestions(String keyword, Pageable pageable);
     
     /**
+     * 高级搜索原始问题
+     * @param keyword 关键词（可选）
+     * @param tags 标签列表（可选）
+     * @param unStandardized 是否只返回未标准化的问题
+     * @param pageable 分页参数
+     * @return 符合条件的问题列表
+     */
+    Page<RawQuestionDisplayDTO> advancedSearchRawQuestions(String keyword, List<String> tags, 
+            Boolean unStandardized, Pageable pageable);
+    
+    /**
      * 根据多个标签查询问题
      * @param tags 标签列表
      * @param pageable 分页参数

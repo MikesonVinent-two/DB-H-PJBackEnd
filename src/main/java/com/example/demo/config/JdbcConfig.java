@@ -29,7 +29,7 @@ public class JdbcConfig {
 
     /**
      * 配置NamedParameterJdbcTemplate
-     * 支持命名参数，而不是位置参数（如?）
+     * 支持命名参数，而不是位置参数（?）
      */
     @Bean
     public NamedParameterJdbcTemplate namedParameterJdbcTemplate() {

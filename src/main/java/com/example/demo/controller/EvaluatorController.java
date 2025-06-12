@@ -28,6 +28,7 @@ import com.example.demo.entity.jdbc.Evaluator;
 import com.example.demo.entity.jdbc.User;
 import com.example.demo.repository.jdbc.EvaluatorRepository;
 import com.example.demo.repository.jdbc.UserRepository;
+import com.example.demo.service.AiEvaluatorConnectivityService;
 import com.example.demo.util.ApiConstants;
 
 /**
@@ -42,10 +43,15 @@ public class EvaluatorController {
     
     private final EvaluatorRepository evaluatorRepository;
     private final UserRepository userRepository;
+    private final AiEvaluatorConnectivityService aiEvaluatorConnectivityService;
     
-    public EvaluatorController(EvaluatorRepository evaluatorRepository, UserRepository userRepository) {
+    public EvaluatorController(
+            EvaluatorRepository evaluatorRepository, 
+            UserRepository userRepository,
+            AiEvaluatorConnectivityService aiEvaluatorConnectivityService) {
         this.evaluatorRepository = evaluatorRepository;
         this.userRepository = userRepository;
+        this.aiEvaluatorConnectivityService = aiEvaluatorConnectivityService;
     }
     
     /**
@@ -468,6 +474,56 @@ public class EvaluatorController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "error", "获取评测者列表失败: " + e.getMessage()
             ));
+        }
+    }
+    
+    /**
+     * 测试大模型评测员的连通性
+     * 
+     * @param evaluatorId 评测员ID
+     * @return 连通性测试结果
+     */
+    @GetMapping("/ai/connectivity-test/{evaluatorId}")
+    public ResponseEntity<Map<String, Object>> testAiEvaluatorConnectivity(@PathVariable Long evaluatorId) {
+        logger.info("接收到测试大模型评测员连通性请求，评测员ID: {}", evaluatorId);
+        
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            // 获取评测员信息
+            Optional<Evaluator> evaluatorOpt = evaluatorRepository.findById(evaluatorId);
+            
+            if (evaluatorOpt.isEmpty()) {
+                response.put("success", false);
+                response.put("message", "未找到指定的评测员");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            
+            Evaluator evaluator = evaluatorOpt.get();
+            
+            // 检查是否为AI评测员
+            if (evaluator.getEvaluatorType() != Evaluator.EvaluatorType.AI_MODEL) {
+                response.put("success", false);
+                response.put("message", "指定的评测员不是大模型评测员");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            // 检查是否有关联的LLM模型
+            if (evaluator.getLlmModel() == null) {
+                response.put("success", false);
+                response.put("message", "评测员没有关联的大模型");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            // 调用服务进行连通性测试
+            Map<String, Object> testResult = aiEvaluatorConnectivityService.testConnectivity(evaluatorId);
+            
+            return ResponseEntity.ok(testResult);
+        } catch (Exception e) {
+            logger.error("测试大模型评测员连通性失败", e);
+            response.put("success", false);
+            response.put("message", "测试连通性时发生错误: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
     

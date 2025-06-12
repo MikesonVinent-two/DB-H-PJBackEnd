@@ -1,17 +1,5 @@
 package com.example.demo.repository.jdbc;
 
-import com.example.demo.entity.jdbc.ChangeLog;
-import com.example.demo.entity.jdbc.Evaluator;
-import com.example.demo.entity.jdbc.LlmModel;
-import com.example.demo.entity.jdbc.User;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -20,6 +8,19 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.jdbc.ChangeLog;
+import com.example.demo.entity.jdbc.Evaluator;
+import com.example.demo.entity.jdbc.LlmModel;
+import com.example.demo.entity.jdbc.User;
 
 /**
  * 基于JDBC的评测者仓库实现
@@ -58,6 +59,9 @@ public class EvaluatorRepository {
             
     private static final String SQL_EXISTS_BY_ID = 
             "SELECT COUNT(*) FROM evaluators WHERE id=?";
+            
+    private static final String SQL_FIND_HUMAN_EVALUATOR_IDS_BY_USER_ID = 
+            "SELECT id FROM evaluators WHERE evaluator_type='HUMAN' AND user_id=? AND deleted_at IS NULL";
 
     @Autowired
     public EvaluatorRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
@@ -262,6 +266,16 @@ public class EvaluatorRepository {
     public boolean existsById(Long id) {
         Integer count = jdbcTemplate.queryForObject(SQL_EXISTS_BY_ID, Integer.class, id);
         return count != null && count > 0;
+    }
+
+    /**
+     * 根据用户ID查找人类评测者ID列表
+     *
+     * @param userId 用户ID
+     * @return 人类评测者ID列表
+     */
+    public List<Long> findHumanEvaluatorIdsByUserId(Long userId) {
+        return jdbcTemplate.queryForList(SQL_FIND_HUMAN_EVALUATOR_IDS_BY_USER_ID, Long.class, userId);
     }
 
     /**

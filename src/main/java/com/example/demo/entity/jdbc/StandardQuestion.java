@@ -93,6 +93,14 @@ public class StandardQuestion {
     public void setDifficulty(DifficultyLevel difficulty) {
         this.difficulty = difficulty;
     }
+    
+    /**
+     * 获取问题难度级别
+     * @return 难度级别
+     */
+    public DifficultyLevel getDifficultyLevel() {
+        return difficulty;
+    }
 
     public LocalDateTime getCreationTime() {
         return creationTime;
