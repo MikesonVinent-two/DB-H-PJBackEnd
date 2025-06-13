@@ -54,13 +54,13 @@ public class EvaluationCriterionRepository {
             "SELECT * FROM evaluation_criteria WHERE id=?";
     
     private static final String SQL_FIND_ALL = 
-            "SELECT * FROM evaluation_criteria";
+            "SELECT * FROM evaluation_criteria WHERE deleted_at IS NULL";
     
     private static final String SQL_FIND_ALL_PAGEABLE = 
-            "SELECT * FROM evaluation_criteria LIMIT ? OFFSET ?";
+            "SELECT * FROM evaluation_criteria WHERE deleted_at IS NULL LIMIT ? OFFSET ?";
     
     private static final String SQL_COUNT_ALL = 
-            "SELECT COUNT(*) FROM evaluation_criteria";
+            "SELECT COUNT(*) FROM evaluation_criteria WHERE deleted_at IS NULL";
     
     private static final String SQL_FIND_BY_QUESTION_TYPE_AND_DELETED_AT_IS_NULL = 
             "SELECT * FROM evaluation_criteria WHERE question_type=? AND deleted_at IS NULL";

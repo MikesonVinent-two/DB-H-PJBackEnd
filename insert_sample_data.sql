@@ -125,56 +125,394 @@ INSERT INTO `RAW_ANSWERS` (`RAW_QUESTION_ID`, `AUTHOR_INFO`, `CONTENT`, `PUBLISH
 (40, '结核病防治医生', '肺结核最主要的传播途径是呼吸道传播，特别是通过病人咳嗽、打喷嚏产生的飞沫传播。', NOW() - INTERVAL 40 DAY + INTERVAL 1 HOUR, 28, TRUE, JSON_OBJECT('answer_id', 2040)),
 (41, '急救志愿者', '中暑了应迅速移到阴凉处，用湿毛巾擦拭降温，补充淡盐水。预防要避免高温暴晒，及时补水，穿着透气衣物。', NOW() - INTERVAL 41 DAY + INTERVAL 1 HOUR, 35, TRUE, JSON_OBJECT('answer_id', 2041));
 
--- 插入标准问题数据 (与 RAW_QUESTIONS 的 ID 对应)
-INSERT INTO `STANDARD_QUESTIONS` (`ID`, `ORIGINAL_RAW_QUESTION_ID`, `QUESTION_TEXT`, `QUESTION_TYPE`, `DIFFICULTY`, `CREATED_BY_USER_ID`) VALUES
-(1, 1, '高血压的主要症状有哪些？', 'SUBJECTIVE', 'MEDIUM', 1),
-(2, 2, '糖尿病患者的日常饮食应该注意什么？', 'SUBJECTIVE', 'MEDIUM', 1),
-(3, 3, '以下哪些是冠心病的典型症状？\nA. 胸痛\nB. 气短\nC. 出汗\nD. 恶心', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(4, 4, '正常人的空腹血糖值范围是多少？\nA. 3.9-6.1 mmol/L\nB. 7.0-8.0 mmol/L\nC. 2.0-3.5 mmol/L\nD. 8.0-10.0 mmol/L', 'SINGLE_CHOICE', 'EASY', 1),
-(5, 5, '成人正常心率范围是多少？', 'SIMPLE_FACT', 'EASY', 1),
-(6, 6, '人体正常体温是多少摄氏度？', 'SIMPLE_FACT', 'EASY', 1),
-(7, 7, '正常成人血压的理想范围是多少？', 'SIMPLE_FACT', 'EASY', 1),
-(8, 8, 'BMI指数超过多少被定义为肥胖？', 'SIMPLE_FACT', 'EASY', 1),
-(9, 9, '人体中最大的器官是什么？', 'SIMPLE_FACT', 'EASY', 1),
--- 更多标准问题 (扩充)
-(10, 10, '以下哪项不是常见的感冒症状？\nA. 发烧\nB. 咳嗽\nC. 腹泻\nD. 鼻塞', 'SINGLE_CHOICE', 'EASY', 1),
-(11, 11, '预防流感的有效措施包括哪些？\nA. 每年接种流感疫苗\nB. 保持良好的个人卫生习惯\nC. 避免前往人群密集场所\nD. 多喝水', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(12, 12, '什么是抗生素耐药性？它是如何产生的？', 'SUBJECTIVE', 'MEDIUM', 1),
-(13, 13, '健康成年人每日推荐的饮水量大约是多少？', 'SIMPLE_FACT', 'EASY', 1),
-(14, 14, '下列哪种维生素缺乏可能导致夜盲症？\nA. 维生素A\nB. 维生素C\nC. 维生素D\nD. 维生素B12', 'SINGLE_CHOICE', 'MEDIUM', 1),
-(15, 15, '请简述心肌梗死的急救措施和后续治疗原则。', 'SUBJECTIVE', 'HARD', 1),
-(16, 16, '以下哪些属于慢性阻塞性肺疾病（COPD）的高危因素？\nA. 长期吸烟\nB. 空气污染\nC. 遗传因素\nD. 过敏性鼻炎', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(17, 17, '艾滋病的主要传播途径是什么？', 'SIMPLE_FACT', 'EASY', 1),
-(18, 18, '骨质疏松症最常发生骨折的部位是哪里？\nA. 颅骨\nB. 肋骨\nC. 脊椎体\nD. 指骨', 'SINGLE_CHOICE', 'MEDIUM', 1),
-(19, 19, '如何通过改善生活方式来预防2型糖尿病？', 'SUBJECTIVE', 'MEDIUM', 1),
-(20, 20, '"癌症三阶梯止痛法"是由哪个组织提出的？', 'SIMPLE_FACT', 'MEDIUM', 1),
-(21, 21, '发热时，物理降温的常用方法不包括？\nA. 温水擦浴\nB. 冰袋敷额头\nC. 饮用大量冰水\nD. 减少衣物', 'SINGLE_CHOICE', 'EASY', 1),
-(22, 22, '儿童常见的过敏原有哪些？\nA. 花粉\nB. 尘螨\nC. 牛奶\nD. 宠物皮屑', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(23, 23, '什么是抑郁症的核心症状？如何进行初步识别？', 'SUBJECTIVE', 'MEDIUM', 1),
-(24, 24, '人体内负责凝血功能的重要血细胞是什么？', 'SIMPLE_FACT', 'EASY', 1),
-(25, 25, '用于早期筛查宫颈癌的常用检查方法是？\nA. B超检查\nB. HPV检测和TCT检查\nC. 阴道镜检查\nD. 肿瘤标志物检测', 'SINGLE_CHOICE', 'MEDIUM', 1),
-(26, 26, '简述阿尔茨海默病的主要临床表现和分期。', 'SUBJECTIVE', 'HARD', 1),
-(27, 27, '幽门螺杆菌感染与下列哪些疾病密切相关？\nA. 慢性胃炎\nB. 消化性溃疡\nC. 胃癌\nD. 胃食管反流病', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(28, 28, '白内障最主要的治疗方法是什么？', 'SIMPLE_FACT', 'EASY', 1),
-(29, 29, '对于急性缺血性脑卒中，发病后多少小时内进行静脉溶栓治疗效果最佳（时间窗）？\nA. 1小时内\nB. 3小时内\nC. 4.5小时内\nD. 6小时内', 'SINGLE_CHOICE', 'HARD', 1),
-(30, 30, '什么是疫苗？它在预防传染病中的作用机制是什么？', 'SUBJECTIVE', 'MEDIUM', 1),
-(31, 31, '狂犬病病毒主要通过哪种方式传播给人类？', 'SIMPLE_FACT', 'EASY', 1),
-(32, 32, '痛风患者饮食中应严格限制哪类食物的摄入？\nA. 高嘌呤食物\nB. 高蛋白食物\nC. 高碳水化合物食物\nD. 高维生素食物', 'SINGLE_CHOICE', 'MEDIUM', 1),
-(33, 33, '维持人体水电解质平衡至关重要的离子有哪些？\nA. 钠离子 (Na+)\nB. 钾离子 (K+)\nC. 氯离子 (Cl-)\nD. 钙离子 (Ca2+)', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(34, 34, '什么是食物中毒？常见的预防措施有哪些？', 'SUBJECTIVE', 'MEDIUM', 1),
-(35, 35, '缺铁性贫血最常见的症状是什么？', 'SIMPLE_FACT', 'EASY', 1),
-(36, 36, '"OTC"药品是指什么类型的药品？\nA. 处方药\nB. 非处方药\nC. 精神药品\nD. 特殊管理药品', 'SINGLE_CHOICE', 'EASY', 1),
-(37, 37, '以下哪些是健康的生活习惯？\nA. 规律作息，保证充足睡眠\nB. 均衡饮食，多吃蔬菜水果\nC. 坚持适度体育锻炼\nD. 长期熬夜，吸烟饮酒', 'MULTIPLE_CHOICE', 'MEDIUM', 1),
-(38, 38, '请解释什么是"免疫力"？如何科学地提高个人免疫力？', 'SUBJECTIVE', 'HARD', 1),
-(39, 39, '新生儿黄疸分为生理性和病理性，哪种需要及时就医干预？', 'SIMPLE_FACT', 'MEDIUM', 1),
-(40, 40, '肺结核最主要的传播途径是？\nA. 消化道传播\nB. 血液传播\nC. 呼吸道传播（飞沫传播）\nD. 接触传播', 'SINGLE_CHOICE', 'MEDIUM', 1),
-(41, 41, '中暑了应该怎么办？如何预防中暑？', 'SUBJECTIVE', 'MEDIUM', 1);
+-- 首先插入变更日志主表数据
+INSERT INTO `CHANGE_LOG` (`ID`, `CHANGE_TIME`, `CHANGED_BY_USER_ID`, `CHANGE_TYPE`, `COMMIT_MESSAGE`, `ASSOCIATED_STANDARD_QUESTION_ID`) VALUES
+(1, '2024-01-15 09:00:00', 1, 'BULK_CREATE', '批量导入医疗健康领域标准问题数据集，包含各种类型的医学问题', NULL),
+(2, '2024-01-15 09:15:00', 1, 'CREATE', '创建高血压症状相关主观题', 1),
+(3, '2024-01-15 09:16:00', 1, 'CREATE', '创建糖尿病饮食指导主观题', 2),
+(4, '2024-01-15 09:17:00', 1, 'CREATE', '创建冠心病症状识别多选题', 3),
+(5, '2024-01-15 09:18:00', 1, 'CREATE', '创建空腹血糖正常值单选题', 4),
+(6, '2024-01-15 09:19:00', 1, 'CREATE', '创建成人心率范围事实题', 5),
+(7, '2024-01-15 09:20:00', 1, 'CREATE', '创建人体正常体温事实题', 6),
+(8, '2024-01-15 09:21:00', 1, 'CREATE', '创建血压理想范围事实题', 7),
+(9, '2024-01-15 09:22:00', 1, 'CREATE', '创建BMI肥胖标准事实题', 8),
+(10, '2024-01-15 09:23:00', 1, 'CREATE', '创建人体最大器官事实题', 9),
+(11, '2024-01-15 09:24:00', 1, 'CREATE', '创建感冒症状识别单选题', 10),
+(12, '2024-01-15 09:25:00', 1, 'CREATE', '创建流感预防措施多选题', 11),
+(13, '2024-01-15 09:26:00', 1, 'CREATE', '创建抗生素耐药性解释主观题', 12),
+(14, '2024-01-15 09:27:00', 1, 'CREATE', '创建每日饮水量事实题', 13),
+(15, '2024-01-15 09:28:00', 1, 'CREATE', '创建维生素缺乏症单选题', 14),
+(16, '2024-01-15 09:29:00', 1, 'CREATE', '创建心肌梗死急救主观题', 15),
+(17, '2024-01-15 09:30:00', 1, 'CREATE', '创建COPD高危因素多选题', 16),
+(18, '2024-01-15 09:31:00', 1, 'CREATE', '创建艾滋病传播途径事实题', 17),
+(19, '2024-01-15 09:32:00', 1, 'CREATE', '创建骨质疏松骨折部位单选题', 18),
+(20, '2024-01-15 09:33:00', 1, 'CREATE', '创建2型糖尿病预防主观题', 19),
+(21, '2024-01-15 09:34:00', 1, 'CREATE', '创建癌症止痛法来源事实题', 20),
+(22, '2024-01-15 09:35:00', 1, 'CREATE', '创建物理降温方法单选题', 21),
+(23, '2024-01-15 09:36:00', 1, 'CREATE', '创建儿童过敏原多选题', 22),
+(24, '2024-01-15 09:37:00', 1, 'CREATE', '创建抑郁症症状识别主观题', 23),
+(25, '2024-01-15 09:38:00', 1, 'CREATE', '创建凝血血细胞事实题', 24),
+(26, '2024-01-15 09:39:00', 1, 'CREATE', '创建宫颈癌筛查方法单选题', 25),
+(27, '2024-01-15 09:40:00', 1, 'CREATE', '创建阿尔茨海默病临床表现主观题', 26),
+(28, '2024-01-15 09:41:00', 1, 'CREATE', '创建幽门螺杆菌相关疾病多选题', 27),
+(29, '2024-01-15 09:42:00', 1, 'CREATE', '创建白内障治疗方法事实题', 28),
+(30, '2024-01-15 09:43:00', 1, 'CREATE', '创建脑卒中溶栓时间窗单选题', 29),
+(31, '2024-01-15 09:44:00', 1, 'CREATE', '创建疫苗作用机制主观题', 30),
+(32, '2024-01-15 09:45:00', 1, 'CREATE', '创建狂犬病传播方式事实题', 31),
+(33, '2024-01-15 09:46:00', 1, 'CREATE', '创建痛风饮食限制单选题', 32),
+(34, '2024-01-15 09:47:00', 1, 'CREATE', '创建水电解质平衡离子多选题', 33),
+(35, '2024-01-15 09:48:00', 1, 'CREATE', '创建食物中毒预防主观题', 34),
+(36, '2024-01-15 09:49:00', 1, 'CREATE', '创建缺铁性贫血症状事实题', 35),
+(37, '2024-01-15 09:50:00', 1, 'CREATE', '创建OTC药品定义单选题', 36),
+(38, '2024-01-15 09:51:00', 1, 'CREATE', '创建健康生活习惯多选题', 37),
+(39, '2024-01-15 09:52:00', 1, 'CREATE', '创建免疫力提升方法主观题', 38),
+(40, '2024-01-15 09:53:00', 1, 'CREATE', '创建新生儿黄疸分类事实题', 39),
+(41, '2024-01-15 09:54:00', 1, 'CREATE', '创建肺结核传播途径单选题', 40),
+(42, '2024-01-15 09:55:00', 1, 'CREATE', '创建中暑处理预防主观题', 41);
+
+-- 然后插入变更日志详情数据
+INSERT INTO CHANGE_LOG_DETAILS (CHANGE_LOG_ID, ENTITY_TYPE, ENTITY_ID, ATTRIBUTE_NAME, OLD_VALUE, NEW_VALUE) VALUES
+-- 问题1的详情
+(2, 'STANDARD_QUESTION', 1, 'QUESTION_TEXT', NULL, '"高血压的主要症状有哪些？"'),
+(2, 'STANDARD_QUESTION', 1, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(2, 'STANDARD_QUESTION', 1, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(2, 'STANDARD_QUESTION', 1, 'ORIGINAL_RAW_QUESTION_ID', NULL, '1'),
+(2, 'STANDARD_QUESTION', 1, 'CREATED_BY_USER_ID', NULL, '1'),
+
+-- 问题2的详情
+(3, 'STANDARD_QUESTION', 2, 'QUESTION_TEXT', NULL, '"糖尿病患者的日常饮食应该注意什么？"'),
+(3, 'STANDARD_QUESTION', 2, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(3, 'STANDARD_QUESTION', 2, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(3, 'STANDARD_QUESTION', 2, 'ORIGINAL_RAW_QUESTION_ID', NULL, '2'),
+(3, 'STANDARD_QUESTION', 2, 'CREATED_BY_USER_ID', NULL, '2'),
+
+-- 问题3的详情
+(4, 'STANDARD_QUESTION', 3, 'QUESTION_TEXT', NULL, '"以下哪些是冠心病的典型症状？\\nA. 胸痛\\nB. 气短\\nC. 出汗\\nD. 恶心"'),
+(4, 'STANDARD_QUESTION', 3, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(4, 'STANDARD_QUESTION', 3, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(4, 'STANDARD_QUESTION', 3, 'ORIGINAL_RAW_QUESTION_ID', NULL, '3'),
+(4, 'STANDARD_QUESTION', 3, 'CREATED_BY_USER_ID', NULL, '3'),
+
+-- 问题4的详情
+(5, 'STANDARD_QUESTION', 4, 'QUESTION_TEXT', NULL, '"正常人的空腹血糖值范围是多少？\\nA. 3.9-6.1 mmol/L\\nB. 7.0-8.0 mmol/L\\nC. 2.0-3.5 mmol/L\\nD. 8.0-10.0 mmol/L"'),
+(5, 'STANDARD_QUESTION', 4, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(5, 'STANDARD_QUESTION', 4, 'DIFFICULTY', NULL, '"EASY"'),
+(5, 'STANDARD_QUESTION', 4, 'ORIGINAL_RAW_QUESTION_ID', NULL, '4'),
+(5, 'STANDARD_QUESTION', 4, 'CREATED_BY_USER_ID', NULL, '4'),
+
+-- 问题5的详情
+(6, 'STANDARD_QUESTION', 5, 'QUESTION_TEXT', NULL, '"成人正常心率范围是多少？"'),
+(6, 'STANDARD_QUESTION', 5, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(6, 'STANDARD_QUESTION', 5, 'DIFFICULTY', NULL, '"EASY"'),
+(6, 'STANDARD_QUESTION', 5, 'ORIGINAL_RAW_QUESTION_ID', NULL, '5'),
+(6, 'STANDARD_QUESTION', 5, 'CREATED_BY_USER_ID', NULL, '5'),
+
+-- 问题6的详情
+(7, 'STANDARD_QUESTION', 6, 'QUESTION_TEXT', NULL, '"人体正常体温是多少摄氏度？"'),
+(7, 'STANDARD_QUESTION', 6, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(7, 'STANDARD_QUESTION', 6, 'DIFFICULTY', NULL, '"EASY"'),
+(7, 'STANDARD_QUESTION', 6, 'ORIGINAL_RAW_QUESTION_ID', NULL, '6'),
+(7, 'STANDARD_QUESTION', 6, 'CREATED_BY_USER_ID', NULL, '6'),
+
+-- 问题7的详情
+(8, 'STANDARD_QUESTION', 7, 'QUESTION_TEXT', NULL, '"正常成人血压的理想范围是多少？"'),
+(8, 'STANDARD_QUESTION', 7, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(8, 'STANDARD_QUESTION', 7, 'DIFFICULTY', NULL, '"EASY"'),
+(8, 'STANDARD_QUESTION', 7, 'ORIGINAL_RAW_QUESTION_ID', NULL, '7'),
+(8, 'STANDARD_QUESTION', 7, 'CREATED_BY_USER_ID', NULL, '7'),
+
+-- 问题8的详情
+(9, 'STANDARD_QUESTION', 8, 'QUESTION_TEXT', NULL, '"BMI指数超过多少被定义为肥胖？"'),
+(9, 'STANDARD_QUESTION', 8, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(9, 'STANDARD_QUESTION', 8, 'DIFFICULTY', NULL, '"EASY"'),
+(9, 'STANDARD_QUESTION', 8, 'ORIGINAL_RAW_QUESTION_ID', NULL, '8'),
+(9, 'STANDARD_QUESTION', 8, 'CREATED_BY_USER_ID', NULL, '8'),
+
+-- 问题9的详情
+(10, 'STANDARD_QUESTION', 9, 'QUESTION_TEXT', NULL, '"人体中最大的器官是什么？"'),
+(10, 'STANDARD_QUESTION', 9, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(10, 'STANDARD_QUESTION', 9, 'DIFFICULTY', NULL, '"EASY"'),
+(10, 'STANDARD_QUESTION', 9, 'ORIGINAL_RAW_QUESTION_ID', NULL, '9'),
+(10, 'STANDARD_QUESTION', 9, 'CREATED_BY_USER_ID', NULL, '9'),
+
+-- 问题10的详情
+(11, 'STANDARD_QUESTION', 10, 'QUESTION_TEXT', NULL, '"以下哪项不是常见的感冒症状？\\nA. 发烧\\nB. 咳嗽\\nC. 腹泻\\nD. 鼻塞"'),
+(11, 'STANDARD_QUESTION', 10, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(11, 'STANDARD_QUESTION', 10, 'DIFFICULTY', NULL, '"EASY"'),
+(11, 'STANDARD_QUESTION', 10, 'ORIGINAL_RAW_QUESTION_ID', NULL, '10'),
+(11, 'STANDARD_QUESTION', 10, 'CREATED_BY_USER_ID', NULL, '10'),
+
+-- 问题11的详情
+(12, 'STANDARD_QUESTION', 11, 'QUESTION_TEXT', NULL, '"预防流感的有效措施包括哪些？\\nA. 每年接种流感疫苗\\nB. 保持良好的个人卫生习惯\\nC. 避免前往人群密集场所\\nD. 多喝水"'),
+(12, 'STANDARD_QUESTION', 11, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(12, 'STANDARD_QUESTION', 11, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(12, 'STANDARD_QUESTION', 11, 'ORIGINAL_RAW_QUESTION_ID', NULL, '11'),
+(12, 'STANDARD_QUESTION', 11, 'CREATED_BY_USER_ID', NULL, '11'),
+
+-- 问题12的详情
+(13, 'STANDARD_QUESTION', 12, 'QUESTION_TEXT', NULL, '"什么是抗生素耐药性？它是如何产生的？"'),
+(13, 'STANDARD_QUESTION', 12, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(13, 'STANDARD_QUESTION', 12, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(13, 'STANDARD_QUESTION', 12, 'ORIGINAL_RAW_QUESTION_ID', NULL, '12'),
+(13, 'STANDARD_QUESTION', 12, 'CREATED_BY_USER_ID', NULL, '12'),
+
+-- 问题13的详情
+(14, 'STANDARD_QUESTION', 13, 'QUESTION_TEXT', NULL, '"健康成年人每日推荐的饮水量大约是多少？"'),
+(14, 'STANDARD_QUESTION', 13, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(14, 'STANDARD_QUESTION', 13, 'DIFFICULTY', NULL, '"EASY"'),
+(14, 'STANDARD_QUESTION', 13, 'ORIGINAL_RAW_QUESTION_ID', NULL, '13'),
+(14, 'STANDARD_QUESTION', 13, 'CREATED_BY_USER_ID', NULL, '13'),
+
+-- 问题14的详情
+(15, 'STANDARD_QUESTION', 14, 'QUESTION_TEXT', NULL, '"下列哪种维生素缺乏可能导致夜盲症？\\nA. 维生素A\\nB. 维生素C\\nC. 维生素D\\nD. 维生素B12"'),
+(15, 'STANDARD_QUESTION', 14, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(15, 'STANDARD_QUESTION', 14, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(15, 'STANDARD_QUESTION', 14, 'ORIGINAL_RAW_QUESTION_ID', NULL, '14'),
+(15, 'STANDARD_QUESTION', 14, 'CREATED_BY_USER_ID', NULL, '14'),
+
+-- 问题15的详情
+(16, 'STANDARD_QUESTION', 15, 'QUESTION_TEXT', NULL, '"请简述心肌梗死的急救措施和后续治疗原则。"'),
+(16, 'STANDARD_QUESTION', 15, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(16, 'STANDARD_QUESTION', 15, 'DIFFICULTY', NULL, '"HARD"'),
+(16, 'STANDARD_QUESTION', 15, 'ORIGINAL_RAW_QUESTION_ID', NULL, '15'),
+(16, 'STANDARD_QUESTION', 15, 'CREATED_BY_USER_ID', NULL, '15'),
+
+-- 问题16的详情
+(17, 'STANDARD_QUESTION', 16, 'QUESTION_TEXT', NULL, '"以下哪些属于慢性阻塞性肺疾病（COPD）的高危因素？\\nA. 长期吸烟\\nB. 空气污染\\nC. 遗传因素\\nD. 过敏性鼻炎"'),
+(17, 'STANDARD_QUESTION', 16, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(17, 'STANDARD_QUESTION', 16, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(17, 'STANDARD_QUESTION', 16, 'ORIGINAL_RAW_QUESTION_ID', NULL, '16'),
+(17, 'STANDARD_QUESTION', 16, 'CREATED_BY_USER_ID', NULL, '16'),
+
+-- 问题17的详情
+(18, 'STANDARD_QUESTION', 17, 'QUESTION_TEXT', NULL, '"艾滋病的主要传播途径是什么？"'),
+(18, 'STANDARD_QUESTION', 17, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(18, 'STANDARD_QUESTION', 17, 'DIFFICULTY', NULL, '"EASY"'),
+(18, 'STANDARD_QUESTION', 17, 'ORIGINAL_RAW_QUESTION_ID', NULL, '17'),
+(18, 'STANDARD_QUESTION', 17, 'CREATED_BY_USER_ID', NULL, '17'),
+
+-- 问题18的详情
+(19, 'STANDARD_QUESTION', 18, 'QUESTION_TEXT', NULL, '"骨质疏松症最常发生骨折的部位是哪里？\\nA. 颅骨\\nB. 肋骨\\nC. 脊椎体\\nD. 指骨"'),
+(19, 'STANDARD_QUESTION', 18, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(19, 'STANDARD_QUESTION', 18, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(19, 'STANDARD_QUESTION', 18, 'ORIGINAL_RAW_QUESTION_ID', NULL, '18'),
+(19, 'STANDARD_QUESTION', 18, 'CREATED_BY_USER_ID', NULL, '18'),
+
+-- 问题19的详情
+(20, 'STANDARD_QUESTION', 19, 'QUESTION_TEXT', NULL, '"如何通过改善生活方式来预防2型糖尿病？"'),
+(20, 'STANDARD_QUESTION', 19, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(20, 'STANDARD_QUESTION', 19, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(20, 'STANDARD_QUESTION', 19, 'ORIGINAL_RAW_QUESTION_ID', NULL, '19'),
+(20, 'STANDARD_QUESTION', 19, 'CREATED_BY_USER_ID', NULL, '19'),
+
+-- 问题20的详情
+(21, 'STANDARD_QUESTION', 20, 'QUESTION_TEXT', NULL, '"癌症三阶梯止痛法是由哪个组织提出的？"'),
+(21, 'STANDARD_QUESTION', 20, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(21, 'STANDARD_QUESTION', 20, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(21, 'STANDARD_QUESTION', 20, 'ORIGINAL_RAW_QUESTION_ID', NULL, '20'),
+(21, 'STANDARD_QUESTION', 20, 'CREATED_BY_USER_ID', NULL, '20'),
+
+-- 问题21的详情
+(22, 'STANDARD_QUESTION', 21, 'QUESTION_TEXT', NULL, '"发热时，物理降温的常用方法不包括？\\nA. 温水擦浴\\nB. 冰袋敷额头\\nC. 饮用大量冰水\\nD. 减少衣物"'),
+(22, 'STANDARD_QUESTION', 21, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(22, 'STANDARD_QUESTION', 21, 'DIFFICULTY', NULL, '"EASY"'),
+(22, 'STANDARD_QUESTION', 21, 'ORIGINAL_RAW_QUESTION_ID', NULL, '21'),
+(22, 'STANDARD_QUESTION', 21, 'CREATED_BY_USER_ID', NULL, '21'),
+
+-- 问题22的详情
+(23, 'STANDARD_QUESTION', 22, 'QUESTION_TEXT', NULL, '"儿童常见的过敏原有哪些？\\nA. 花粉\\nB. 尘螨\\nC. 牛奶\\nD. 宠物皮屑"'),
+(23, 'STANDARD_QUESTION', 22, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(23, 'STANDARD_QUESTION', 22, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(23, 'STANDARD_QUESTION', 22, 'ORIGINAL_RAW_QUESTION_ID', NULL, '22'),
+(23, 'STANDARD_QUESTION', 22, 'CREATED_BY_USER_ID', NULL, '22'),
+
+-- 问题23的详情
+(24, 'STANDARD_QUESTION', 23, 'QUESTION_TEXT', NULL, '"什么是抑郁症的核心症状？如何进行初步识别？"'),
+(24, 'STANDARD_QUESTION', 23, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(24, 'STANDARD_QUESTION', 23, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(24, 'STANDARD_QUESTION', 23, 'ORIGINAL_RAW_QUESTION_ID', NULL, '23'),
+(24, 'STANDARD_QUESTION', 23, 'CREATED_BY_USER_ID', NULL, '23'),
+
+-- 问题24的详情
+(25, 'STANDARD_QUESTION', 24, 'QUESTION_TEXT', NULL, '"人体内负责凝血功能的重要血细胞是什么？"'),
+(25, 'STANDARD_QUESTION', 24, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(25, 'STANDARD_QUESTION', 24, 'DIFFICULTY', NULL, '"EASY"'),
+(25, 'STANDARD_QUESTION', 24, 'ORIGINAL_RAW_QUESTION_ID', NULL, '24'),
+(25, 'STANDARD_QUESTION', 24, 'CREATED_BY_USER_ID', NULL, '24'),
+
+-- 问题25的详情
+(26, 'STANDARD_QUESTION', 25, 'QUESTION_TEXT', NULL, '"用于早期筛查宫颈癌的常用检查方法是？\\nA. B超检查\\nB. HPV检测和TCT检查\\nC. 阴道镜检查\\nD. 肿瘤标志物检测"'),
+(26, 'STANDARD_QUESTION', 25, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(26, 'STANDARD_QUESTION', 25, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(26, 'STANDARD_QUESTION', 25, 'ORIGINAL_RAW_QUESTION_ID', NULL, '25'),
+(26, 'STANDARD_QUESTION', 25, 'CREATED_BY_USER_ID', NULL, '25'),
+
+-- 问题26的详情
+(27, 'STANDARD_QUESTION', 26, 'QUESTION_TEXT', NULL, '"简述阿尔茨海默病的主要临床表现和分期。"'),
+(27, 'STANDARD_QUESTION', 26, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(27, 'STANDARD_QUESTION', 26, 'DIFFICULTY', NULL, '"HARD"'),
+(27, 'STANDARD_QUESTION', 26, 'ORIGINAL_RAW_QUESTION_ID', NULL, '26'),
+(27, 'STANDARD_QUESTION', 26, 'CREATED_BY_USER_ID', NULL, '26'),
+
+-- 问题27的详情
+(28, 'STANDARD_QUESTION', 27, 'QUESTION_TEXT', NULL, '"幽门螺杆菌感染与下列哪些疾病密切相关？\\nA. 慢性胃炎\\nB. 消化性溃疡\\nC. 胃癌\\nD. 胃食管反流病"'),
+(28, 'STANDARD_QUESTION', 27, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(28, 'STANDARD_QUESTION', 27, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(28, 'STANDARD_QUESTION', 27, 'ORIGINAL_RAW_QUESTION_ID', NULL, '27'),
+(28, 'STANDARD_QUESTION', 27, 'CREATED_BY_USER_ID', NULL, '27'),
+
+-- 问题28的详情
+(29, 'STANDARD_QUESTION', 28, 'QUESTION_TEXT', NULL, '"白内障最主要的治疗方法是什么？"'),
+(29, 'STANDARD_QUESTION', 28, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(29, 'STANDARD_QUESTION', 28, 'DIFFICULTY', NULL, '"EASY"'),
+(29, 'STANDARD_QUESTION', 28, 'ORIGINAL_RAW_QUESTION_ID', NULL, '28'),
+(29, 'STANDARD_QUESTION', 28, 'CREATED_BY_USER_ID', NULL, '28'),
+
+-- 问题29的详情
+(30, 'STANDARD_QUESTION', 29, 'QUESTION_TEXT', NULL, '"对于急性缺血性脑卒中，发病后多少小时内进行静脉溶栓治疗效果最佳（时间窗）？\\nA. 1小时内\\nB. 3小时内\\nC. 4.5小时内\\nD. 6小时内"'),
+(30, 'STANDARD_QUESTION', 29, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(30, 'STANDARD_QUESTION', 29, 'DIFFICULTY', NULL, '"HARD"'),
+(30, 'STANDARD_QUESTION', 29, 'ORIGINAL_RAW_QUESTION_ID', NULL, '29'),
+(30, 'STANDARD_QUESTION', 29, 'CREATED_BY_USER_ID', NULL, '29'),
+
+-- 问题30的详情
+(31, 'STANDARD_QUESTION', 30, 'QUESTION_TEXT', NULL, '"什么是疫苗？它在预防传染病中的作用机制是什么？"'),
+(31, 'STANDARD_QUESTION', 30, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(31, 'STANDARD_QUESTION', 30, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(31, 'STANDARD_QUESTION', 30, 'ORIGINAL_RAW_QUESTION_ID', NULL, '30'),
+(31, 'STANDARD_QUESTION', 30, 'CREATED_BY_USER_ID', NULL, '30'),
+
+-- 问题31的详情
+(32, 'STANDARD_QUESTION', 31, 'QUESTION_TEXT', NULL, '"狂犬病病毒主要通过哪种方式传播给人类？"'),
+(32, 'STANDARD_QUESTION', 31, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(32, 'STANDARD_QUESTION', 31, 'DIFFICULTY', NULL, '"EASY"'),
+(32, 'STANDARD_QUESTION', 31, 'ORIGINAL_RAW_QUESTION_ID', NULL, '31'),
+(32, 'STANDARD_QUESTION', 31, 'CREATED_BY_USER_ID', NULL, '31'),
+
+-- 问题32的详情
+(33, 'STANDARD_QUESTION', 32, 'QUESTION_TEXT', NULL, '"痛风患者饮食中应严格限制哪类食物的摄入？\\nA. 高嘌呤食物\\nB. 高蛋白食物\\nC. 高碳水化合物食物\\nD. 高维生素食物"'),
+(33, 'STANDARD_QUESTION', 32, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(33, 'STANDARD_QUESTION', 32, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(33, 'STANDARD_QUESTION', 32, 'ORIGINAL_RAW_QUESTION_ID', NULL, '32'),
+(33, 'STANDARD_QUESTION', 32, 'CREATED_BY_USER_ID', NULL, '32'),
+
+-- 问题33的详情
+(34, 'STANDARD_QUESTION', 33, 'QUESTION_TEXT', NULL, '"维持人体水电解质平衡至关重要的离子有哪些？\\nA. 钠离子 (Na+)\\nB. 钾离子 (K+)\\nC. 氯离子 (Cl-)\\nD. 钙离子 (Ca2+)"'),
+(34, 'STANDARD_QUESTION', 33, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(34, 'STANDARD_QUESTION', 33, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(34, 'STANDARD_QUESTION', 33, 'ORIGINAL_RAW_QUESTION_ID', NULL, '33'),
+(34, 'STANDARD_QUESTION', 33, 'CREATED_BY_USER_ID', NULL, '33'),
+
+-- 问题34的详情
+(35, 'STANDARD_QUESTION', 34, 'QUESTION_TEXT', NULL, '"什么是食物中毒？常见的预防措施有哪些？"'),
+(35, 'STANDARD_QUESTION', 34, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(35, 'STANDARD_QUESTION', 34, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(35, 'STANDARD_QUESTION', 34, 'ORIGINAL_RAW_QUESTION_ID', NULL, '34'),
+(35, 'STANDARD_QUESTION', 34, 'CREATED_BY_USER_ID', NULL, '34'),
+
+-- 问题35的详情
+(36, 'STANDARD_QUESTION', 35, 'QUESTION_TEXT', NULL, '"缺铁性贫血最常见的症状是什么？"'),
+(36, 'STANDARD_QUESTION', 35, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(36, 'STANDARD_QUESTION', 35, 'DIFFICULTY', NULL, '"EASY"'),
+(36, 'STANDARD_QUESTION', 35, 'ORIGINAL_RAW_QUESTION_ID', NULL, '35'),
+(36, 'STANDARD_QUESTION', 35, 'CREATED_BY_USER_ID', NULL, '35'),
+
+-- 问题36的详情
+(37, 'STANDARD_QUESTION', 36, 'QUESTION_TEXT', NULL, '"OTC药品是指什么类型的药品？\\nA. 处方药\\nB. 非处方药\\nC. 精神药品\\nD. 特殊管理药品"'),
+(37, 'STANDARD_QUESTION', 36, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(37, 'STANDARD_QUESTION', 36, 'DIFFICULTY', NULL, '"EASY"'),
+(37, 'STANDARD_QUESTION', 36, 'ORIGINAL_RAW_QUESTION_ID', NULL, '36'),
+(37, 'STANDARD_QUESTION', 36, 'CREATED_BY_USER_ID', NULL, '36'),
+
+-- 问题37的详情
+(38, 'STANDARD_QUESTION', 37, 'QUESTION_TEXT', NULL, '"以下哪些是健康的生活习惯？\\nA. 规律作息，保证充足睡眠\\nB. 均衡饮食，多吃蔬菜水果\\nC. 坚持适度体育锻炼\\nD. 长期熬夜，吸烟饮酒"'),
+(38, 'STANDARD_QUESTION', 37, 'QUESTION_TYPE', NULL, '"MULTIPLE_CHOICE"'),
+(38, 'STANDARD_QUESTION', 37, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(38, 'STANDARD_QUESTION', 37, 'ORIGINAL_RAW_QUESTION_ID', NULL, '37'),
+(38, 'STANDARD_QUESTION', 37, 'CREATED_BY_USER_ID', NULL, '37'),
+
+-- 问题38的详情
+(39, 'STANDARD_QUESTION', 38, 'QUESTION_TEXT', NULL, '"请解释什么是免疫力？如何科学地提高个人免疫力？"'),
+(39, 'STANDARD_QUESTION', 38, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(39, 'STANDARD_QUESTION', 38, 'DIFFICULTY', NULL, '"HARD"'),
+(39, 'STANDARD_QUESTION', 38, 'ORIGINAL_RAW_QUESTION_ID', NULL, '38'),
+(39, 'STANDARD_QUESTION', 38, 'CREATED_BY_USER_ID', NULL, '38'),
+
+-- 问题39的详情
+(40, 'STANDARD_QUESTION', 39, 'QUESTION_TEXT', NULL, '"新生儿黄疸分为生理性和病理性，哪种需要及时就医干预？"'),
+(40, 'STANDARD_QUESTION', 39, 'QUESTION_TYPE', NULL, '"SIMPLE_FACT"'),
+(40, 'STANDARD_QUESTION', 39, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(40, 'STANDARD_QUESTION', 39, 'ORIGINAL_RAW_QUESTION_ID', NULL, '39'),
+(40, 'STANDARD_QUESTION', 39, 'CREATED_BY_USER_ID', NULL, '39'),
+
+-- 问题40的详情
+(41, 'STANDARD_QUESTION', 40, 'QUESTION_TEXT', NULL, '"肺结核最主要的传播途径是？\\nA. 消化道传播\\nB. 血液传播\\nC. 呼吸道传播（飞沫传播）\\nD. 接触传播"'),
+(41, 'STANDARD_QUESTION', 40, 'QUESTION_TYPE', NULL, '"SINGLE_CHOICE"'),
+(41, 'STANDARD_QUESTION', 40, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(41, 'STANDARD_QUESTION', 40, 'ORIGINAL_RAW_QUESTION_ID', NULL, '40'),
+(41, 'STANDARD_QUESTION', 40, 'CREATED_BY_USER_ID', NULL, '40'),
+
+-- 问题41的详情
+(42, 'STANDARD_QUESTION', 41, 'QUESTION_TEXT', NULL, '"中暑了应该怎么办？如何预防中暑？"'),
+(42, 'STANDARD_QUESTION', 41, 'QUESTION_TYPE', NULL, '"SUBJECTIVE"'),
+(42, 'STANDARD_QUESTION', 41, 'DIFFICULTY', NULL, '"MEDIUM"'),
+(42, 'STANDARD_QUESTION', 41, 'ORIGINAL_RAW_QUESTION_ID', NULL, '41'),
+(42, 'STANDARD_QUESTION', 41, 'CREATED_BY_USER_ID', NULL, '1');
+
+
+
+-- 现在修改原来的标准问题插入语句，加上CREATED_CHANGE_LOG_ID字段
+INSERT INTO `STANDARD_QUESTIONS` (`ID`, `ORIGINAL_RAW_QUESTION_ID`, `QUESTION_TEXT`, `QUESTION_TYPE`, `DIFFICULTY`, `CREATED_BY_USER_ID`, `CREATED_CHANGE_LOG_ID`) VALUES
+(1, 1, '高血压的主要症状有哪些？', 'SUBJECTIVE', 'MEDIUM', 1, 2),
+(2, 2, '糖尿病患者的日常饮食应该注意什么？', 'SUBJECTIVE', 'MEDIUM', 1, 3),
+(3, 3, '以下哪些是冠心病的典型症状？\nA. 胸痛\nB. 气短\nC. 出汗\nD. 恶心', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 4),
+(4, 4, '正常人的空腹血糖值范围是多少？\nA. 3.9-6.1 mmol/L\nB. 7.0-8.0 mmol/L\nC. 2.0-3.5 mmol/L\nD. 8.0-10.0 mmol/L', 'SINGLE_CHOICE', 'EASY', 1, 5),
+(5, 5, '成人正常心率范围是多少？', 'SIMPLE_FACT', 'EASY', 1, 6),
+(6, 6, '人体正常体温是多少摄氏度？', 'SIMPLE_FACT', 'EASY', 1, 7),
+(7, 7, '正常成人血压的理想范围是多少？', 'SIMPLE_FACT', 'EASY', 1, 8),
+(8, 8, 'BMI指数超过多少被定义为肥胖？', 'SIMPLE_FACT', 'EASY', 1, 9),
+(9, 9, '人体中最大的器官是什么？', 'SIMPLE_FACT', 'EASY', 1, 10),
+(10, 10, '以下哪项不是常见的感冒症状？\nA. 发烧\nB. 咳嗽\nC. 腹泻\nD. 鼻塞', 'SINGLE_CHOICE', 'EASY', 1, 11),
+(11, 11, '预防流感的有效措施包括哪些？\nA. 每年接种流感疫苗\nB. 保持良好的个人卫生习惯\nC. 避免前往人群密集场所\nD. 多喝水', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 12),
+(12, 12, '什么是抗生素耐药性？它是如何产生的？', 'SUBJECTIVE', 'MEDIUM', 1, 13),
+(13, 13, '健康成年人每日推荐的饮水量大约是多少？', 'SIMPLE_FACT', 'EASY', 1, 14),
+(14, 14, '下列哪种维生素缺乏可能导致夜盲症？\nA. 维生素A\nB. 维生素C\nC. 维生素D\nD. 维生素B12', 'SINGLE_CHOICE', 'MEDIUM', 1, 15),
+(15, 15, '请简述心肌梗死的急救措施和后续治疗原则。', 'SUBJECTIVE', 'HARD', 1, 16),
+(16, 16, '以下哪些属于慢性阻塞性肺疾病（COPD）的高危因素？\nA. 长期吸烟\nB. 空气污染\nC. 遗传因素\nD. 过敏性鼻炎', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 17),
+(17, 17, '艾滋病的主要传播途径是什么？', 'SIMPLE_FACT', 'EASY', 1, 18),
+(18, 18, '骨质疏松症最常发生骨折的部位是哪里？\nA. 颅骨\nB. 肋骨\nC. 脊椎体\nD. 指骨', 'SINGLE_CHOICE', 'MEDIUM', 1, 19),
+(19, 19, '如何通过改善生活方式来预防2型糖尿病？', 'SUBJECTIVE', 'MEDIUM', 1, 20),
+(20, 20, '"癌症三阶梯止痛法"是由哪个组织提出的？', 'SIMPLE_FACT', 'MEDIUM', 1, 21),
+(21, 21, '发热时，物理降温的常用方法不包括？\nA. 温水擦浴\nB. 冰袋敷额头\nC. 饮用大量冰水\nD. 减少衣物', 'SINGLE_CHOICE', 'EASY', 1, 22),
+(22, 22, '儿童常见的过敏原有哪些？\nA. 花粉\nB. 尘螨\nC. 牛奶\nD. 宠物皮屑', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 23),
+(23, 23, '什么是抑郁症的核心症状？如何进行初步识别？', 'SUBJECTIVE', 'MEDIUM', 1, 24),
+(24, 24, '人体内负责凝血功能的重要血细胞是什么？', 'SIMPLE_FACT', 'EASY', 1, 25),
+(25, 25, '用于早期筛查宫颈癌的常用检查方法是？\nA. B超检查\nB. HPV检测和TCT检查\nC. 阴道镜检查\nD. 肿瘤标志物检测', 'SINGLE_CHOICE', 'MEDIUM', 1, 26),
+(26, 26, '简述阿尔茨海默病的主要临床表现和分期。', 'SUBJECTIVE', 'HARD', 1, 27),
+(27, 27, '幽门螺杆菌感染与下列哪些疾病密切相关？\nA. 慢性胃炎\nB. 消化性溃疡\nC. 胃癌\nD. 胃食管反流病', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 28),
+(28, 28, '白内障最主要的治疗方法是什么？', 'SIMPLE_FACT', 'EASY', 1, 29),
+(29, 29, '对于急性缺血性脑卒中，发病后多少小时内进行静脉溶栓治疗效果最佳（时间窗）？\nA. 1小时内\nB. 3小时内\nC. 4.5小时内\nD. 6小时内', 'SINGLE_CHOICE', 'HARD', 1, 30),
+(30, 30, '什么是疫苗？它在预防传染病中的作用机制是什么？', 'SUBJECTIVE', 'MEDIUM', 1, 31),
+(31, 31, '狂犬病病毒主要通过哪种方式传播给人类？', 'SIMPLE_FACT', 'EASY', 1, 32),
+(32, 32, '痛风患者饮食中应严格限制哪类食物的摄入？\nA. 高嘌呤食物\nB. 高蛋白食物\nC. 高碳水化合物食物\nD. 高维生素食物', 'SINGLE_CHOICE', 'MEDIUM', 1, 33),
+(33, 33, '维持人体水电解质平衡至关重要的离子有哪些？\nA. 钠离子 (Na+)\nB. 钾离子 (K+)\nC. 氯离子 (Cl-)\nD. 钙离子 (Ca2+)', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 34),
+(34, 34, '什么是食物中毒？常见的预防措施有哪些？', 'SUBJECTIVE', 'MEDIUM', 1, 35),
+(35, 35, '缺铁性贫血最常见的症状是什么？', 'SIMPLE_FACT', 'EASY', 1, 36),
+(36, 36, '"OTC"药品是指什么类型的药品？\nA. 处方药\nB. 非处方药\nC. 精神药品\nD. 特殊管理药品', 'SINGLE_CHOICE', 'EASY', 1, 37),
+(37, 37, '以下哪些是健康的生活习惯？\nA. 规律作息，保证充足睡眠\nB. 均衡饮食，多吃蔬菜水果\nC. 坚持适度体育锻炼\nD. 长期熬夜，吸烟饮酒', 'MULTIPLE_CHOICE', 'MEDIUM', 1, 38),
+(38, 38, '请解释什么是"免疫力"？如何科学地提高个人免疫力？', 'SUBJECTIVE', 'HARD', 1, 39),
+(39, 39, '新生儿黄疸分为生理性和病理性，哪种需要及时就医干预？', 'SIMPLE_FACT', 'MEDIUM', 1, 40),
+(40, 40, '肺结核最主要的传播途径是？\nA. 消化道传播\nB. 血液传播\nC. 呼吸道传播（飞沫传播）\nD. 接触传播', 'SINGLE_CHOICE', 'MEDIUM', 1, 41),
+(41, 41, '中暑了应该怎么办？如何预防中暑？', 'SUBJECTIVE', 'MEDIUM', 1, 42);
+
+
+
+
 
 -- 插入标准客观题答案
 INSERT INTO `STANDARD_OBJECTIVE_ANSWERS` (`STANDARD_QUESTION_ID`, `OPTIONS`, `CORRECT_IDS`, `DETERMINED_BY_USER_ID`) VALUES
 (3, '[{"id":"A","text":"胸痛"},{"id":"B","text":"气短"},{"id":"C","text":"出汗"},{"id":"D","text":"恶心"}]', '["A","B","C"]', 2),
 (4, '[{"id":"A","text":"3.9-6.1 mmol/L"},{"id":"B","text":"7.0-8.0 mmol/L"},{"id":"C","text":"2.0-3.5 mmol/L"},{"id":"D","text":"8.0-10.0 mmol/L"}]', '["A"]', 2),
--- 更多标准客观题答案 (扩充)
 (10, '[{"id":"A","text":"发烧"},{"id":"B","text":"咳嗽"},{"id":"C","text":"腹泻"},{"id":"D","text":"鼻塞"}]', '["C"]', 2),
 (11, '[{"id":"A","text":"每年接种流感疫苗"},{"id":"B","text":"保持良好的个人卫生习惯"},{"id":"C","text":"避免前往人群密集场所"},{"id":"D","text":"多喝水"}]', '["A","B","C"]', 2),
 (14, '[{"id":"A","text":"维生素A"},{"id":"B","text":"维生素C"},{"id":"C","text":"维生素D"},{"id":"D","text":"维生素B12"}]', '["A"]', 2),
@@ -195,7 +533,6 @@ INSERT INTO `STANDARD_OBJECTIVE_ANSWERS` (`STANDARD_QUESTION_ID`, `OPTIONS`, `CO
 INSERT INTO `STANDARD_SUBJECTIVE_ANSWERS` (`STANDARD_QUESTION_ID`, `ANSWER_TEXT`, `SCORING_GUIDANCE`, `DETERMINED_BY_USER_ID`) VALUES
 (1, '高血压的主要症状包括：\n1. 头痛，特别是后脑部\n2. 头晕和眩晕\n3. 耳鸣\n4. 心悸\n5. 疲劳\n6. 视物模糊\n7. 失眠\n\n需要注意的是，早期高血压可能没有明显症状，因此定期测量血压很重要。', '评分要点：\n1. 症状的完整性（3分）\n2. 症状的准确性（4分）\n3. 补充说明的合理性（3分）', 2),
 (2, '糖尿病患者的日常饮食注意事项：\n1. 控制总热量摄入\n2. 定时定量进餐\n3. 主食以复杂碳水化合物为主\n4. 增加膳食纤维的摄入\n5. 限制单糖和双糖的摄入\n6. 适量摄入优质蛋白\n7. 限制饱和脂肪酸的摄入\n8. 补充适量维生素和矿物质', '评分要点：\n1. 饮食原则的完整性（4分）\n2. 具体建议的实用性（3分）\n3. 说明的合理性（3分）', 2),
--- 更多标准主观题答案 (扩充)
 (12, '抗生素耐药性是指细菌、病毒、真菌和寄生虫等微生物对抗微生物药物产生抵抗力，导致药物治疗效果降低或失效的现象。\n产生的主要原因包括：\n1. 抗生素的滥用：不遵医嘱随意使用或过量使用抗生素。\n2. 抗生素的不当使用：如未完成整个疗程，或用于病毒性感染等不适宜情况。\n3. 农业和畜牧业中的抗生素使用：为促进动物生长或预防疾病而广泛使用抗生素，导致耐药菌通过食物链传播给人类。\n4. 医院内感染控制不足：导致耐药菌在医疗机构内传播。\n5. 新型抗生素研发缓慢：跟不上耐药性发展的速度。', '评分要点：\n1. 对抗生素耐药性的准确定义（4分）\n2. 产生原因的阐述（至少3个主要原因，每个原因2分，共6分）\n3. 逻辑清晰，表达准确（2分）', 2),
 (15, '心肌梗死的急救措施（院前急救）：\n1. 立即呼叫急救中心（如120）。\n2. 让患者保持安静休息，最好是半卧位，避免用力活动。\n3. 如有条件，可给予硝酸甘油舌下含服（需排除禁忌症，如低血压）。\n4. 如有阿司匹林，且患者无禁忌症，可嚼服300mg。\n5. 如患者出现心脏骤停，立即进行心肺复苏（CPR）。\n\n后续治疗原则（院内治疗）：\n1. 尽快开通堵塞的冠状动脉：包括急诊经皮冠状动脉介入治疗（PCI）或溶栓治疗。\n2. 缓解症状：如止痛、吸氧等。\n3. 防止并发症：如心律失常、心力衰竭、心脏破裂等。\n4. 二级预防：包括抗血小板治疗、他汀类药物调脂、β受体阻滞剂、ACEI/ARB类药物等，并进行生活方式干预（戒烟、合理饮食、适度运动、控制体重、管理情绪）。\n5. 康复治疗：进行心脏康复计划。', '评分要点：\n1. 急救措施的及时性和正确性（5分，至少包含呼救、休息、硝酸甘油/阿司匹林（如适用）、CPR（如适用））\n2. 后续治疗原则的全面性（5分，至少包含开通血管、缓解症状、防治并发症、二级预防）\n3. 专业术语准确，逻辑清晰（2分）', 2),
 (19, '预防2型糖尿病的生活方式干预主要包括：\n1. 健康饮食：保持膳食平衡，多吃蔬菜水果和全谷物，限制高糖、高脂肪、高盐食物的摄入，控制总热量。\n2. 规律运动：每周至少进行150分钟中等强度的有氧运动，如快走、慢跑、游泳等，并结合每周2-3次的抗阻运动。\n3. 控制体重：保持健康的体重指数（BMI），超重或肥胖者应积极减重。\n4. 戒烟限酒：吸烟和过量饮酒都是2型糖尿病的危险因素。\n5. 保证充足睡眠：长期睡眠不足会影响胰岛素敏感性。\n6. 管理压力：长期精神压力过大也可能增加患病风险。\n7. 定期体检：对于高危人群，应定期监测血糖，及早发现问题并干预。', '评分要点：\n1. 至少列出4项主要的生活方式干预措施（每项1.5分，共6分）\n2. 每项措施有简要合理的解释（每项0.5分，共2分）\n3. 建议具有科学性和可操作性（2分）', 2),
@@ -240,7 +577,6 @@ INSERT INTO `STANDARD_QUESTION_TAGS` (`STANDARD_QUESTION_ID`, `TAG_ID`, `CREATED
 (3, 6, 1), -- 冠心病问题关联"诊断"标签
 (4, 5, 1), -- 血糖问题关联"糖尿病"标签
 (4, 6, 1), -- 血糖问题关联"诊断"标签
--- 更多标准问题-标签关联 (扩充)
 (10, 9, 1), (10, 12, 1), -- 问题10 (感冒症状): 呼吸系统疾病, 传染病
 (11, 9, 1), (11, 12, 1), (11, 20, 1), -- 问题11 (流感预防): 呼吸系统疾病, 传染病, 公共卫生
 (12, 19, 1), (12, 20, 1), -- 问题12 (抗生素耐药性): 药物使用, 公共卫生
