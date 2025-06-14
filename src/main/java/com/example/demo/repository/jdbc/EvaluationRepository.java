@@ -114,7 +114,7 @@ public class EvaluationRepository {
             "JOIN evaluators ev ON e.evaluator_id = ev.id " +
             "WHERE mar.answer_generation_batch_id = ? " +
             "AND ev.evaluator_type = 'HUMAN' " +
-            "AND ev.user_id = ? " +
+            "AND e.evaluator_id = ? " +
             "AND (? IS NULL OR lm.id IN (%s)) " +
             "AND (? IS NULL OR sq.question_type = ?) " +
             "ORDER BY e.evaluation_time DESC " +
@@ -131,7 +131,7 @@ public class EvaluationRepository {
             "JOIN evaluators ev ON e.evaluator_id = ev.id " +
             "WHERE mar.answer_generation_batch_id = ? " +
             "AND ev.evaluator_type = 'HUMAN' " +
-            "AND ev.user_id = ? " +
+            "AND e.evaluator_id = ? " +
             "AND (? IS NULL OR lm.id IN (%s)) " +
             "AND (? IS NULL OR sq.question_type = ?)";
 
@@ -597,7 +597,7 @@ public class EvaluationRepository {
             
             int paramIndex = 0;
             params[paramIndex++] = batchId;
-            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = evaluatorIds.get(0); // 使用评测者ID
             params[paramIndex++] = 1; // 非空标志
             
             for (Long modelId : modelIds) {
@@ -616,7 +616,7 @@ public class EvaluationRepository {
             
             int paramIndex = 0;
             params[paramIndex++] = batchId;
-            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = evaluatorIds.get(0); // 使用评测者ID
             params[paramIndex++] = null; // 使用null表示不应用模型过滤
             params[paramIndex++] = questionType == null ? null : 1; // 非空标志
             params[paramIndex++] = questionType == null ? null : questionType.name();
@@ -680,7 +680,7 @@ public class EvaluationRepository {
             
             int paramIndex = 0;
             params[paramIndex++] = batchId;
-            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = evaluatorIds.get(0); // 使用评测者ID
             params[paramIndex++] = 1; // 非空标志
             
             for (Long modelId : modelIds) {
@@ -697,7 +697,7 @@ public class EvaluationRepository {
             
             int paramIndex = 0;
             params[paramIndex++] = batchId;
-            params[paramIndex++] = evaluatorIds.get(0); // 假设只使用第一个评测者ID作为用户ID
+            params[paramIndex++] = evaluatorIds.get(0); // 使用评测者ID
             params[paramIndex++] = null; // 使用null表示不应用模型过滤
             params[paramIndex++] = questionType == null ? null : 1; // 非空标志
             params[paramIndex++] = questionType == null ? null : questionType.name();

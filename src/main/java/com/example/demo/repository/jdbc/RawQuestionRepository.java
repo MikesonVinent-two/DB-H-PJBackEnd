@@ -480,17 +480,40 @@ public class RawQuestionRepository {
         // 查询数据
         String querySql = String.format(SQL_FIND_BY_TAG_NAMES, placeholders);
         
-        // 创建完整参数列表（包括分页参数）
-        List<Object> params = new ArrayList<>(tagNames);
-        params.add(tagCount);
-        params.add(pageable.getPageSize());
-        params.add(pageable.getOffset());
-        
-        List<RawQuestion> content = jdbcTemplate.query(
-            querySql,
-            new RawQuestionRowMapper(),
-            params.toArray()
-        );
+                // 查询数据
+        List<RawQuestion> content;
+        if (pageable.isUnpaged()) {
+            // 如果是不分页查询，不添加LIMIT和OFFSET参数
+            String unpagedQuerySql = String.format(
+                "SELECT DISTINCT rq.* FROM RAW_QUESTIONS rq " +
+                "JOIN RAW_QUESTION_TAGS qt ON rq.ID = qt.RAW_QUESTION_ID " +
+                "JOIN TAGS t ON qt.TAG_ID = t.ID " +
+                "WHERE t.TAG_NAME IN (%s) " +
+                "GROUP BY rq.ID " +
+                "HAVING COUNT(DISTINCT t.TAG_NAME) = ? " +
+                "ORDER BY rq.ID DESC", placeholders);
+            
+            List<Object> unpagedParams = new ArrayList<>(tagNames);
+            unpagedParams.add(tagCount);
+            
+            content = jdbcTemplate.query(
+                unpagedQuerySql,
+                new RawQuestionRowMapper(),
+                unpagedParams.toArray()
+            );
+        } else {
+            // 分页查询
+            List<Object> params = new ArrayList<>(tagNames);
+            params.add(tagCount);
+            params.add(pageable.getPageSize());
+            params.add(pageable.getOffset());
+
+            content = jdbcTemplate.query(
+                querySql,
+                new RawQuestionRowMapper(),
+                params.toArray()
+            );
+        }
         
         return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
@@ -540,21 +563,45 @@ public class RawQuestionRepository {
         }
         
         // 查询数据
-        String querySql = String.format(SQL_FIND_BY_IDS_AND_TAG_NAMES, idPlaceholders, tagPlaceholders);
-        
-        // 创建完整参数列表（包括分页参数）
-        List<Object> params = new ArrayList<>();
-        params.addAll(ids);
-        params.addAll(tagNames);
-        params.add(tagCount);
-        params.add(pageable.getPageSize());
-        params.add(pageable.getOffset());
-        
-        List<RawQuestion> content = jdbcTemplate.query(
-            querySql,
-            new RawQuestionRowMapper(),
-            params.toArray()
-        );
+        List<RawQuestion> content;
+        if (pageable.isUnpaged()) {
+            // 如果是不分页查询，不添加LIMIT和OFFSET参数
+            String unpagedQuerySql = String.format(
+                "SELECT DISTINCT rq.* FROM RAW_QUESTIONS rq " +
+                "JOIN RAW_QUESTION_TAGS qt ON rq.ID = qt.RAW_QUESTION_ID " +
+                "JOIN TAGS t ON qt.TAG_ID = t.ID " +
+                "WHERE rq.ID IN (%s) AND t.TAG_NAME IN (%s) " +
+                "GROUP BY rq.ID " +
+                "HAVING COUNT(DISTINCT t.TAG_NAME) = ? " +
+                "ORDER BY rq.ID DESC", idPlaceholders, tagPlaceholders);
+            
+            List<Object> unpagedParams = new ArrayList<>();
+            unpagedParams.addAll(ids);
+            unpagedParams.addAll(tagNames);
+            unpagedParams.add(tagCount);
+            
+            content = jdbcTemplate.query(
+                unpagedQuerySql,
+                new RawQuestionRowMapper(),
+                unpagedParams.toArray()
+            );
+        } else {
+            // 分页查询
+            String querySql = String.format(SQL_FIND_BY_IDS_AND_TAG_NAMES, idPlaceholders, tagPlaceholders);
+            
+            List<Object> params = new ArrayList<>();
+            params.addAll(ids);
+            params.addAll(tagNames);
+            params.add(tagCount);
+            params.add(pageable.getPageSize());
+            params.add(pageable.getOffset());
+            
+            content = jdbcTemplate.query(
+                querySql,
+                new RawQuestionRowMapper(),
+                params.toArray()
+            );
+        }
         
         return new PageImpl<>(content, pageable, total != null ? total : 0);
     }
@@ -582,12 +629,22 @@ public class RawQuestionRepository {
         );
         
         // 查询数据
-        List<RawQuestion> content = jdbcTemplate.query(
-            "SELECT * FROM RAW_QUESTIONS ORDER BY ID DESC LIMIT ? OFFSET ?",
-            new RawQuestionRowMapper(),
-            pageable.getPageSize(),
-            pageable.getOffset()
-        );
+        List<RawQuestion> content;
+        if (pageable.isUnpaged()) {
+            // 如果是不分页查询，获取所有数据
+            content = jdbcTemplate.query(
+                "SELECT * FROM RAW_QUESTIONS ORDER BY ID DESC",
+                new RawQuestionRowMapper()
+            );
+        } else {
+            // 分页查询
+            content = jdbcTemplate.query(
+                "SELECT * FROM RAW_QUESTIONS ORDER BY ID DESC LIMIT ? OFFSET ?",
+                new RawQuestionRowMapper(),
+                pageable.getPageSize(),
+                pageable.getOffset()
+            );
+        }
         
         return new PageImpl<>(content, pageable, total != null ? total : 0);
     }

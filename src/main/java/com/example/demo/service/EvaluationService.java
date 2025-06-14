@@ -461,4 +461,16 @@ public interface EvaluationService {
      * @return 评测记录
      */
     Evaluation oneStepHumanEvaluation(Long llmAnswerId, Long userId);
+    
+    /**
+     * 获取批次综合评分展示数据
+     * 包含客观题、主观题的详细评分统计和模型排名
+     *
+     * @param batchId 批次ID
+     * @param modelIds 模型ID列表（可选）
+     * @param page 页码
+     * @param size 每页大小
+     * @return 批次综合评分数据
+     */
+    Map<String, Object> getBatchComprehensiveScores(Long batchId, List<Long> modelIds, int page, int size);
 } 

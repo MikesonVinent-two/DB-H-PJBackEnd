@@ -57,7 +57,7 @@ public class WebSocketService {
             Object questionText = payload.get("questionText");
             Object completedCount = payload.get("completedCount");
             
-            logger.info("发送问题完成消息: 运行ID={}, 问题ID={}, 已完成数量={}, 目的地={}",
+            logger.info("准备发送问题完成消息: 运行ID={}, 问题ID={}, 已完成数量={}, 目的地={}",
                 runId, questionId, completedCount, destination);
             logger.debug("问题完成消息内容: 问题文本={}", questionText);
         } else {
@@ -65,7 +65,34 @@ public class WebSocketService {
             logger.debug("发送运行消息: 运行ID={}, 类型={}, 目的地={}", runId, type, destination);
         }
         
-        messagingTemplate.convertAndSend(destination, message);
+        try {
+            // 记录发送前的详细信息
+            logger.info("准备发送WebSocket消息: 目的地={}, 类型={}, 消息={}", 
+                destination, type, message);
+            
+            // 使用异步方式发送消息，避免线程上下文问题
+            messagingTemplate.convertAndSend(destination, message);
+            
+            // 记录发送后的状态
+            logger.info("WebSocket消息发送完成: 目的地={}, 类型={}", destination, type);
+            
+            if (type == MessageType.QUESTION_COMPLETED) {
+                logger.warn("【重要】问题完成消息发送成功: 运行ID={}, 问题ID={}, 目的地={}", 
+                    runId, payload.get("questionId"), destination);
+            }
+        } catch (Exception e) {
+            logger.error("发送WebSocket消息失败: 运行ID={}, 类型={}, 错误={}", 
+                runId, type, e.getMessage(), e);
+            
+            // 如果是问题完成消息发送失败，记录详细错误
+            if (type == MessageType.QUESTION_COMPLETED) {
+                logger.error("【严重】问题完成消息发送失败: 运行ID={}, 问题ID={}, 目的地={}, 错误详情={}", 
+                    runId, payload.get("questionId"), destination, e);
+            }
+            
+            // 重新抛出异常，确保调用方知道发送失败
+            throw e;
+        }
     }
     
     /**
@@ -160,5 +187,64 @@ public class WebSocketService {
         
         WebSocketMessage message = new WebSocketMessage(MessageType.STATUS_CHANGE, payload);
         messagingTemplate.convertAndSend(destination, message);
+    }
+    
+    /**
+     * 强制发送问题完成消息（用于测试和调试）
+     * 
+     * @param runId 运行ID
+     * @param questionId 问题ID
+     * @param completedCount 完成数量
+     */
+    public void forceQuestionCompletedMessage(Long runId, Long questionId, int completedCount) {
+        String destination = "/topic/run/" + runId;
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("runId", runId);
+        payload.put("questionId", questionId);
+        payload.put("completedCount", completedCount);
+        payload.put("timestamp", System.currentTimeMillis());
+        payload.put("source", "force-send");
+        
+        WebSocketMessage message = new WebSocketMessage(MessageType.QUESTION_COMPLETED, payload);
+        
+        logger.warn("强制发送问题完成消息: 运行ID={}, 问题ID={}, 完成数量={}, 目的地={}",
+            runId, questionId, completedCount, destination);
+        
+        try {
+            messagingTemplate.convertAndSend(destination, message);
+            logger.warn("强制发送问题完成消息成功: 运行ID={}, 问题ID={}", runId, questionId);
+        } catch (Exception e) {
+            logger.error("强制发送问题完成消息失败: 运行ID={}, 问题ID={}, 错误={}", 
+                runId, questionId, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 检查WebSocket连接状态和发送能力
+     */
+    public void checkWebSocketStatus() {
+        logger.info("=== WebSocket状态检查开始 ===");
+        logger.info("SimpMessagingTemplate实例: {}", messagingTemplate != null ? "正常" : "NULL");
+        
+        try {
+            // 尝试发送一个测试消息到全局频道
+            Map<String, Object> testPayload = new HashMap<>();
+            testPayload.put("test", "connection-check");
+            testPayload.put("timestamp", System.currentTimeMillis());
+            
+            WebSocketMessage testMessage = new WebSocketMessage(MessageType.NOTIFICATION, testPayload);
+            messagingTemplate.convertAndSend("/topic/global", testMessage);
+            
+            logger.info("WebSocket连接测试成功: 全局消息发送正常");
+            
+            // 测试运行频道
+            messagingTemplate.convertAndSend("/topic/run/test", testMessage);
+            logger.info("WebSocket连接测试成功: 运行频道消息发送正常");
+            
+        } catch (Exception e) {
+            logger.error("WebSocket连接测试失败: {}", e.getMessage(), e);
+        }
+        
+        logger.info("=== WebSocket状态检查完成 ===");
     }
 } 

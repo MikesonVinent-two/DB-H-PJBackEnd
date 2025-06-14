@@ -501,7 +501,7 @@ public class AnswerGenerationTask {
                     
                     // 处理单个问题
                     logger.debug("运行{}开始处理问题: ID={}", runId, question.getId());
-                    boolean success = processQuestion(run, question, r);
+                    boolean success = processQuestion(run, question, r, completedQuestions + 1);
                     
                     // 更新计数器
                     if (success) {
@@ -610,7 +610,7 @@ public class AnswerGenerationTask {
                     }
                     
                     // 处理单个问题
-                    boolean success = processQuestion(run, question, r);
+                    boolean success = processQuestion(run, question, r, completedQuestions + 1);
                     
                     // 更新计数器
                     if (success) {
@@ -657,7 +657,7 @@ public class AnswerGenerationTask {
     /**
      * 处理单个问题
      */
-    public boolean processQuestion(ModelAnswerRun run, StandardQuestion question, int repeatIndex) {
+    public boolean processQuestion(ModelAnswerRun run, StandardQuestion question, int repeatIndex, int expectedCompletedCount) {
         Long runId = run.getId();
         Long questionId = question.getId();
         Long batchId = run.getAnswerGenerationBatch().getId();
@@ -667,6 +667,19 @@ public class AnswerGenerationTask {
         // 每次处理问题前检查中断标志
         if (shouldInterrupt(batchId)) {
             logger.info("检测到批次{}的中断信号，跳过问题处理", batchId);
+            
+            // 发送问题跳过通知
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("runId", runId);
+            payload.put("questionId", questionId);
+            payload.put("questionText", question.getQuestionText());
+            payload.put("repeatIndex", repeatIndex);
+            payload.put("reason", "批次中断");
+            payload.put("timestamp", System.currentTimeMillis());
+            
+            webSocketService.sendRunMessage(runId, MessageType.NOTIFICATION, payload);
+            logger.debug("问题跳过通知已发送: 运行={}, 问题ID={}", runId, questionId);
+            
             return false; // 立即返回，不处理当前问题
         }
         
@@ -736,12 +749,13 @@ public class AnswerGenerationTask {
             saveModelAnswer(run, question, answer, repeatIndex);
             logger.info("回答结果保存成功: 运行={}, 问题ID={}", runId, questionId);
             
-            // 发送问题完成处理通知
-            sendQuestionCompletedNotification(run, question, repeatIndex);
-            logger.debug("问题处理完成通知已发送: 运行={}, 问题ID={}", runId, questionId);
-            
             // 提交事务
             transactionManager.commit(status);
+            
+            // 事务提交成功后发送问题完成处理通知
+            sendQuestionCompletedNotification(run, question, repeatIndex, expectedCompletedCount);
+            logger.debug("问题处理完成通知已发送: 运行={}, 问题ID={}, 完成数量={}", runId, questionId, expectedCompletedCount);
+            
             return true;
         } catch (Exception e) {
             // 回滚事务
@@ -1364,15 +1378,36 @@ public class AnswerGenerationTask {
     /**
      * 发送问题完成处理通知
      */
-    private void sendQuestionCompletedNotification(ModelAnswerRun run, StandardQuestion question, int repeatIndex) {
+    private void sendQuestionCompletedNotification(ModelAnswerRun run, StandardQuestion question, int repeatIndex, int currentCompletedCount) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("runId", run.getId());
         payload.put("questionId", question.getId());
         payload.put("questionText", question.getQuestionText());
         payload.put("repeatIndex", repeatIndex);
-        payload.put("completedCount", run.getCompletedQuestionsCount());
+        payload.put("completedCount", currentCompletedCount);
+        payload.put("timestamp", System.currentTimeMillis());
         
-        webSocketService.sendRunMessage(run.getId(), MessageType.QUESTION_COMPLETED, payload);
+        // 使用异步方式发送消息，避免线程上下文问题
+        try {
+            // 添加短暂延迟，确保事务完全提交
+            Thread.sleep(10);
+            
+            logger.info("即将发送问题完成通知: 运行ID={}, 问题ID={}, 完成数量={}", 
+                run.getId(), question.getId(), currentCompletedCount);
+            
+            webSocketService.sendRunMessage(run.getId(), MessageType.QUESTION_COMPLETED, payload);
+            
+            logger.info("问题完成通知发送完成: 运行ID={}, 问题ID={}", 
+                run.getId(), question.getId());
+                
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("发送问题完成通知时被中断: 运行ID={}, 问题ID={}", 
+                run.getId(), question.getId());
+        } catch (Exception e) {
+            logger.error("发送问题完成通知失败: 运行ID={}, 问题ID={}, 错误={}", 
+                run.getId(), question.getId(), e.getMessage(), e);
+        }
     }
     
     /**

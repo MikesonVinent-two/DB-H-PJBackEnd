@@ -309,20 +309,25 @@ public class EvaluationServiceImpl implements EvaluationService {
             (question.getQuestionType() == QuestionType.SUBJECTIVE && 
              evaluationSubjectivePromptRepository.findByIsActiveTrueAndDeletedAtIsNull().isEmpty())) {
             promptBuilder.append("\n请对回答进行全面评测，并给出以下格式的评测结果：\n");
-            promptBuilder.append("1. 总体评分（0-10分）\n");
+            promptBuilder.append("1. 总体评分（0-100分）\n");
             promptBuilder.append("2. 各评测标准的得分和评语\n");
             promptBuilder.append("3. 总体评语，包括优点和不足\n");
             promptBuilder.append("4. 改进建议\n\n");
-            promptBuilder.append("请以JSON格式输出，格式如下：\n");
+            promptBuilder.append("**重要：请严格按照以下JSON格式输出，确保'总分'字段在最外层：**\n");
+            promptBuilder.append("```json\n");
             promptBuilder.append("{\n");
-            promptBuilder.append("  \"总分\": 分数,\n");
-            promptBuilder.append("  \"criteria_scores\": [\n");
-            promptBuilder.append("    {\"criterion\": \"标准名称\", \"score\": 分数, \"comments\": \"评语\"},\n");
-            promptBuilder.append("    ...\n");
-            promptBuilder.append("  ],\n");
-            promptBuilder.append("  \"overall_comments\": \"总体评语\",\n");
-            promptBuilder.append("  \"improvement_suggestions\": \"改进建议\"\n");
-            promptBuilder.append("}");
+            promptBuilder.append("  \"总分\": 数字分数(0-100),\n");
+            for (EvaluationCriterion criterion : criteria) {
+                promptBuilder.append("  \"").append(criterion.getName()).append("\": 数字分数,\n");
+            }
+            promptBuilder.append("  \"建议\": \"改进建议和总体评语\"\n");
+            promptBuilder.append("}\n");
+            promptBuilder.append("```\n\n");
+            promptBuilder.append("注意：\n");
+            promptBuilder.append("1. 总分必须是0-100之间的数字\n");
+            promptBuilder.append("2. 各评测标准的分数也必须是数字\n");
+            promptBuilder.append("3. 请确保JSON格式正确，可以被程序解析\n");
+            promptBuilder.append("4. 不要添加任何额外的文字说明，只返回JSON");
         }
         
                 String finalPrompt = promptBuilder.toString();
@@ -821,7 +826,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 添加系统消息
             Map<String, String> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请以JSON格式返回评测结果，并保证有一个键叫做'总分'。");
+            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请严格按照用户要求的JSON格式返回评测结果，确保'总分'字段在JSON的最外层，且值为0-100之间的数字。");
             messages.add(systemMessage);
             
             // 添加用户消息
@@ -995,7 +1000,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 添加系统消息
             Map<String, String> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量，并保证有一个键叫做'总分'。");
+            systemMessage.put("content", "你是一位专业的评测专家，负责评估答案的质量。请严格按照用户要求的JSON格式返回评测结果，确保'总分'字段在JSON的最外层，且值为0-100之间的数字。");
             messages.add(systemMessage);
             
             // 添加用户消息
@@ -3381,7 +3386,8 @@ public class EvaluationServiceImpl implements EvaluationService {
                 break;
                 
             case MULTIPLE_CHOICE:
-                StandardObjectiveAnswer multipleChoiceAnswer = objectiveAnswerRepository.findByStandardQuestionId(question.getId())
+                StandardObjectiveAnswer multipleChoiceAnswer = objectiveAnswerRepository
+                        .findByStandardQuestionId(question.getId())
                         .orElseThrow(() -> new IllegalStateException("找不到多选题的标准答案: " + question.getId()));
                 
                 evaluationResult = evaluateMultipleChoice(
@@ -3692,13 +3698,13 @@ public class EvaluationServiceImpl implements EvaluationService {
                             processed++;
                             
                             // 更新进度
-                            String updateProgressSql = "UPDATE evaluation_runs SET processed_answers_count = ?, progress = ? WHERE id = ?";
+                            String updateProgressSql = "UPDATE evaluation_runs SET completed_answers_count = ?, progress_percentage = ? WHERE id = ?";
                             finalJdbcTemplate.update(updateProgressSql, processed, (int)((processed * 100.0) / total), finalRunId);
                             
         } catch (Exception e) {
                             logger.error("处理回答时发生错误", e);
                             // 更新错误状态
-                            String updateErrorSql = "UPDATE evaluation_runs SET status = 'ERROR', error_message = ? WHERE id = ?";
+                            String updateErrorSql = "UPDATE evaluation_runs SET status = 'FAILED', error_message = ? WHERE id = ?";
                             finalJdbcTemplate.update(updateErrorSql, e.getMessage(), finalRunId);
             throw e;
         }
@@ -4135,59 +4141,252 @@ public class EvaluationServiceImpl implements EvaluationService {
         Map<String, Object> result = new HashMap<>();
         
         try {
-            // 尝试直接解析为JSON
-            try {
-                result = objectMapper.readValue(aiResponse, new TypeReference<Map<String, Object>>() {});
-                if (!result.isEmpty()) {
-                    return result;
+            // 首先尝试提取JSON内容（处理markdown代码块）
+            String jsonContent = aiResponse;
+            
+            // 如果包含markdown代码块，提取其中的JSON
+            if (aiResponse.contains("```json")) {
+                Pattern jsonPattern = Pattern.compile("```json\\s*\\n(.*?)\\n```", Pattern.DOTALL);
+                Matcher jsonMatcher = jsonPattern.matcher(aiResponse);
+                if (jsonMatcher.find()) {
+                    jsonContent = jsonMatcher.group(1).trim();
                 }
-            } catch (Exception e) {
-                logger.debug("无法直接解析为JSON，将尝试其他解析方法");
+            } else if (aiResponse.contains("```")) {
+                // 处理没有指定语言的代码块
+                Pattern codePattern = Pattern.compile("```\\s*\\n(.*?)\\n```", Pattern.DOTALL);
+                Matcher codeMatcher = codePattern.matcher(aiResponse);
+                if (codeMatcher.find()) {
+                    String codeContent = codeMatcher.group(1).trim();
+                    // 检查是否是JSON格式
+                    if (codeContent.startsWith("{") && codeContent.endsWith("}")) {
+                        jsonContent = codeContent;
+                    }
+                }
             }
+            
+            // 尝试解析JSON
+            try {
+                result = objectMapper.readValue(jsonContent, new TypeReference<Map<String, Object>>() {});
+                logger.info("成功解析AI响应为JSON，包含 {} 个字段", result.size());
+                
+                // 确保有总分字段
+                if (!result.containsKey("总分")) {
+                    // 尝试从其他可能的字段名获取总分
+                    Object totalScore = findTotalScore(result);
+                    if (totalScore != null) {
+                        result.put("总分", totalScore);
+                        logger.info("从嵌套结构中提取到总分: {}", totalScore);
+                    }
+                }
+                
+                return result;
+                
+            } catch (Exception e) {
+                logger.warn("JSON解析失败，将使用正则表达式解析: {}", e.getMessage());
+            }
+            
+            // 如果JSON解析失败，使用正则表达式解析
+            logger.info("使用正则表达式解析AI响应");
             
             // 提取总分
-            Pattern scorePattern = Pattern.compile("总分[：:](\\d+(\\.\\d+)?)");
+            Pattern scorePattern = Pattern.compile("\"?总分\"?\\s*[：:\"]*\\s*(\\d+(\\.\\d+)?)");
             Matcher scoreMatcher = scorePattern.matcher(aiResponse);
             if (scoreMatcher.find()) {
-                result.put("总分", scoreMatcher.group(1));
+                result.put("总分", Double.parseDouble(scoreMatcher.group(1)));
+                logger.info("提取到总分: {}", scoreMatcher.group(1));
+            }
+            
+            // 提取建议/评价
+            Pattern commentPattern = Pattern.compile("\"?建议\"?\\s*[：:\"]*\\s*\"([^\"]+)\"");
+            Matcher commentMatcher = commentPattern.matcher(aiResponse);
+            if (commentMatcher.find()) {
+                result.put("建议", commentMatcher.group(1));
             } else {
-                // 尝试找到数字打分
-                Pattern numericPattern = Pattern.compile("(\\d+(\\.\\d+)?)/10");
-                Matcher numericMatcher = numericPattern.matcher(aiResponse);
-                if (numericMatcher.find()) {
-                    result.put("总分", numericMatcher.group(1));
+                // 尝试其他可能的字段名
+                Pattern altCommentPattern = Pattern.compile("\"?(评价|评语|总体评语)\"?\\s*[：:\"]*\\s*\"([^\"]+)\"");
+                Matcher altCommentMatcher = altCommentPattern.matcher(aiResponse);
+                if (altCommentMatcher.find()) {
+                    result.put("总体评语", altCommentMatcher.group(2));
                 }
             }
             
-            // 提取评价
-            Pattern commentPattern = Pattern.compile("评价[：:](.*?)(?=\\n\\n|$)", Pattern.DOTALL);
-            Matcher commentMatcher = commentPattern.matcher(aiResponse);
-            if (commentMatcher.find()) {
-                result.put("评价", commentMatcher.group(1).trim());
-            }
-            
-            // 提取详细评分
-            Pattern detailPattern = Pattern.compile("(\\w+)[：:](\\d+(\\.\\d+)?)");
-            Matcher detailMatcher = detailPattern.matcher(aiResponse);
-            while (detailMatcher.find()) {
-                String criterion = detailMatcher.group(1);
-                if (!criterion.equals("总分")) {
-                    result.put(criterion, detailMatcher.group(2));
+            // 提取各个评测标准的分数（动态）
+            Pattern criterionPattern = Pattern.compile("\"?(\\w+)\"?\\s*[：:\"]*\\s*(\\d+(\\.\\d+)?)");
+            Matcher criterionMatcher = criterionPattern.matcher(aiResponse);
+            while (criterionMatcher.find()) {
+                String criterion = criterionMatcher.group(1);
+                String score = criterionMatcher.group(2);
+                
+                // 跳过总分和一些非评测标准的字段
+                if (!criterion.equals("总分") && !criterion.equals("建议") && 
+                    !criterion.equals("评价") && !criterion.equals("评语")) {
+                    result.put(criterion, Double.parseDouble(score));
+                    logger.info("提取到评测标准 {}: {}", criterion, score);
                 }
             }
             
             // 保存原始响应
             result.put("原始响应", aiResponse);
             
+            if (result.isEmpty() || !result.containsKey("总分")) {
+                logger.warn("未能从AI响应中提取到有效的评测结果");
+                result.put("总分", 0);
+                result.put("解析警告", "未能提取到有效的评测结果");
+            }
+            
         } catch (Exception e) {
-            logger.error("解析AI响应失败: {}", e.getMessage());
+            logger.error("解析AI响应失败: {}", e.getMessage(), e);
             result.put("原始响应", aiResponse);
             result.put("解析错误", e.getMessage());
+            result.put("总分", 0);
         }
         
-        return result;
+                return result;
     }
-
+    
+    /**
+     * 从复杂的嵌套结构中查找总分
+     */
+    private Object findTotalScore(Map<String, Object> data) {
+        // 直接在最外层查找各种可能的总分字段名
+        for (String key : Arrays.asList("总分", "total_score", "overall_score", "score", "总体评分", "overall", "final_score")) {
+            if (data.containsKey(key)) {
+                Object value = data.get(key);
+                if (isValidScore(value)) {
+                    return value;
+                }
+            }
+        }
+        
+        // 在嵌套结构中查找
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof Map) {
+                Map<String, Object> nestedMap = (Map<String, Object>) value;
+                Object nestedScore = findTotalScore(nestedMap);
+                if (nestedScore != null) {
+                    return nestedScore;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 检查是否是有效的分数值
+     */
+    private boolean isValidScore(Object value) {
+        if (value == null) return false;
+        
+        if (value instanceof Number) {
+            double score = ((Number) value).doubleValue();
+            return score >= 0 && score <= 100;
+        }
+        
+        if (value instanceof String) {
+            try {
+                double score = Double.parseDouble((String) value);
+                return score >= 0 && score <= 100;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 保存评测详情到 EVALUATION_DETAILS 表
+     */
+    private void saveEvaluationDetails(Long evaluationId, Map<String, Object> evaluationResult, List<EvaluationCriterion> criteria) {
+        try {
+            // 创建评测标准名称到ID的映射
+            Map<String, Long> criterionNameToId = new HashMap<>();
+            if (criteria != null) {
+                for (EvaluationCriterion criterion : criteria) {
+                    criterionNameToId.put(criterion.getName(), criterion.getId());
+                }
+            }
+            
+            // 遍历评测结果，保存各个标准的得分
+            for (Map.Entry<String, Object> entry : evaluationResult.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                
+                // 跳过一些非评测标准的字段
+                if (key.equals("总分") || key.equals("建议") || key.equals("评价") || 
+                    key.equals("总体评语") || key.equals("原始响应") || key.equals("解析错误") || 
+                    key.equals("解析警告")) {
+                    continue;
+                }
+                
+                // 处理嵌套的评测标准结构（如 "评测标准" -> {"专业性": {"评分": 30, "依据": "..."}} ）
+                if (key.equals("评测标准") && value instanceof Map) {
+                    Map<String, Object> criteriaMap = (Map<String, Object>) value;
+                    for (Map.Entry<String, Object> criterionEntry : criteriaMap.entrySet()) {
+                        String criterionName = criterionEntry.getKey();
+                        Object criterionValue = criterionEntry.getValue();
+                        
+                        if (criterionValue instanceof Map) {
+                            Map<String, Object> criterionDetails = (Map<String, Object>) criterionValue;
+                            Object scoreObj = criterionDetails.get("评分");
+                            Object commentsObj = criterionDetails.get("依据");
+                            
+                            if (scoreObj != null) {
+                                saveEvaluationDetail(evaluationId, criterionName, scoreObj, commentsObj, criterionNameToId);
+                            }
+                        }
+                    }
+                } else {
+                    // 处理直接的评测标准得分（如 "专业性": 98）
+                    if (value instanceof Number || (value instanceof String && ((String) value).matches("\\d+(\\.\\d+)?"))) {
+                        saveEvaluationDetail(evaluationId, key, value, null, criterionNameToId);
+                    }
+                }
+            }
+            
+            logger.info("成功保存评测详情，评测ID: {}", evaluationId);
+            
+        } catch (Exception e) {
+            logger.error("保存评测详情失败，评测ID: {}, 错误: {}", evaluationId, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 保存单个评测详情
+     */
+    private void saveEvaluationDetail(Long evaluationId, String criterionName, Object scoreObj, Object commentsObj, Map<String, Long> criterionNameToId) {
+        try {
+            BigDecimal score = null;
+            if (scoreObj instanceof Number) {
+                score = BigDecimal.valueOf(((Number) scoreObj).doubleValue());
+            } else if (scoreObj instanceof String) {
+                try {
+                    score = new BigDecimal((String) scoreObj);
+                } catch (NumberFormatException e) {
+                    logger.warn("无法解析评分: {}", scoreObj);
+                    return;
+                }
+            }
+            
+            if (score == null) {
+                return;
+            }
+            
+            String comments = commentsObj != null ? commentsObj.toString() : null;
+            Long criterionId = criterionNameToId.get(criterionName);
+            
+            String insertDetailSql = "INSERT INTO evaluation_details (evaluation_id, criterion_id, criterion_name, score, comments) VALUES (?, ?, ?, ?, ?)";
+            jdbcTemplate.update(insertDetailSql, evaluationId, criterionId, criterionName, score, comments);
+            
+            logger.debug("保存评测详情: {} = {}", criterionName, score);
+            
+        } catch (Exception e) {
+            logger.error("保存单个评测详情失败: {}, 错误: {}", criterionName, e.getMessage());
+        }
+    }
+    
     @Override
     public Map<String, Object> getObjectiveDetailedResults(Long batchId, List<Long> modelIds, int page, int size) {
         logger.info("获取客观题评测详细结果，批次ID: {}, 模型IDs: {}, 页码: {}, 每页大小: {}", 
@@ -4466,7 +4665,7 @@ public class EvaluationServiceImpl implements EvaluationService {
                 return result;
             }
             
-            // 强制设置问题类型为主观题，忽略传入的问题类型参数
+            // 强制设置问题类型为主观题，此接口只返回主观题回答
             QuestionType questionTypeEnum = QuestionType.SUBJECTIVE;
             
             // 获取已评测的回答
@@ -4589,39 +4788,95 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Override
     @Transactional
     public EvaluationRun getOrCreateEvaluationRun(Long batchId, Long evaluatorId, Long userId) {
-        // 查找是否已存在评测运行记录
-        String findSql = "SELECT * FROM evaluation_runs WHERE batch_id = ? AND evaluator_id = ? ORDER BY id DESC LIMIT 1";
-        List<Map<String, Object>> existingRuns = jdbcTemplate.queryForList(findSql, batchId, evaluatorId);
+        // 注意：这里的batchId实际上是answer_generation_batch_id
+        // 但evaluation_runs表存储的是model_answer_run_id，需要先找到对应的model_answer_run_id
+        
+        // 首先查找该batch对应的model_answer_run_id列表
+        String findModelRunsSql = "SELECT id FROM model_answer_runs WHERE answer_generation_batch_id = ?";
+        List<Long> modelRunIds = jdbcTemplate.queryForList(findModelRunsSql, Long.class, batchId);
+        
+        if (modelRunIds.isEmpty()) {
+            throw new IllegalArgumentException("找不到对应的模型回答运行记录，批次ID: " + batchId);
+        }
+        
+        // 查找是否已存在评测运行记录（对该批次的任何一个模型运行）
+        StringBuilder findSqlBuilder = new StringBuilder();
+        findSqlBuilder.append("SELECT * FROM evaluation_runs WHERE evaluator_id = ? AND model_answer_run_id IN (");
+        for (int i = 0; i < modelRunIds.size(); i++) {
+            if (i > 0) findSqlBuilder.append(",");
+            findSqlBuilder.append("?");
+        }
+        findSqlBuilder.append(") ORDER BY id DESC LIMIT 1");
+        
+        List<Object> params = new ArrayList<>();
+        params.add(evaluatorId);
+        params.addAll(modelRunIds);
+        
+        List<Map<String, Object>> existingRuns = jdbcTemplate.queryForList(findSqlBuilder.toString(), params.toArray());
         
         if (!existingRuns.isEmpty()) {
             Map<String, Object> runData = existingRuns.get(0);
+            
+            // 查询并设置Evaluator对象
+            String evaluatorSql = "SELECT * FROM evaluators WHERE id = ?";
+            Map<String, Object> evaluatorData = jdbcTemplate.queryForMap(evaluatorSql, evaluatorId);
+            
+            Evaluator evaluator = new Evaluator();
+            evaluator.setId(evaluatorId);
+            evaluator.setName((String) evaluatorData.get("name"));
+            evaluator.setEvaluatorType(Evaluator.EvaluatorType.valueOf((String) evaluatorData.get("evaluator_type")));
+            
+            // 创建并设置ModelAnswerRun对象
+            Long modelAnswerRunId = (Long) runData.get("model_answer_run_id");
+            ModelAnswerRun modelAnswerRun = new ModelAnswerRun();
+            modelAnswerRun.setId(modelAnswerRunId);
+            
             EvaluationRun evaluationRun = new EvaluationRun();
             evaluationRun.setId((Long) runData.get("id"));
             evaluationRun.setEvaluatorId(evaluatorId);
+            evaluationRun.setEvaluator(evaluator);
+            evaluationRun.setModelAnswerRun(modelAnswerRun);
             evaluationRun.setStatus(RunStatus.valueOf((String) runData.get("status")));
             
             return evaluationRun;
         }
         
-        // 创建新的评测运行记录
-        String insertSql = "INSERT INTO evaluation_runs (batch_id, evaluator_id, created_by_user_id, status, start_time) VALUES (?, ?, ?, ?, ?)";
+        // 创建新的评测运行记录，使用第一个model_answer_run_id
+        Long modelAnswerRunId = modelRunIds.get(0);
+        String insertSql = "INSERT INTO evaluation_runs (model_answer_run_id, evaluator_id, created_by_user_id, status, start_time, run_name) VALUES (?, ?, ?, ?, ?, ?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, batchId);
+            ps.setLong(1, modelAnswerRunId);
             ps.setLong(2, evaluatorId);
             ps.setLong(3, userId);
             ps.setString(4, RunStatus.PENDING.toString());
             ps.setTimestamp(5, Timestamp.valueOf(LocalDateTime.now()));
+            ps.setString(6, "Batch Evaluation Run " + batchId + " - " + LocalDateTime.now().toString());
             return ps;
         }, keyHolder);
         
         Long runId = keyHolder.getKey().longValue();
         
+        // 查询并设置Evaluator对象
+        String evaluatorSql = "SELECT * FROM evaluators WHERE id = ?";
+        Map<String, Object> evaluatorData = jdbcTemplate.queryForMap(evaluatorSql, evaluatorId);
+        
+        Evaluator evaluator = new Evaluator();
+        evaluator.setId(evaluatorId);
+        evaluator.setName((String) evaluatorData.get("name"));
+        evaluator.setEvaluatorType(Evaluator.EvaluatorType.valueOf((String) evaluatorData.get("evaluator_type")));
+        
+        // 创建并设置ModelAnswerRun对象
+        ModelAnswerRun modelAnswerRun = new ModelAnswerRun();
+        modelAnswerRun.setId(modelAnswerRunId);
+        
         EvaluationRun evaluationRun = new EvaluationRun();
         evaluationRun.setId(runId);
         evaluationRun.setEvaluatorId(evaluatorId);
+        evaluationRun.setEvaluator(evaluator);
+        evaluationRun.setModelAnswerRun(modelAnswerRun);
         evaluationRun.setStatus(RunStatus.PENDING);
         
         return evaluationRun;
@@ -4775,10 +5030,9 @@ public class EvaluationServiceImpl implements EvaluationService {
                         answer.setId(answerId);
                         answer.setAnswerText(answerText);
                         
-                        // 构建评测者对象
-                        Evaluator evaluator = new Evaluator();
-                        evaluator.setId(evaluatorId);
-                        evaluator.setEvaluatorType(Evaluator.EvaluatorType.AI_MODEL);
+                        // 获取完整的评测者对象
+                        Evaluator evaluator = evaluatorRepository.findById(evaluatorId)
+                                .orElseThrow(() -> new EntityNotFoundException("评测员不存在: " + evaluatorId));
                         
                         // 构建用户对象
                         User user = new User();
@@ -4790,13 +5044,13 @@ public class EvaluationServiceImpl implements EvaluationService {
                         processed++;
                     
                     // 更新进度
-                        String updateProgressSql = "UPDATE evaluation_runs SET processed_answers_count = ?, progress = ? WHERE id = ?";
+                        String updateProgressSql = "UPDATE evaluation_runs SET completed_answers_count = ?, progress_percentage = ? WHERE id = ?";
                         jdbcTemplate.update(updateProgressSql, processed, (int)((processed * 100.0) / total), evaluationRun.getId());
                     
                 } catch (Exception e) {
                         logger.error("处理回答时发生错误", e);
                         // 更新错误状态
-                        String updateErrorSql = "UPDATE evaluation_runs SET status = 'ERROR', error_message = ? WHERE id = ?";
+                        String updateErrorSql = "UPDATE evaluation_runs SET status = 'FAILED', error_message = ? WHERE id = ?";
                         jdbcTemplate.update(updateErrorSql, e.getMessage(), evaluationRun.getId());
                         throw e;
                     }
@@ -4859,7 +5113,12 @@ public class EvaluationServiceImpl implements EvaluationService {
             String prompt = assembleEvaluationPrompt(question, answer.getAnswerText(), referenceAnswer, criteria);
             
             // 调用AI服务进行评测
-            String aiResponse = callAIService(prompt, evaluator.getId());
+            // 需要从evaluator中获取关联的模型ID
+            Long modelId = null;
+            if (evaluator.getLlmModel() != null) {
+                modelId = evaluator.getLlmModel().getId();
+            }
+            String aiResponse = callAIService(prompt, modelId);
             
             // 解析AI响应
             Map<String, Object> evaluationResult = parseAIResponse(aiResponse);
@@ -4879,26 +5138,84 @@ public class EvaluationServiceImpl implements EvaluationService {
             if (existingId != null) {
                 // 更新现有评测
                 String updateSql = "UPDATE evaluations SET overall_score = ?, comments = ?, evaluation_results = ?, " +
-                        "updated_at = ?, updated_by_user_id = ? WHERE id = ?";
+                        "completion_time = ?, evaluation_status = ?, raw_evaluator_response = ? WHERE id = ?";
+                
+                // 提取评语/建议
+                String comments = "";
+                if (evaluationResult.containsKey("建议")) {
+                    comments = evaluationResult.get("建议").toString();
+                } else if (evaluationResult.containsKey("总体评语")) {
+                    comments = evaluationResult.get("总体评语").toString();
+                } else if (evaluationResult.containsKey("评价")) {
+                    comments = evaluationResult.get("评价").toString();
+                }
+                
+                String evaluationResultJson;
+                try {
+                    evaluationResultJson = new ObjectMapper().writeValueAsString(evaluationResult);
+                } catch (Exception e) {
+                    logger.error("序列化评测结果失败: {}", e.getMessage());
+                    evaluationResultJson = "{}";
+                }
+                
                 jdbcTemplate.update(updateSql, 
                         overallScore, 
-                        evaluationResult.getOrDefault("总体评语", "").toString(),
-                        new ObjectMapper().writeValueAsString(evaluationResult),
+                        comments,
+                        evaluationResultJson,
                         Timestamp.valueOf(LocalDateTime.now()),
-                        user.getId(),
+                        "SUCCESS",
+                        evaluationResult.getOrDefault("原始响应", "").toString(),
                         existingId);
+                
+                // 删除旧的评测详情并保存新的
+                jdbcTemplate.update("DELETE FROM evaluation_details WHERE evaluation_id = ?", existingId);
+                saveEvaluationDetails(existingId, evaluationResult, criteria);
             } else {
                 // 创建新评测
                 String insertSql = "INSERT INTO evaluations (llm_answer_id, evaluator_id, overall_score, comments, " +
-                        "evaluation_results, created_at, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
-                jdbcTemplate.update(insertSql,
-                        answer.getId(),
-                        evaluator.getId(),
-                        overallScore,
-                        evaluationResult.getOrDefault("总体评语", "").toString(),
-                        new ObjectMapper().writeValueAsString(evaluationResult),
-                        Timestamp.valueOf(LocalDateTime.now()),
-                        user.getId());
+                        "evaluation_results, creation_time, created_by_user_id, evaluation_status, raw_evaluator_response) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                
+                // 提取评语/建议
+                final String comments;
+                if (evaluationResult.containsKey("建议")) {
+                    comments = evaluationResult.get("建议").toString();
+                } else if (evaluationResult.containsKey("总体评语")) {
+                    comments = evaluationResult.get("总体评语").toString();
+                } else if (evaluationResult.containsKey("评价")) {
+                    comments = evaluationResult.get("评价").toString();
+                } else {
+                    comments = "";
+                }
+                
+                final String evaluationResultJson;
+                final String rawResponse;
+                try {
+                    evaluationResultJson = new ObjectMapper().writeValueAsString(evaluationResult);
+                    rawResponse = evaluationResult.getOrDefault("原始响应", "").toString();
+                } catch (Exception e) {
+                    logger.error("序列化评测结果失败: {}", e.getMessage());
+                    throw new RuntimeException("序列化评测结果失败", e);
+                }
+                
+                KeyHolder keyHolder = new GeneratedKeyHolder();
+                jdbcTemplate.update(connection -> {
+                    PreparedStatement ps = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+                    ps.setLong(1, answer.getId());
+                    ps.setLong(2, evaluator.getId());
+                    ps.setBigDecimal(3, overallScore);
+                    ps.setString(4, comments);
+                    ps.setString(5, evaluationResultJson);
+                    ps.setTimestamp(6, Timestamp.valueOf(LocalDateTime.now()));
+                    ps.setLong(7, user.getId());
+                    ps.setString(8, "SUCCESS");
+                    ps.setString(9, rawResponse);
+                    return ps;
+                }, keyHolder);
+                
+                Long evaluationId = keyHolder.getKey().longValue();
+                
+                // 保存评测详情到 EVALUATION_DETAILS 表
+                saveEvaluationDetails(evaluationId, evaluationResult, criteria);
             }
             
             return overallScore;
@@ -4974,5 +5291,408 @@ public class EvaluationServiceImpl implements EvaluationService {
         
         // 保存更改
         evaluationCriterionRepository.save(criterion);
+    }
+
+    @Override
+    public Map<String, Object> getBatchComprehensiveScores(Long batchId, List<Long> modelIds, int page, int size) {
+        logger.info("获取批次{}的综合评分展示数据，模型IDs: {}", batchId, modelIds);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 1. 获取批次基本信息
+            String batchQuery = "SELECT agb.id, agb.name, agb.description, agb.creation_time, " +
+                    "dv.name as dataset_name, dv.version_number as dataset_version " +
+                    "FROM answer_generation_batches agb " +
+                    "JOIN dataset_versions dv ON agb.dataset_version_id = dv.id " +
+                    "WHERE agb.id = ?";
+            
+            Map<String, Object> batchInfo = jdbcTemplate.queryForMap(batchQuery, batchId);
+            result.put("batchInfo", batchInfo);
+            
+            // 2. 获取批次中的所有模型信息
+            StringBuilder modelsQuery = new StringBuilder();
+            modelsQuery.append("SELECT DISTINCT lm.id, lm.name, lm.provider, lm.version ");
+            modelsQuery.append("FROM model_answer_runs mar ");
+            modelsQuery.append("JOIN llm_models lm ON mar.llm_model_id = lm.id ");
+            modelsQuery.append("WHERE mar.answer_generation_batch_id = ?");
+            
+            List<Object> queryParams = new ArrayList<>();
+            queryParams.add(batchId);
+            
+            if (modelIds != null && !modelIds.isEmpty()) {
+                modelsQuery.append(" AND lm.id IN (");
+                for (int i = 0; i < modelIds.size(); i++) {
+                    modelsQuery.append("?");
+                    if (i < modelIds.size() - 1) modelsQuery.append(",");
+                    queryParams.add(modelIds.get(i));
+                }
+                modelsQuery.append(")");
+            }
+            
+            List<Map<String, Object>> models = jdbcTemplate.queryForList(modelsQuery.toString(), queryParams.toArray());
+            result.put("models", models);
+            
+            // 3. 获取评分统计数据
+            List<Map<String, Object>> modelScores = new ArrayList<>();
+            
+            for (Map<String, Object> model : models) {
+                Long modelId = (Long) model.get("id");
+                Map<String, Object> modelScore = getModelComprehensiveScore(batchId, modelId);
+                modelScore.put("modelInfo", model);
+                modelScores.add(modelScore);
+            }
+            
+            // 4. 按总分排序
+            modelScores.sort((a, b) -> {
+                BigDecimal scoreA = (BigDecimal) a.get("overallScore");
+                BigDecimal scoreB = (BigDecimal) b.get("overallScore");
+                if (scoreA == null) scoreA = BigDecimal.ZERO;
+                if (scoreB == null) scoreB = BigDecimal.ZERO;
+                return scoreB.compareTo(scoreA); // 降序排列
+            });
+            
+            // 5. 添加排名
+            for (int i = 0; i < modelScores.size(); i++) {
+                modelScores.get(i).put("rank", i + 1);
+            }
+            
+            // 6. 分页处理
+            int totalModels = modelScores.size();
+            int totalPages = (int) Math.ceil((double) totalModels / size);
+            int startIndex = page * size;
+            int endIndex = Math.min(startIndex + size, totalModels);
+            
+            List<Map<String, Object>> pagedModelScores = modelScores.subList(startIndex, endIndex);
+            
+            // 7. 获取评测统计概览
+            Map<String, Object> overview = getBatchEvaluationOverview(batchId, modelIds);
+            
+            // 8. 构建返回结果
+            result.put("modelScores", pagedModelScores);
+            result.put("overview", overview);
+            result.put("pagination", Map.of(
+                    "currentPage", page,
+                    "pageSize", size,
+                    "totalItems", totalModels,
+                    "totalPages", totalPages
+            ));
+            
+            logger.info("成功获取批次{}的综合评分数据，共{}个模型", batchId, totalModels);
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("获取批次{}综合评分数据失败", batchId, e);
+            throw new RuntimeException("获取批次综合评分数据失败: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 获取单个模型在批次中的综合评分
+     */
+    private Map<String, Object> getModelComprehensiveScore(Long batchId, Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 1. 获取客观题评分
+            Map<String, Object> objectiveScores = getModelObjectiveScores(batchId, modelId);
+            result.put("objectiveScores", objectiveScores);
+            
+            // 2. 获取主观题AI评分
+            Map<String, Object> subjectiveAiScores = getModelSubjectiveAiScores(batchId, modelId);
+            result.put("subjectiveAiScores", subjectiveAiScores);
+            
+            // 3. 获取主观题人工评分
+            Map<String, Object> subjectiveHumanScores = getModelSubjectiveHumanScores(batchId, modelId);
+            result.put("subjectiveHumanScores", subjectiveHumanScores);
+            
+            // 4. 计算综合评分
+            BigDecimal overallScore = calculateOverallScore(objectiveScores, subjectiveAiScores, subjectiveHumanScores);
+            result.put("overallScore", overallScore);
+            
+            // 5. 获取评测详情统计
+            Map<String, Object> detailStats = getModelEvaluationDetailStats(batchId, modelId);
+            result.put("detailStats", detailStats);
+            
+            return result;
+            
+        } catch (Exception e) {
+            logger.error("获取模型{}在批次{}中的综合评分失败", modelId, batchId, e);
+            return new HashMap<>();
+        }
+    }
+    
+    /**
+     * 获取模型客观题评分
+     */
+    private Map<String, Object> getModelObjectiveScores(Long batchId, Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            String query = "SELECT " +
+                    "COUNT(DISTINCT e.llm_answer_id) as total_answers, " +
+                    "AVG(e.normalized_score) as average_score, " +
+                    "MAX(e.normalized_score) as max_score, " +
+                    "MIN(e.normalized_score) as min_score, " +
+                    "SUM(CASE WHEN sq.question_type = 'SINGLE_CHOICE' THEN 1 ELSE 0 END) as single_choice_count, " +
+                    "SUM(CASE WHEN sq.question_type = 'MULTIPLE_CHOICE' THEN 1 ELSE 0 END) as multiple_choice_count, " +
+                    "SUM(CASE WHEN sq.question_type = 'SIMPLE_FACT' THEN 1 ELSE 0 END) as simple_fact_count, " +
+                    "AVG(CASE WHEN sq.question_type = 'SINGLE_CHOICE' THEN e.normalized_score END) as single_choice_avg, " +
+                    "AVG(CASE WHEN sq.question_type = 'MULTIPLE_CHOICE' THEN e.normalized_score END) as multiple_choice_avg, " +
+                    "AVG(CASE WHEN sq.question_type = 'SIMPLE_FACT' THEN e.normalized_score END) as simple_fact_avg " +
+                    "FROM evaluations e " +
+                    "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                    "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                    "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                    "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                    "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ? " +
+                    "AND sq.question_type IN ('SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SIMPLE_FACT') " +
+                    "AND e.evaluation_status = 'SUCCESS'";
+            
+            List<Map<String, Object>> queryResult = jdbcTemplate.queryForList(query, batchId, modelId);
+            
+            if (!queryResult.isEmpty()) {
+                result = queryResult.get(0);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取模型{}客观题评分失败", modelId, e);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 获取模型主观题AI评分
+     */
+    private Map<String, Object> getModelSubjectiveAiScores(Long batchId, Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            String query = "SELECT " +
+                    "COUNT(DISTINCT e.llm_answer_id) as total_answers, " +
+                    "AVG(e.overall_score) as average_score, " +
+                    "MAX(e.overall_score) as max_score, " +
+                    "MIN(e.overall_score) as min_score, " +
+                    "COUNT(DISTINCT e.evaluator_id) as evaluator_count " +
+                    "FROM evaluations e " +
+                    "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                    "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                    "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                    "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                    "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+                    "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ? " +
+                    "AND sq.question_type = 'SUBJECTIVE' " +
+                    "AND ev.evaluator_type = 'AI_MODEL' " +
+                    "AND e.evaluation_status = 'SUCCESS'";
+            
+            List<Map<String, Object>> queryResult = jdbcTemplate.queryForList(query, batchId, modelId);
+            
+            if (!queryResult.isEmpty()) {
+                result = queryResult.get(0);
+                
+                // 获取各个评测标准的平均分
+                String criteriaQuery = "SELECT " +
+                        "ed.criterion_name, " +
+                        "AVG(ed.score) as average_score, " +
+                        "COUNT(*) as count " +
+                        "FROM evaluation_details ed " +
+                        "JOIN evaluations e ON ed.evaluation_id = e.id " +
+                        "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                        "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                        "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+                        "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ? " +
+                        "AND ev.evaluator_type = 'AI_MODEL' " +
+                        "AND e.evaluation_status = 'SUCCESS' " +
+                        "GROUP BY ed.criterion_name " +
+                        "ORDER BY ed.criterion_name";
+                
+                List<Map<String, Object>> criteriaScores = jdbcTemplate.queryForList(criteriaQuery, batchId, modelId);
+                result.put("criteriaScores", criteriaScores);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取模型{}主观题AI评分失败", modelId, e);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 获取模型主观题人工评分
+     */
+    private Map<String, Object> getModelSubjectiveHumanScores(Long batchId, Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            String query = "SELECT " +
+                    "COUNT(DISTINCT e.llm_answer_id) as total_answers, " +
+                    "AVG(e.overall_score) as average_score, " +
+                    "MAX(e.overall_score) as max_score, " +
+                    "MIN(e.overall_score) as min_score, " +
+                    "COUNT(DISTINCT e.evaluator_id) as evaluator_count " +
+                    "FROM evaluations e " +
+                    "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                    "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                    "JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id " +
+                    "JOIN standard_questions sq ON dqm.standard_question_id = sq.id " +
+                    "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+                    "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ? " +
+                    "AND sq.question_type = 'SUBJECTIVE' " +
+                    "AND ev.evaluator_type = 'HUMAN' " +
+                    "AND e.evaluation_status = 'SUCCESS'";
+            
+            List<Map<String, Object>> queryResult = jdbcTemplate.queryForList(query, batchId, modelId);
+            
+            if (!queryResult.isEmpty()) {
+                result = queryResult.get(0);
+                
+                // 获取各个评测标准的平均分
+                String criteriaQuery = "SELECT " +
+                        "ed.criterion_name, " +
+                        "AVG(ed.score) as average_score, " +
+                        "COUNT(*) as count " +
+                        "FROM evaluation_details ed " +
+                        "JOIN evaluations e ON ed.evaluation_id = e.id " +
+                        "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                        "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                        "JOIN evaluators ev ON e.evaluator_id = ev.id " +
+                        "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ? " +
+                        "AND ev.evaluator_type = 'HUMAN' " +
+                        "AND e.evaluation_status = 'SUCCESS' " +
+                        "GROUP BY ed.criterion_name " +
+                        "ORDER BY ed.criterion_name";
+                
+                List<Map<String, Object>> criteriaScores = jdbcTemplate.queryForList(criteriaQuery, batchId, modelId);
+                result.put("criteriaScores", criteriaScores);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取模型{}主观题人工评分失败", modelId, e);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 计算综合评分
+     */
+    private BigDecimal calculateOverallScore(Map<String, Object> objectiveScores, 
+                                           Map<String, Object> subjectiveAiScores, 
+                                           Map<String, Object> subjectiveHumanScores) {
+        try {
+            List<BigDecimal> scores = new ArrayList<>();
+            
+            // 客观题评分
+            if (objectiveScores.get("average_score") != null) {
+                scores.add(new BigDecimal(objectiveScores.get("average_score").toString()));
+            }
+            
+            // 主观题AI评分
+            if (subjectiveAiScores.get("average_score") != null) {
+                scores.add(new BigDecimal(subjectiveAiScores.get("average_score").toString()));
+            }
+            
+            // 主观题人工评分
+            if (subjectiveHumanScores.get("average_score") != null) {
+                scores.add(new BigDecimal(subjectiveHumanScores.get("average_score").toString()));
+            }
+            
+            if (scores.isEmpty()) {
+                return BigDecimal.ZERO;
+            }
+            
+            // 计算平均分
+            BigDecimal sum = scores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+            return sum.divide(new BigDecimal(scores.size()), 2, RoundingMode.HALF_UP);
+            
+        } catch (Exception e) {
+            logger.error("计算综合评分失败", e);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    /**
+     * 获取模型评测详情统计
+     */
+    private Map<String, Object> getModelEvaluationDetailStats(Long batchId, Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            String query = "SELECT " +
+                    "COUNT(DISTINCT e.id) as total_evaluations, " +
+                    "COUNT(DISTINCT e.llm_answer_id) as total_answers, " +
+                    "COUNT(DISTINCT e.evaluator_id) as total_evaluators, " +
+                    "SUM(CASE WHEN e.evaluation_status = 'SUCCESS' THEN 1 ELSE 0 END) as success_count, " +
+                    "SUM(CASE WHEN e.evaluation_status = 'FAILED' THEN 1 ELSE 0 END) as failed_count " +
+                    "FROM evaluations e " +
+                    "JOIN llm_answers la ON e.llm_answer_id = la.id " +
+                    "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
+                    "WHERE mar.answer_generation_batch_id = ? AND mar.llm_model_id = ?";
+            
+            List<Map<String, Object>> queryResult = jdbcTemplate.queryForList(query, batchId, modelId);
+            
+            if (!queryResult.isEmpty()) {
+                result = queryResult.get(0);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取模型{}评测详情统计失败", modelId, e);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 获取批次评测概览
+     */
+    private Map<String, Object> getBatchEvaluationOverview(Long batchId, List<Long> modelIds) {
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            StringBuilder query = new StringBuilder();
+            query.append("SELECT ");
+            query.append("COUNT(DISTINCT mar.llm_model_id) as total_models, ");
+            query.append("COUNT(DISTINCT la.id) as total_answers, ");
+            query.append("COUNT(DISTINCT e.id) as total_evaluations, ");
+            query.append("COUNT(DISTINCT e.evaluator_id) as total_evaluators, ");
+            query.append("SUM(CASE WHEN sq.question_type = 'SINGLE_CHOICE' THEN 1 ELSE 0 END) as single_choice_count, ");
+            query.append("SUM(CASE WHEN sq.question_type = 'MULTIPLE_CHOICE' THEN 1 ELSE 0 END) as multiple_choice_count, ");
+            query.append("SUM(CASE WHEN sq.question_type = 'SIMPLE_FACT' THEN 1 ELSE 0 END) as simple_fact_count, ");
+            query.append("SUM(CASE WHEN sq.question_type = 'SUBJECTIVE' THEN 1 ELSE 0 END) as subjective_count, ");
+            query.append("SUM(CASE WHEN ev.evaluator_type = 'AI_MODEL' THEN 1 ELSE 0 END) as ai_evaluation_count, ");
+            query.append("SUM(CASE WHEN ev.evaluator_type = 'HUMAN' THEN 1 ELSE 0 END) as human_evaluation_count ");
+            query.append("FROM model_answer_runs mar ");
+            query.append("JOIN llm_answers la ON mar.id = la.model_answer_run_id ");
+            query.append("JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id ");
+            query.append("JOIN standard_questions sq ON dqm.standard_question_id = sq.id ");
+            query.append("LEFT JOIN evaluations e ON la.id = e.llm_answer_id ");
+            query.append("LEFT JOIN evaluators ev ON e.evaluator_id = ev.id ");
+            query.append("WHERE mar.answer_generation_batch_id = ?");
+            
+            List<Object> queryParams = new ArrayList<>();
+            queryParams.add(batchId);
+            
+            if (modelIds != null && !modelIds.isEmpty()) {
+                query.append(" AND mar.llm_model_id IN (");
+                for (int i = 0; i < modelIds.size(); i++) {
+                    query.append("?");
+                    if (i < modelIds.size() - 1) query.append(",");
+                    queryParams.add(modelIds.get(i));
+                }
+                query.append(")");
+            }
+            
+            List<Map<String, Object>> queryResult = jdbcTemplate.queryForList(query.toString(), queryParams.toArray());
+            
+            if (!queryResult.isEmpty()) {
+                result = queryResult.get(0);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取批次{}评测概览失败", batchId, e);
+        }
+        
+        return result;
     }
 } 

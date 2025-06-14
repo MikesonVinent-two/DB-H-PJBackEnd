@@ -344,22 +344,35 @@ public class RawDataServiceImpl implements RawDataService {
         
         // 2. 如果有标签，按标签搜索
         if (tags != null && !tags.isEmpty()) {
-            Page<RawQuestion> tagResults;
+            logger.debug("开始标签搜索，标签: {}", tags);
+            List<RawQuestion> tagResults;
             if (resultMap.isEmpty() && keyword == null) {
                 // 如果没有关键词搜索结果，直接按标签搜索
-                tagResults = questionRepository.findByTagNames(tags, (long)tags.size(), Pageable.unpaged());
+                // 首先尝试从关联表搜索
+                Page<RawQuestion> relationalResults = rawQuestionRepository.findByTagNames(tags, (long)tags.size(), Pageable.unpaged());
+                logger.debug("关联表搜索结果: {} 个", relationalResults.getTotalElements());
+                if (relationalResults.hasContent()) {
+                    tagResults = relationalResults.getContent();
+                } else {
+                    // 如果关联表没有结果，从JSON字段搜索
+                    logger.debug("关联表无结果，开始JSON字段搜索");
+                    tagResults = searchByJsonTags(tags);
+                    logger.debug("JSON字段搜索结果: {} 个", tagResults.size());
+                }
             } else {
                 // 如果有关键词搜索结果，在关键词结果中过滤标签
                 List<Long> questionIds = new ArrayList<>(resultMap.keySet());
                 if (questionIds.isEmpty()) {
                     return Page.empty(pageable);
                 }
-                // 这里需要实现一个新的repository方法来支持按ID列表和标签名过滤
-                tagResults = questionRepository.findByIdsAndTagNames(questionIds, tags, (long)tags.size(), Pageable.unpaged());
+                // 在关键词结果中过滤标签
+                tagResults = filterByTags(new ArrayList<>(resultMap.values()), tags);
+                logger.debug("关键词结果中过滤标签: {} 个", tagResults.size());
             }
             // 更新结果集
             resultMap.clear();
             tagResults.forEach(q -> resultMap.put(q.getId(), q));
+            logger.debug("标签搜索完成，最终结果: {} 个", resultMap.size());
         }
         
         // 3. 如果需要过滤标准化状态
@@ -384,6 +397,11 @@ public class RawDataServiceImpl implements RawDataService {
             // 如果没有任何过滤条件，获取所有问题
             Page<RawQuestion> allQuestions = rawQuestionRepository.findAll(Pageable.unpaged());
             allQuestions.forEach(q -> resultMap.put(q.getId(), q));
+        }
+        
+        // 如果有搜索条件但没有结果，返回空页面
+        if (resultMap.isEmpty() && ((keyword != null && !keyword.trim().isEmpty()) || (tags != null && !tags.isEmpty()))) {
+            return Page.empty(pageable);
         }
         
         // 将结果转换为列表并排序
@@ -415,7 +433,7 @@ public class RawDataServiceImpl implements RawDataService {
             return findAllRawQuestions(pageable);
         }
         
-        return questionRepository.findByTagNames(tags, (long)tags.size(), pageable)
+        return rawQuestionRepository.findByTagNames(tags, (long)tags.size(), pageable)
                 .map(this::convertToDisplayDTO);
     }
 
@@ -520,6 +538,49 @@ public class RawDataServiceImpl implements RawDataService {
         logger.debug("查询到原始问题(ID:{})的{}个回答", questionId, answers.getTotalElements());
         
         return answers;
+    }
+
+    // 从JSON标签字段搜索问题
+    private List<RawQuestion> searchByJsonTags(List<String> searchTags) {
+        logger.debug("开始从JSON字段搜索标签: {}", searchTags);
+        List<RawQuestion> allQuestions = rawQuestionRepository.findAll();
+        logger.debug("获取到 {} 个问题进行标签过滤", allQuestions.size());
+        List<RawQuestion> result = filterByTags(allQuestions, searchTags);
+        logger.debug("JSON字段搜索完成，找到 {} 个匹配的问题", result.size());
+        return result;
+    }
+    
+    // 在给定的问题列表中过滤包含指定标签的问题
+    private List<RawQuestion> filterByTags(List<RawQuestion> questions, List<String> searchTags) {
+        return questions.stream()
+                .filter(question -> {
+                    List<String> questionTags = getQuestionTags(question);
+                    // 检查是否包含所有搜索标签（AND逻辑）
+                    return questionTags.containsAll(searchTags);
+                })
+                .collect(Collectors.toList());
+    }
+    
+    // 获取问题的标签列表
+    private List<String> getQuestionTags(RawQuestion question) {
+        // 首先尝试从关联表获取
+        if (question.getQuestionTags() != null && !question.getQuestionTags().isEmpty()) {
+            return question.getQuestionTags().stream()
+                    .map(tag -> tag.getTag().getTagName())
+                    .collect(Collectors.toList());
+        }
+        
+        // 如果关联表为空，尝试从JSON字符串解析
+        if (question.getTags() != null && !question.getTags().isEmpty() && !question.getTags().equals("[]")) {
+            try {
+                return objectMapper.readValue(question.getTags(), 
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            } catch (Exception e) {
+                logger.warn("解析问题 ID：{} 的标签JSON字符串失败: {}", question.getId(), e.getMessage());
+            }
+        }
+        
+        return Collections.emptyList();
     }
 
     // 转换为展示DTO的辅助方法

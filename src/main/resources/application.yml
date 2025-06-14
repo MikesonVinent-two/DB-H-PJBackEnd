@@ -22,6 +22,8 @@ server:
     accept-count: 1000
     max-keep-alive-requests: 10000
     keep-alive-timeout: 120s
+    # URI编码配置
+    uri-encoding: UTF-8
   websocket:
     path: /ws
 

@@ -138,17 +138,59 @@ public class RawDataController {
     @GetMapping("/questions/search")
     public ResponseEntity<Page<RawQuestionDisplayDTO>> searchRawQuestions(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) List<String> tags,
+            @RequestParam(value = "tags", required = false) List<String> tags,
+            @RequestParam(value = "tags[]", required = false) List<String> tagsArray,
             @RequestParam(required = false) Boolean unStandardized,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
         
-        // 如果只有关键词，使用简单搜索
-        if (keyword != null && !keyword.isEmpty() && (tags == null || tags.isEmpty()) && unStandardized == null) {
-            return ResponseEntity.ok(rawDataService.searchRawQuestions(keyword, pageable));
+        // 合并两种格式的标签参数
+        List<String> finalTags = null;
+        if (tags != null && !tags.isEmpty()) {
+            finalTags = tags;
+        } else if (tagsArray != null && !tagsArray.isEmpty()) {
+            finalTags = tagsArray;
         }
         
-        // 否则使用高级搜索
-        return ResponseEntity.ok(rawDataService.advancedSearchRawQuestions(keyword, tags, unStandardized, pageable));
+        logger.info("接收到搜索请求 - keyword: {}, tags: {}, tagsArray: {}, finalTags: {}, unStandardized: {}", 
+                   keyword, tags, tagsArray, finalTags, unStandardized);
+        System.out.println("DEBUG: 接收到搜索请求 - finalTags: " + finalTags);
+        
+        try {
+            // 清理和验证参数
+            if (keyword != null) {
+                keyword = keyword.trim();
+                if (keyword.isEmpty()) {
+                    keyword = null;
+                }
+            }
+            
+            if (finalTags != null) {
+                // 清理标签列表，移除空白标签
+                finalTags = finalTags.stream()
+                        .filter(tag -> tag != null && !tag.trim().isEmpty())
+                        .map(String::trim)
+                        .collect(java.util.stream.Collectors.toList());
+                if (finalTags.isEmpty()) {
+                    finalTags = null;
+                }
+            }
+            
+            logger.debug("清理后的参数 - keyword: {}, finalTags: {}, unStandardized: {}", keyword, finalTags, unStandardized);
+            
+            // 如果只有关键词，使用简单搜索
+            if (keyword != null && !keyword.isEmpty() && (finalTags == null || finalTags.isEmpty()) && unStandardized == null) {
+                logger.debug("使用简单搜索");
+                return ResponseEntity.ok(rawDataService.searchRawQuestions(keyword, pageable));
+            }
+            
+            // 否则使用高级搜索
+            logger.debug("使用高级搜索");
+            return ResponseEntity.ok(rawDataService.advancedSearchRawQuestions(keyword, finalTags, unStandardized, pageable));
+            
+        } catch (Exception e) {
+            logger.error("搜索原始问题时发生错误", e);
+            throw e; // 让全局异常处理器处理
+        }
     }
     
     // 添加测试数据
@@ -189,6 +231,19 @@ public class RawDataController {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(rawDataService.findQuestionsByTags(tags, pageable));
+    }
+    
+    // 测试参数绑定
+    @GetMapping("/test-params")
+    public ResponseEntity<Map<String, Object>> testParams(
+            @RequestParam(value = "tags", required = false) List<String> tags,
+            @RequestParam(value = "tags[]", required = false) List<String> tagsArray) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("tags", tags);
+        result.put("tagsArray", tagsArray);
+        System.out.println("DEBUG: tags = " + tags);
+        System.out.println("DEBUG: tagsArray = " + tagsArray);
+        return ResponseEntity.ok(result);
     }
     
     /**

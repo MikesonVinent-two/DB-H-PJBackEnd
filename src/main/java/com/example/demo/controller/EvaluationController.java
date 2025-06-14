@@ -505,14 +505,21 @@ public class EvaluationController {
     public ResponseEntity<Map<String, Object>> getSubjectiveDetailedResults(
             @RequestParam Long batchId,
             @RequestParam(required = false) List<Long> modelIds,
-            @RequestParam Long evaluatorId,
+            @RequestParam(required = false) Long evaluatorId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         
         logger.info("接收到获取主观题评测详细结果请求，批次ID: {}, 模型IDs: {}, 评测者ID: {}, 页码: {}, 每页大小: {}", 
                 batchId, modelIds, evaluatorId, page, size);
         
-        Map<String, Object> results = evaluationService.getSubjectiveDetailedResults(batchId, modelIds, evaluatorId, page, size);
+        Map<String, Object> results;
+        if (evaluatorId != null) {
+            // 如果指定了评测者ID，返回该评测者的结果
+            results = evaluationService.getSubjectiveDetailedResults(batchId, modelIds, evaluatorId, page, size);
+        } else {
+            // 如果没有指定评测者ID，返回所有评测者的结果
+            results = evaluationService.getSubjectiveDetailedResultsWithAllEvaluators(batchId, modelIds, page, size);
+        }
         
         return ResponseEntity.ok(results);
     }
@@ -1347,7 +1354,7 @@ public class EvaluationController {
     @GetMapping("/batch/{batchId}/unevaluated")
     public ResponseEntity<Map<String, Object>> getUnevaluatedAnswers(
             @PathVariable Long batchId,
-            @RequestParam Long evaluatorId,
+            @RequestParam(required = false) Long evaluatorId,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size) {
         
@@ -1369,10 +1376,14 @@ public class EvaluationController {
         // 筛选出未被该评测员评测的回答
         List<Map<String, Object>> allUnevaluatedAnswers = new ArrayList<>();
         for (LlmAnswer answer : allAnswers) {
-            // 检查该回答是否已被该评测员评测
-            boolean evaluated = evaluationService.isAnswerEvaluatedByEvaluator(answer.getId(), evaluatorId);
+            // 如果没有指定评测者ID，则返回所有回答；否则检查该回答是否已被该评测员评测
+            boolean shouldInclude = true;
+            if (evaluatorId != null) {
+                boolean evaluated = evaluationService.isAnswerEvaluatedByEvaluator(answer.getId(), evaluatorId);
+                shouldInclude = !evaluated;
+            }
             
-            if (!evaluated) {
+            if (shouldInclude) {
                 // 获取标准问题和标准答案
                 Map<String, Object> answerData = new HashMap<>();
                 answerData.put("answer", answer);
@@ -1550,6 +1561,35 @@ public class EvaluationController {
             Map<String, Object> result = new HashMap<>();
             result.put("success", false);
             result.put("message", "获取评测结果失败: " + e.getMessage());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+    
+    /**
+     * 获取批次综合评分展示数据
+     * 包含客观题、主观题的详细评分统计和模型排名
+     */
+    @GetMapping("/batch/{batchId}/comprehensive-scores")
+    public ResponseEntity<Map<String, Object>> getBatchComprehensiveScores(
+            @PathVariable Long batchId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取批次{}综合评分展示数据请求", batchId);
+        
+        try {
+            Map<String, Object> result = evaluationService.getBatchComprehensiveScores(batchId, modelIds, page, size);
+            result.put("success", true);
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("获取批次{}综合评分展示数据失败", batchId, e);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", false);
+            result.put("message", "获取批次评分数据失败: " + e.getMessage());
             
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
         }

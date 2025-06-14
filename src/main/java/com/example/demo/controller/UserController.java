@@ -346,6 +346,17 @@ public class UserController {
                     userMap.put("role", user.getRole());
                     userMap.put("createdAt", user.getCreatedAt());
                     userMap.put("updatedAt", user.getUpdatedAt());
+                    
+                    // 添加是否是评测员的判断
+                    boolean isEvaluator = evaluatorService.getEvaluatorByUserId(user.getId()).isPresent();
+                    userMap.put("isEvaluator", isEvaluator);
+                    
+                    // 如果是评测员，添加评测员ID
+                    if (isEvaluator) {
+                        evaluatorService.getEvaluatorByUserId(user.getId())
+                            .ifPresent(evaluator -> userMap.put("evaluatorId", evaluator.getId()));
+                    }
+                    
                     // 不返回密码等敏感信息
                     return userMap;
                 })
@@ -406,6 +417,17 @@ public class UserController {
                     userMap.put("role", user.getRole());
                     userMap.put("createdAt", user.getCreatedAt());
                     userMap.put("updatedAt", user.getUpdatedAt());
+                    
+                    // 添加是否是评测员的判断
+                    boolean isEvaluator = evaluatorService.getEvaluatorByUserId(user.getId()).isPresent();
+                    userMap.put("isEvaluator", isEvaluator);
+                    
+                    // 如果是评测员，添加评测员ID
+                    if (isEvaluator) {
+                        evaluatorService.getEvaluatorByUserId(user.getId())
+                            .ifPresent(evaluator -> userMap.put("evaluatorId", evaluator.getId()));
+                    }
+                    
                     // 不返回密码等敏感信息
                     return userMap;
                 })

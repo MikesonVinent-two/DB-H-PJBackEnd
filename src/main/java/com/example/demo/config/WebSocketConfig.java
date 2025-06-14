@@ -64,6 +64,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 自定义握手处理器
         CustomHandshakeHandler handshakeHandler = new CustomHandshakeHandler();
         
+        logger.info("注册WebSocket端点: {}", websocketPath);
+        
         // 注册STOMP端点，支持SockJS
         registry.addEndpoint(websocketPath)
                 .setAllowedOriginPatterns("*")

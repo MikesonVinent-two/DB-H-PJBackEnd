@@ -30,6 +30,7 @@ public class EvaluatorRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final UserRepository userRepository;
+    private final LlmModelRepository llmModelRepository;
 
     private static final String SQL_INSERT = 
             "INSERT INTO evaluators (evaluator_type, user_id, llm_model_id, name, created_at, created_by_user_id, created_change_log_id, deleted_at) " +
@@ -64,9 +65,10 @@ public class EvaluatorRepository {
             "SELECT id FROM evaluators WHERE evaluator_type='HUMAN' AND user_id=? AND deleted_at IS NULL";
 
     @Autowired
-    public EvaluatorRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository) {
+    public EvaluatorRepository(JdbcTemplate jdbcTemplate, UserRepository userRepository, LlmModelRepository llmModelRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.userRepository = userRepository;
+        this.llmModelRepository = llmModelRepository;
     }
 
     /**
@@ -316,9 +318,10 @@ public class EvaluatorRepository {
             
             Long llmModelId = rs.getLong("llm_model_id");
             if (!rs.wasNull()) {
-                LlmModel llmModel = new LlmModel();
-                llmModel.setId(llmModelId);
-                evaluator.setLlmModel(llmModel);
+                // 加载完整的LlmModel信息，而不是只设置ID
+                llmModelRepository.findById(llmModelId).ifPresent(llmModel -> {
+                    evaluator.setLlmModel(llmModel);
+                });
             }
             
             // 设置创建者用户

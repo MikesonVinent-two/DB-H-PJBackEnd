@@ -181,7 +181,7 @@ public class LlmAnswerRepository {
             "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
             "sq.id as question_id, sq.question_text, sq.question_type, " +
             "e.id as evaluation_id, e.overall_score as score, e.comments, e.evaluation_results, " +
-            "ev.id as evaluator_id, ev.name as evaluator_name, ev.type as evaluator_type, " +
+            "ev.id as evaluator_id, ev.name as evaluator_name, ev.evaluator_type as evaluator_type, " +
             "u.id as user_id, u.username as username " +
             "FROM llm_answers la " +
             "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
@@ -1190,7 +1190,7 @@ public class LlmAnswerRepository {
             "SELECT la.id as answer_id, la.answer_text, mar.id as run_id, lm.id as model_id, lm.name as model_name, " +
             "sq.id as question_id, sq.question_text, sq.question_type, " +
             "e.id as evaluation_id, e.overall_score as score, e.comments, e.evaluation_results, " +
-            "ev.id as evaluator_id, ev.name as evaluator_name, ev.type as evaluator_type, " +
+            "ev.id as evaluator_id, ev.name as evaluator_name, ev.evaluator_type as evaluator_type, " +
             "u.id as user_id, u.username as username " +
             "FROM llm_answers la " +
             "JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id " +
