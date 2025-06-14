@@ -253,8 +253,8 @@
 
 1. **克隆项目**
 ```bash
-git clone [项目地址]
-cd [项目目录]
+git clone https://github.com/MikesonVinent-two/DB-H-PJBackEnd.git
+cd DB-H-PJBackEnd
 ```
 
 2. **配置数据库**
