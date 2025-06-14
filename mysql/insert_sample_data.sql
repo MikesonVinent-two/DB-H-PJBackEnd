@@ -7,8 +7,8 @@ SET NAMES utf8mb4;
 -- 插入用户数据
 INSERT INTO `USERS` (`ID`, `USERNAME`, `CONTACT_INFO`, `PASSWORD`, `ROLE`, `CREATED_AT`) VALUES
 (1, 'admin', 'admin@example.com', '$2a$10$S2.pYcCOB5uQjy4geXShTO8/iurJqDyWZ7YQugEkzINYoK6bK7lli', 'ADMIN', '2023-01-01 00:00:00'),
-(2, 'expert1', 'expert1@example.com', '$2a$10$S2.pYcCOB5uQjy4geXShTO8/iurJqDyWZ7YQugEkzINYoK6bK7lli', 'EXPERT', '2023-01-02 00:00:00'),
-(3, 'user1', 'user1@example.com', '$2a$10$S2.pYcCOB5uQjy4geXShTO8/iurJqDyWZ7YQugEkzINYoK6bK7lli', 'CROWDSOURCE_USER', '2023-01-03 00:00:00');
+(2, 'expert', 'expert1@example.com', '$2a$10$S2.pYcCOB5uQjy4geXShTO8/iurJqDyWZ7YQugEkzINYoK6bK7lli', 'EXPERT', '2023-01-02 00:00:00'),
+(3, 'user', 'user1@example.com', '$2a$10$S2.pYcCOB5uQjy4geXShTO8/iurJqDyWZ7YQugEkzINYoK6bK7lli', 'CROWDSOURCE_USER', '2023-01-03 00:00:00');
 
 -- 插入标签数据
 INSERT INTO `TAGS` (`ID`, `TAG_NAME`, `TAG_TYPE`, `DESCRIPTION`, `CREATED_BY_USER_ID`) VALUES
