@@ -138,10 +138,19 @@ public class RawDataController {
     @GetMapping("/questions/search")
     public ResponseEntity<Page<RawQuestionDisplayDTO>> searchRawQuestions(
             @RequestParam(required = false) String keyword,
+            @RequestParam(value = "keyword[]", required = false) String keywordArray,
             @RequestParam(value = "tags", required = false) List<String> tags,
             @RequestParam(value = "tags[]", required = false) List<String> tagsArray,
             @RequestParam(required = false) Boolean unStandardized,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+        
+        // 合并两种格式的关键词参数
+        String finalKeyword = null;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            finalKeyword = keyword;
+        } else if (keywordArray != null && !keywordArray.trim().isEmpty()) {
+            finalKeyword = keywordArray;
+        }
         
         // 合并两种格式的标签参数
         List<String> finalTags = null;
@@ -151,16 +160,16 @@ public class RawDataController {
             finalTags = tagsArray;
         }
         
-        logger.info("接收到搜索请求 - keyword: {}, tags: {}, tagsArray: {}, finalTags: {}, unStandardized: {}", 
-                   keyword, tags, tagsArray, finalTags, unStandardized);
-        System.out.println("DEBUG: 接收到搜索请求 - finalTags: " + finalTags);
+        logger.info("接收到搜索请求 - keyword: {}, keywordArray: {}, finalKeyword: {}, tags: {}, tagsArray: {}, finalTags: {}, unStandardized: {}", 
+                   keyword, keywordArray, finalKeyword, tags, tagsArray, finalTags, unStandardized);
+        System.out.println("DEBUG: 接收到搜索请求 - finalKeyword: " + finalKeyword + ", finalTags: " + finalTags);
         
         try {
             // 清理和验证参数
-            if (keyword != null) {
-                keyword = keyword.trim();
-                if (keyword.isEmpty()) {
-                    keyword = null;
+            if (finalKeyword != null) {
+                finalKeyword = finalKeyword.trim();
+                if (finalKeyword.isEmpty()) {
+                    finalKeyword = null;
                 }
             }
             
@@ -175,17 +184,17 @@ public class RawDataController {
                 }
             }
             
-            logger.debug("清理后的参数 - keyword: {}, finalTags: {}, unStandardized: {}", keyword, finalTags, unStandardized);
+            logger.debug("清理后的参数 - finalKeyword: {}, finalTags: {}, unStandardized: {}", finalKeyword, finalTags, unStandardized);
             
             // 如果只有关键词，使用简单搜索
-            if (keyword != null && !keyword.isEmpty() && (finalTags == null || finalTags.isEmpty()) && unStandardized == null) {
+            if (finalKeyword != null && !finalKeyword.isEmpty() && (finalTags == null || finalTags.isEmpty()) && unStandardized == null) {
                 logger.debug("使用简单搜索");
-                return ResponseEntity.ok(rawDataService.searchRawQuestions(keyword, pageable));
+                return ResponseEntity.ok(rawDataService.searchRawQuestions(finalKeyword, pageable));
             }
             
             // 否则使用高级搜索
             logger.debug("使用高级搜索");
-            return ResponseEntity.ok(rawDataService.advancedSearchRawQuestions(keyword, finalTags, unStandardized, pageable));
+            return ResponseEntity.ok(rawDataService.advancedSearchRawQuestions(finalKeyword, finalTags, unStandardized, pageable));
             
         } catch (Exception e) {
             logger.error("搜索原始问题时发生错误", e);

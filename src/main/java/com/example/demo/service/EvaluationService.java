@@ -473,4 +473,21 @@ public interface EvaluationService {
      * @return 批次综合评分数据
      */
     Map<String, Object> getBatchComprehensiveScores(Long batchId, List<Long> modelIds, int page, int size);
+
+    /**
+     * 获取回答的所有评分详情（分页）
+     * 支持查看每道题的所有评测员评分，包括各个评测标准的详细得分
+     * 
+     * @param answerId 回答ID（可选）
+     * @param batchId 批次ID（可选）
+     * @param questionId 问题ID（可选）
+     * @param modelIds 模型ID列表（可选）
+     * @param evaluatorIds 评测员ID列表（可选）
+     * @param questionType 问题类型（可选）
+     * @param page 页码
+     * @param size 每页大小
+     * @return 评分详情分页结果
+     */
+    Map<String, Object> getAnswerEvaluationDetails(Long answerId, Long batchId, Long questionId, 
+            List<Long> modelIds, List<Long> evaluatorIds, String questionType, int page, int size);
 } 

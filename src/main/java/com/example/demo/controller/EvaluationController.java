@@ -3,6 +3,7 @@ package com.example.demo.controller;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -244,6 +245,56 @@ public class EvaluationController {
         List<EvaluationDetail> details = evaluationService.getEvaluationDetails(evaluationId);
         
         return ResponseEntity.ok(details);
+    }
+    
+    /**
+     * 获取回答的所有评分详情（分页）
+     * 支持查看每道题的所有评测员评分，包括各个评测标准的详细得分
+     * 
+     * @param answerId 回答ID（可选）
+     * @param batchId 批次ID（可选）
+     * @param questionId 问题ID（可选）
+     * @param modelIds 模型ID列表（可选）
+     * @param evaluatorIds 评测员ID列表（可选）
+     * @param questionType 问题类型（可选）
+     * @param page 页码
+     * @param size 每页大小
+     * @return 评分详情分页结果
+     */
+    @GetMapping("/answer-evaluations")
+    public ResponseEntity<Map<String, Object>> getAnswerEvaluationDetails(
+            @RequestParam(required = false) Long answerId,
+            @RequestParam(required = false) Long batchId,
+            @RequestParam(required = false) Long questionId,
+            @RequestParam(required = false) List<Long> modelIds,
+            @RequestParam(required = false) List<Long> evaluatorIds,
+            @RequestParam(required = false) String questionType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        logger.info("接收到获取回答评分详情请求 - 回答ID: {}, 批次ID: {}, 问题ID: {}, 模型IDs: {}, 评测员IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                answerId, batchId, questionId, modelIds, evaluatorIds, questionType, page, size);
+        
+        try {
+            Map<String, Object> result = evaluationService.getAnswerEvaluationDetails(
+                    answerId, batchId, questionId, modelIds, evaluatorIds, questionType, page, size);
+            
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            logger.error("获取回答评分详情失败", e);
+            
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("success", false);
+            errorResult.put("message", "获取评分详情失败: " + e.getMessage());
+            errorResult.put("items", Collections.emptyList());
+            errorResult.put("totalItems", 0);
+            errorResult.put("totalPages", 0);
+            errorResult.put("currentPage", page);
+            errorResult.put("pageSize", size);
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
+        }
     }
     
     /**

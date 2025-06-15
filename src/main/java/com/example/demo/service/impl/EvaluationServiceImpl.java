@@ -5099,11 +5099,12 @@ public class EvaluationServiceImpl implements EvaluationService {
             Long questionId = (Long) questionData.get("question_id");
             
             // 获取参考答案
-            String refAnswerSql = "SELECT answer_text FROM standard_subjective_answers WHERE question_id = ? LIMIT 1";
+            String refAnswerSql = "SELECT answer_text FROM standard_subjective_answers WHERE standard_question_id = ? AND deleted_at IS NULL LIMIT 1";
             String referenceAnswer = "";
             try {
                 referenceAnswer = jdbcTemplate.queryForObject(refAnswerSql, String.class, questionId);
-        } catch (Exception e) {
+                logger.debug("成功获取问题ID: {}的参考答案，长度: {}", questionId, referenceAnswer != null ? referenceAnswer.length() : 0);
+            } catch (Exception e) {
                 logger.warn("未找到问题ID: {}的参考答案", questionId);
             }
             
@@ -5694,5 +5695,312 @@ public class EvaluationServiceImpl implements EvaluationService {
         }
         
         return result;
+    }
+
+    @Override
+    public Map<String, Object> getAnswerEvaluationDetails(Long answerId, Long batchId, Long questionId, 
+            List<Long> modelIds, List<Long> evaluatorIds, String questionType, int page, int size) {
+        
+        logger.info("开始获取回答评分详情 - 回答ID: {}, 批次ID: {}, 问题ID: {}, 模型IDs: {}, 评测员IDs: {}, 问题类型: {}, 页码: {}, 每页大小: {}", 
+                answerId, batchId, questionId, modelIds, evaluatorIds, questionType, page, size);
+        
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            // 构建查询条件
+            StringBuilder sqlBuilder = new StringBuilder();
+            List<Object> params = new ArrayList<>();
+            
+            // 基础查询SQL - 获取回答及其评测信息
+            sqlBuilder.append("SELECT DISTINCT ")
+                    .append("la.id AS answer_id, ")
+                    .append("la.answer_text, ")
+                    .append("la.repeat_index, ")
+                    .append("la.generation_time, ")
+                    .append("sq.id AS question_id, ")
+                    .append("sq.question_text, ")
+                    .append("sq.question_type, ")
+                    .append("sq.difficulty, ")
+                    .append("lm.id AS model_id, ")
+                    .append("lm.name AS model_name, ")
+                    .append("lm.provider AS model_provider, ")
+                    .append("mar.id AS run_id, ")
+                    .append("mar.run_name, ")
+                    .append("agb.id AS batch_id, ")
+                    .append("agb.name AS batch_name, ")
+                    .append("e.id AS evaluation_id, ")
+                    .append("e.overall_score, ")
+                    .append("e.evaluation_time, ")
+                    .append("e.evaluation_type, ")
+                    .append("e.evaluation_status, ")
+                    .append("e.comments AS evaluation_comments, ")
+                    .append("e.evaluation_results, ")
+                    .append("eva.id AS evaluator_id, ")
+                    .append("eva.name AS evaluator_name, ")
+                    .append("eva.evaluator_type ")
+                    .append("FROM llm_answers la ")
+                    .append("JOIN dataset_question_mapping dqm ON la.dataset_question_mapping_id = dqm.id ")
+                    .append("JOIN standard_questions sq ON dqm.standard_question_id = sq.id ")
+                    .append("JOIN model_answer_runs mar ON la.model_answer_run_id = mar.id ")
+                    .append("JOIN llm_models lm ON mar.llm_model_id = lm.id ")
+                    .append("JOIN answer_generation_batches agb ON mar.answer_generation_batch_id = agb.id ")
+                    .append("LEFT JOIN evaluations e ON la.id = e.llm_answer_id ")
+                    .append("LEFT JOIN evaluators eva ON e.evaluator_id = eva.id ")
+                    .append("WHERE 1=1 ");
+            
+            // 添加查询条件
+            if (answerId != null) {
+                sqlBuilder.append("AND la.id = ? ");
+                params.add(answerId);
+            }
+            
+            if (batchId != null) {
+                sqlBuilder.append("AND agb.id = ? ");
+                params.add(batchId);
+            }
+            
+            if (questionId != null) {
+                sqlBuilder.append("AND sq.id = ? ");
+                params.add(questionId);
+            }
+            
+            if (modelIds != null && !modelIds.isEmpty()) {
+                sqlBuilder.append("AND lm.id IN (");
+                for (int i = 0; i < modelIds.size(); i++) {
+                    if (i > 0) sqlBuilder.append(",");
+                    sqlBuilder.append("?");
+                    params.add(modelIds.get(i));
+                }
+                sqlBuilder.append(") ");
+            }
+            
+            if (evaluatorIds != null && !evaluatorIds.isEmpty()) {
+                sqlBuilder.append("AND eva.id IN (");
+                for (int i = 0; i < evaluatorIds.size(); i++) {
+                    if (i > 0) sqlBuilder.append(",");
+                    sqlBuilder.append("?");
+                    params.add(evaluatorIds.get(i));
+                }
+                sqlBuilder.append(") ");
+            }
+            
+            if (questionType != null && !questionType.trim().isEmpty()) {
+                sqlBuilder.append("AND sq.question_type = ? ");
+                params.add(questionType.trim().toUpperCase());
+            }
+            
+            // 添加排序
+            sqlBuilder.append("ORDER BY la.id DESC, e.evaluation_time DESC ");
+            
+            // 先获取总数
+            String countSql = "SELECT COUNT(DISTINCT CONCAT(la.id, '-', COALESCE(e.id, 0))) " + 
+                    sqlBuilder.substring(sqlBuilder.indexOf("FROM"));
+            Long totalCount = jdbcTemplate.queryForObject(countSql, params.toArray(), Long.class);
+            
+            // 添加分页
+            sqlBuilder.append("LIMIT ? OFFSET ? ");
+            params.add(size);
+            params.add(page * size);
+            
+            // 执行查询
+            List<Map<String, Object>> evaluationData = jdbcTemplate.query(
+                    sqlBuilder.toString(), 
+                    params.toArray(),
+                    (rs, rowNum) -> {
+                        Map<String, Object> row = new HashMap<>();
+                        
+                        // 回答信息
+                        row.put("answerId", rs.getLong("answer_id"));
+                        row.put("answerText", rs.getString("answer_text"));
+                        row.put("repeatIndex", rs.getInt("repeat_index"));
+                        row.put("generationTime", rs.getTimestamp("generation_time"));
+                        
+                        // 问题信息
+                        row.put("questionId", rs.getLong("question_id"));
+                        row.put("questionText", rs.getString("question_text"));
+                        row.put("questionType", rs.getString("question_type"));
+                        row.put("difficultyLevel", rs.getString("difficulty"));
+                        
+                        // 模型信息
+                        row.put("modelId", rs.getLong("model_id"));
+                        row.put("modelName", rs.getString("model_name"));
+                        row.put("modelProvider", rs.getString("model_provider"));
+                        
+                        // 运行信息
+                        row.put("runId", rs.getLong("run_id"));
+                        row.put("runName", rs.getString("run_name"));
+                        row.put("batchId", rs.getLong("batch_id"));
+                        row.put("batchName", rs.getString("batch_name"));
+                        
+                        // 评测信息
+                        Long evaluationId = rs.getLong("evaluation_id");
+                        if (!rs.wasNull()) {
+                            row.put("evaluationId", evaluationId);
+                            row.put("overallScore", rs.getBigDecimal("overall_score"));
+                            row.put("evaluationTime", rs.getTimestamp("evaluation_time"));
+                            row.put("evaluationType", rs.getString("evaluation_type"));
+                            row.put("evaluationStatus", rs.getString("evaluation_status"));
+                            row.put("evaluationComments", rs.getString("evaluation_comments"));
+                            
+                            // 解析评测结果JSON
+                            String evaluationResults = rs.getString("evaluation_results");
+                            if (evaluationResults != null) {
+                                try {
+                                    row.put("evaluationResults", objectMapper.readValue(evaluationResults, Map.class));
+                                } catch (Exception e) {
+                                    logger.warn("解析评测结果JSON失败: {}", e.getMessage());
+                                    row.put("evaluationResults", new HashMap<>());
+                                }
+                            }
+                            
+                            // 评测员信息
+                            Long evaluatorId = rs.getLong("evaluator_id");
+                            if (!rs.wasNull()) {
+                                row.put("evaluatorId", evaluatorId);
+                                row.put("evaluatorName", rs.getString("evaluator_name"));
+                                row.put("evaluatorType", rs.getString("evaluator_type"));
+                            }
+                        }
+                        
+                        return row;
+                    });
+            
+            // 为每个评测获取详细评分
+            for (Map<String, Object> evaluation : evaluationData) {
+                Long evaluationId = (Long) evaluation.get("evaluationId");
+                if (evaluationId != null) {
+                    // 获取评测详情
+                    List<Map<String, Object>> details = getEvaluationDetailsByEvaluationId(evaluationId);
+                    evaluation.put("evaluationDetails", details);
+                    
+                    // 获取标准答案（根据问题类型）
+                    Long questionIdForAnswer = (Long) evaluation.get("questionId");
+                    String questionTypeForAnswer = (String) evaluation.get("questionType");
+                    Map<String, Object> standardAnswer = getStandardAnswerByQuestionIdAndType(questionIdForAnswer, questionTypeForAnswer);
+                    evaluation.put("standardAnswer", standardAnswer);
+                }
+            }
+            
+            // 计算分页信息
+            int totalPages = (int) Math.ceil((double) totalCount / size);
+            
+            // 构建返回结果
+            result.put("success", true);
+            result.put("items", evaluationData);
+            result.put("totalItems", totalCount);
+            result.put("totalPages", totalPages);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+            
+            logger.info("成功获取回答评分详情，总数: {}, 当前页: {}, 每页大小: {}", totalCount, page, size);
+            
+        } catch (Exception e) {
+            logger.error("获取回答评分详情失败", e);
+            result.put("success", false);
+            result.put("message", "获取评分详情失败: " + e.getMessage());
+            result.put("items", new ArrayList<>());
+            result.put("totalItems", 0);
+            result.put("totalPages", 0);
+            result.put("currentPage", page);
+            result.put("pageSize", size);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 根据评测ID获取评测详情
+     */
+    private List<Map<String, Object>> getEvaluationDetailsByEvaluationId(Long evaluationId) {
+        String sql = "SELECT ed.id, ed.criterion_id, ed.criterion_name, ed.score, ed.comments, " +
+                "ec.name AS criterion_full_name, ec.description AS criterion_description, " +
+                "ec.score_range AS criterion_score_range, ec.weight AS criterion_weight " +
+                "FROM evaluation_details ed " +
+                "LEFT JOIN evaluation_criteria ec ON ed.criterion_id = ec.id " +
+                "WHERE ed.evaluation_id = ? " +
+                "ORDER BY ed.id";
+        
+        return jdbcTemplate.query(sql, new Object[]{evaluationId}, (rs, rowNum) -> {
+            Map<String, Object> detail = new HashMap<>();
+            detail.put("id", rs.getLong("id"));
+            detail.put("criterionId", rs.getLong("criterion_id"));
+            detail.put("criterionName", rs.getString("criterion_name"));
+            detail.put("score", rs.getBigDecimal("score"));
+            detail.put("comments", rs.getString("comments"));
+            
+            // 评测标准详细信息
+            detail.put("criterionFullName", rs.getString("criterion_full_name"));
+            detail.put("criterionDescription", rs.getString("criterion_description"));
+            detail.put("criterionScoreRange", rs.getString("criterion_score_range"));
+            detail.put("criterionWeight", rs.getBigDecimal("criterion_weight"));
+            
+            return detail;
+        });
+    }
+    
+    /**
+     * 根据问题ID和类型获取标准答案
+     */
+    private Map<String, Object> getStandardAnswerByQuestionIdAndType(Long questionId, String questionType) {
+        Map<String, Object> standardAnswer = new HashMap<>();
+        
+        try {
+            if (questionType == null) {
+                return standardAnswer;
+            }
+            
+            switch (questionType.toUpperCase()) {
+                case "SINGLE_CHOICE":
+                case "MULTIPLE_CHOICE":
+                    // 客观题标准答案
+                    String objectiveSql = "SELECT options, correct_ids FROM standard_objective_answers " +
+                            "WHERE standard_question_id = ? AND deleted_at IS NULL";
+                    try {
+                        Map<String, Object> objectiveAnswer = jdbcTemplate.queryForMap(objectiveSql, questionId);
+                        standardAnswer.put("type", "OBJECTIVE");
+                        standardAnswer.put("options", objectiveAnswer.get("options"));
+                        standardAnswer.put("correctIds", objectiveAnswer.get("correct_ids"));
+                    } catch (Exception e) {
+                        logger.debug("未找到问题{}的客观题标准答案", questionId);
+                    }
+                    break;
+                    
+                case "SIMPLE_FACT":
+                    // 简单题标准答案
+                    String simpleSql = "SELECT answer_text, alternative_answers FROM standard_simple_answers " +
+                            "WHERE standard_question_id = ? AND deleted_at IS NULL";
+                    try {
+                        Map<String, Object> simpleAnswer = jdbcTemplate.queryForMap(simpleSql, questionId);
+                        standardAnswer.put("type", "SIMPLE");
+                        standardAnswer.put("answerText", simpleAnswer.get("answer_text"));
+                        standardAnswer.put("alternativeAnswers", simpleAnswer.get("alternative_answers"));
+                    } catch (Exception e) {
+                        logger.debug("未找到问题{}的简单题标准答案", questionId);
+                    }
+                    break;
+                    
+                case "SUBJECTIVE":
+                    // 主观题标准答案
+                    String subjectiveSql = "SELECT answer_text, scoring_guidance FROM standard_subjective_answers " +
+                            "WHERE standard_question_id = ? AND deleted_at IS NULL";
+                    try {
+                        Map<String, Object> subjectiveAnswer = jdbcTemplate.queryForMap(subjectiveSql, questionId);
+                        standardAnswer.put("type", "SUBJECTIVE");
+                        standardAnswer.put("answerText", subjectiveAnswer.get("answer_text"));
+                        standardAnswer.put("scoringGuidance", subjectiveAnswer.get("scoring_guidance"));
+                    } catch (Exception e) {
+                        logger.debug("未找到问题{}的主观题标准答案", questionId);
+                    }
+                    break;
+                    
+                default:
+                    logger.warn("未知的问题类型: {}", questionType);
+            }
+            
+        } catch (Exception e) {
+            logger.error("获取问题{}的标准答案失败", questionId, e);
+        }
+        
+        return standardAnswer;
     }
 } 

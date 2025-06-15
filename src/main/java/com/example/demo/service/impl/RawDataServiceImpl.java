@@ -332,18 +332,27 @@ public class RawDataServiceImpl implements RawDataService {
     @Override
     public Page<RawQuestionDisplayDTO> advancedSearchRawQuestions(String keyword, List<String> tags, 
             Boolean unStandardized, Pageable pageable) {
+        logger.debug("开始高级搜索 - 关键词: {}, 标签: {}, 未标准化过滤: {}", keyword, tags, unStandardized);
+        
         // 使用Set来防止重复结果
         Map<Long, RawQuestion> resultMap = new HashMap<>();
         
+        // 标记是否有搜索条件
+        boolean hasSearchConditions = false;
+        
         // 1. 如果有关键词，先按关键词搜索
         if (keyword != null && !keyword.trim().isEmpty()) {
+            hasSearchConditions = true;
+            logger.debug("执行关键词搜索 - 关键词: {}", keyword);
             Page<RawQuestion> keywordResults = rawQuestionRepository.findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(
                     keyword, keyword, Pageable.unpaged());
             keywordResults.forEach(q -> resultMap.put(q.getId(), q));
+            logger.debug("关键词搜索结果: {} 个", keywordResults.getTotalElements());
         }
         
         // 2. 如果有标签，按标签搜索
         if (tags != null && !tags.isEmpty()) {
+            hasSearchConditions = true;
             logger.debug("开始标签搜索，标签: {}", tags);
             List<RawQuestion> tagResults;
             if (resultMap.isEmpty() && keyword == null) {
@@ -363,6 +372,8 @@ public class RawDataServiceImpl implements RawDataService {
                 // 如果有关键词搜索结果，在关键词结果中过滤标签
                 List<Long> questionIds = new ArrayList<>(resultMap.keySet());
                 if (questionIds.isEmpty()) {
+                    // 关键词没有匹配结果，直接返回空
+                    logger.debug("关键词搜索无结果，标签过滤也返回空");
                     return Page.empty(pageable);
                 }
                 // 在关键词结果中过滤标签
@@ -377,36 +388,44 @@ public class RawDataServiceImpl implements RawDataService {
         
         // 3. 如果需要过滤标准化状态
         if (unStandardized != null) {
+            hasSearchConditions = true;
             List<Long> standardizedIds = standardQuestionRepository.findDistinctOriginalRawQuestionIds();
             
             if (unStandardized) {
                 // 只保留未标准化的问题
                 resultMap.keySet().removeIf(standardizedIds::contains);
+                logger.debug("过滤未标准化问题后结果: {} 个", resultMap.size());
             } else {
                 // 如果是false，不需要特别过滤，因为我们要返回所有问题
-                // 如果resultMap为空且有其他过滤条件，我们需要初始化resultMap
-                if (resultMap.isEmpty() && (keyword != null || (tags != null && !tags.isEmpty()))) {
+                // 但如果有其他搜索条件且resultMap为空，说明确实没有匹配结果
+                if (resultMap.isEmpty() && (keyword != null && !keyword.trim().isEmpty() || (tags != null && !tags.isEmpty()))) {
+                    logger.debug("有其他搜索条件但无匹配结果，返回空页面");
                     return Page.empty(pageable);
-                } else if (resultMap.isEmpty()) {
-                    // 如果没有任何过滤条件，获取所有问题
+                } else if (resultMap.isEmpty() && keyword == null && (tags == null || tags.isEmpty())) {
+                    // 如果没有其他搜索条件，获取所有问题
+                    logger.debug("没有其他搜索条件，获取所有问题");
                     Page<RawQuestion> allQuestions = rawQuestionRepository.findAll(Pageable.unpaged());
                     allQuestions.forEach(q -> resultMap.put(q.getId(), q));
                 }
             }
-        } else if (resultMap.isEmpty() && keyword == null && (tags == null || tags.isEmpty())) {
-            // 如果没有任何过滤条件，获取所有问题
+        } else if (!hasSearchConditions) {
+            // 如果没有任何搜索条件，获取所有问题
+            logger.debug("没有任何搜索条件，获取所有问题");
             Page<RawQuestion> allQuestions = rawQuestionRepository.findAll(Pageable.unpaged());
             allQuestions.forEach(q -> resultMap.put(q.getId(), q));
         }
         
         // 如果有搜索条件但没有结果，返回空页面
-        if (resultMap.isEmpty() && ((keyword != null && !keyword.trim().isEmpty()) || (tags != null && !tags.isEmpty()))) {
+        if (hasSearchConditions && resultMap.isEmpty()) {
+            logger.debug("有搜索条件但无匹配结果，返回空页面");
             return Page.empty(pageable);
         }
         
         // 将结果转换为列表并排序
         List<RawQuestion> resultList = new ArrayList<>(resultMap.values());
         resultList.sort((q1, q2) -> q2.getId().compareTo(q1.getId())); // 按ID降序排序
+        
+        logger.debug("最终搜索结果: {} 个问题", resultList.size());
         
         // 手动分页
         int start = (int) pageable.getOffset();
